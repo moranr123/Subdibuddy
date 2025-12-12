@@ -1,11 +1,12 @@
 import { useEffect, useState, memo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, getDocs, query, orderBy, doc, updateDoc, deleteDoc, setDoc, getDoc, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, doc, updateDoc, deleteDoc, setDoc, getDoc, Timestamp, onSnapshot } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
+import Header from '../components/Header';
 
 interface UserLocation {
   latitude: number;
@@ -171,17 +172,57 @@ function ResidentManagement() {
     }
   }, [db, activeView]);
 
+  // Set up real-time listener for applications view
   useEffect(() => {
-    if (user) {
-      console.log('User authenticated, fetching residents...', { userEmail: user.email, dbExists: !!db });
-      if (db) {
-        fetchResidents();
-      } else {
-        console.error('Firestore db is not available');
-        alert('Database connection error. Please refresh the page.');
+    if (!user || !db) return;
+    
+    if (activeView === 'applications') {
+      console.log('Setting up real-time listener for pending applications...');
+      setLoading(true);
+      
+      // Set up real-time listener for pendingUsers collection
+      let q;
+      try {
+        q = query(collection(db, 'pendingUsers'), orderBy('createdAt', 'desc'));
+      } catch (orderByError: any) {
+        console.warn('orderBy failed, trying without orderBy:', orderByError);
+        q = query(collection(db, 'pendingUsers'));
       }
+      
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const residentsData: Resident[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          residentsData.push({
+            id: doc.id,
+            ...data,
+            status: 'pending', // All pendingUsers are pending
+          } as Resident);
+        });
+        
+        // Sort manually if orderBy failed
+        residentsData.sort((a, b) => {
+          const aDate = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+          const bDate = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+          return bDate - aDate;
+        });
+        
+        console.log(`Real-time update: ${residentsData.length} pending applications`);
+        setResidents(residentsData);
+        setLoading(false);
+      }, (error) => {
+        console.error('Error in real-time listener:', error);
+        setLoading(false);
+        alert(`Failed to load applications: ${error.message || 'Unknown error'}`);
+      });
+      
+      return () => unsubscribe();
+    } else {
+      // For registered view, use one-time fetch
+      console.log('Fetching registered residents...');
+      fetchResidents();
     }
-  }, [user, db, fetchResidents, activeView]);
+  }, [user, db, activeView, fetchResidents]);
   
   // Redirect to applications if on base route
   useEffect(() => {
@@ -214,23 +255,47 @@ function ResidentManagement() {
       return false;
     }
     
+    // Get the pending user data for confirmation and processing
+    const pendingUserRef = doc(db, 'pendingUsers', residentId);
+    console.log(`Fetching pending user document: ${residentId}`);
+    let pendingUserSnap;
+    let pendingUserData;
+    
+    try {
+      pendingUserSnap = await getDoc(pendingUserRef);
+      
+      if (!pendingUserSnap.exists()) {
+        console.error(`Pending user document ${residentId} does not exist`);
+        alert('Pending user not found');
+        return false;
+      }
+      
+      pendingUserData = pendingUserSnap.data();
+      const fullName = pendingUserData.fullName || 
+        `${pendingUserData.firstName || ''} ${pendingUserData.lastName || ''}`.trim() || 
+        'this resident';
+      
+      // Show confirmation dialog
+      const confirmed = window.confirm(
+        `Are you sure you want to approve the application for ${fullName}?\n\n` +
+        `This will create their account and allow them to log in to the mobile app.`
+      );
+      
+      if (!confirmed) {
+        return false;
+      }
+    } catch (error) {
+      console.error('Error fetching resident data:', error);
+      alert('Error loading application data. Please try again.');
+      return false;
+    }
+    
     // Get current activeView to ensure we refresh the correct view
     const currentView = location.pathname.includes('/registered') ? 'registered' : 'applications';
     console.log(`Approving resident ${residentId} from ${currentView} view`);
     
     setProcessingStatus(residentId);
     try {
-      // Get the pending user data
-      const pendingUserRef = doc(db, 'pendingUsers', residentId);
-      console.log(`Fetching pending user document: ${residentId}`);
-      const pendingUserSnap = await getDoc(pendingUserRef);
-      
-      if (!pendingUserSnap.exists()) {
-        console.error(`Pending user document ${residentId} does not exist`);
-        throw new Error('Pending user not found');
-      }
-      
-      const pendingUserData = pendingUserSnap.data();
       console.log('Pending user data retrieved:', { username: pendingUserData.username, hasPassword: !!pendingUserData.password });
       const { username, password, ...userData } = pendingUserData;
       
@@ -326,15 +391,8 @@ function ResidentManagement() {
       
       alert('Resident approved successfully');
       
-      // Refresh the list from database to ensure UI is up to date
-      // Only refresh if we're on the applications view
-      if (currentView === 'applications') {
-        console.log('Refreshing applications list after approval');
-        // Add a small delay to ensure Firestore has propagated the deletion
-        await new Promise(resolve => setTimeout(resolve, 500));
-        await fetchResidents();
-        console.log('Applications list refreshed');
-      }
+      // No need to manually refresh - real-time listener will update automatically
+      // The application will be removed from the list when deleted from pendingUsers
       
       // Update local state - remove from list immediately for better UX
       setResidents(prev => {
@@ -352,15 +410,8 @@ function ResidentManagement() {
       
       alert('Resident approved successfully');
       
-      // Refresh the list from database to ensure UI is up to date
-      // Only refresh if we're on the applications view
-      if (currentView === 'applications') {
-        console.log('Refreshing applications list after approval');
-        // Add a small delay to ensure Firestore has propagated the deletion
-        await new Promise(resolve => setTimeout(resolve, 500));
-        await fetchResidents();
-        console.log('Applications list refreshed');
-      }
+      // No need to manually refresh - real-time listener will update automatically
+      // The application will be removed from the list when deleted from pendingUsers
       return true;
     } catch (error: any) {
       console.error('Error approving resident:', error);
@@ -391,8 +442,8 @@ function ResidentManagement() {
       // Update local state - remove from list
       setResidents(prev => prev.filter(r => r.id !== residentId));
       
-      // Refresh the list to ensure UI is up to date
-      await fetchResidents();
+      // No need to manually refresh - real-time listener will update automatically
+      // The application will be removed from the list when deleted from pendingUsers
       
       alert('Application rejected and removed');
       return true;
@@ -403,7 +454,7 @@ function ResidentManagement() {
     } finally {
       setProcessingStatus(null);
     }
-  }, [db, fetchResidents]);
+  }, [db]);
 
   const handleDeactivate = useCallback(async (residentId: string) => {
     if (!db) return;
@@ -524,16 +575,7 @@ function ResidentManagement() {
   return (
     <Layout>
       <div className="min-h-screen bg-white w-full">
-        <header className="bg-white text-gray-900 py-4 border-b border-gray-200 sticky top-0 z-[100]">
-          <div className="w-full m-0 px-8 flex justify-between items-center">
-            <h1 className="text-xl m-0 text-gray-900 font-normal">
-              {activeView === 'applications' ? 'Applications' : 'Registered Residents'}
-            </h1>
-            <div className="flex items-center gap-5">
-              <span className="text-sm text-gray-500 font-normal">{user?.email || ''}</span>
-            </div>
-          </div>
-        </header>
+        <Header title={activeView === 'applications' ? 'Applications' : 'Registered Residents'} />
 
         <main className="w-full max-w-full m-0 p-10 box-border">
           <div className="flex flex-col gap-6 w-full max-w-full">
@@ -542,15 +584,6 @@ function ResidentManagement() {
                 <h2 className="m-0 text-gray-900 text-lg font-normal">
                   {activeView === 'applications' ? 'Pending Applications' : 'Registered Residents'}
                 </h2>
-                {activeView === 'applications' && (
-                  <button 
-                    className="bg-gray-900 text-white border-none px-4 py-2 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                    onClick={fetchResidents} 
-                    disabled={loading}
-                  >
-                    {loading ? 'Loading...' : 'Refresh'}
-                  </button>
-                )}
               </div>
 
               {activeView === 'registered' && (

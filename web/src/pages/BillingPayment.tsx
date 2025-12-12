@@ -5,6 +5,7 @@ import { collection, getDocs, query, orderBy, addDoc, updateDoc, doc, where, Tim
 import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
+import Header from '../components/Header';
 
 interface Payment {
   id?: string;
@@ -332,14 +333,7 @@ function BillingPayment() {
   return (
     <Layout>
       <div className="min-h-screen bg-white w-full">
-        <header className="bg-white text-gray-900 py-4 border-b border-gray-200 sticky top-0 z-[100]">
-          <div className="w-full m-0 px-8 flex justify-between items-center">
-            <h1 className="text-xl m-0 text-gray-900 font-normal">Billing & Payment</h1>
-            <div className="flex items-center gap-5">
-              <span className="text-sm text-gray-500 font-normal">{user?.email || ''}</span>
-            </div>
-          </div>
-        </header>
+        <Header title="Billing & Payment" />
 
         <main className="w-full max-w-full m-0 p-10 box-border">
           <div className="flex flex-col gap-6 w-full max-w-full">

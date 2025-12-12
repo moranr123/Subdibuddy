@@ -4,7 +4,8 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { collection, getDocs } from 'firebase/firestore'
 import { auth, db } from '../firebase/config'
 import { isSuperadmin } from '../utils/auth'
-import Layout from '../components/Layout'
+import Layout from '../components/Layout';
+import Header from '../components/Header';
 
 interface StatCardProps {
   title: string;
@@ -159,19 +160,11 @@ function Dashboard() {
     { title: 'Visitors', value: stats.totalVisitors, label: `${stats.pendingVisitors} pending`, icon: '' },
   ], [stats]);
 
-  const userEmail = useMemo(() => user?.email || '', [user?.email])
 
   return (
     <Layout>
       <div className="min-h-screen bg-white">
-        <header className="bg-white text-gray-900 py-4 border-b border-gray-200 sticky top-0 z-[100]">
-          <div className="max-w-[1400px] mx-auto px-8 flex justify-between items-center">
-            <h1 className="text-xl m-0 text-gray-900 font-normal">Dashboard</h1>
-            <div className="flex items-center gap-5">
-              <span className="text-sm text-gray-500">{userEmail}</span>
-            </div>
-          </div>
-        </header>
+        <Header title="Dashboard" />
 
         <main className="max-w-[1400px] mx-auto p-8 flex flex-col items-center">
           <div className="grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-5 mb-8 w-full">

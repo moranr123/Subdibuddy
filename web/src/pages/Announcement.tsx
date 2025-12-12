@@ -5,6 +5,7 @@ import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy,
 import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
+import Header from '../components/Header';
 
 interface Announcement {
   id: string;
@@ -159,10 +160,10 @@ function Announcement() {
   return (
     <Layout>
       <div className="min-h-screen bg-white w-full">
+        <Header title="Announcements" />
         <main className="w-full max-w-full m-0 p-10 box-border">
           <div className="flex flex-col gap-6 w-full max-w-full">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="m-0 text-gray-900 text-xl font-normal">Announcements</h2>
               <button
                 className="bg-gray-900 text-white border-none px-4 py-2 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-800"
                 onClick={() => {
