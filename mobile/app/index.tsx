@@ -1,12 +1,10 @@
-import { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Alert } from 'react-native';
+import { useEffect } from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { getAuthService, db } from '../firebase/config';
+import { onAuthStateChanged } from 'firebase/auth';
+import { getAuthService } from '../firebase/config';
 
 export default function Index() {
-  const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
@@ -18,53 +16,26 @@ export default function Index() {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(authInstance, async (user) => {
+    const unsubscribe = onAuthStateChanged(authInstance, (user) => {
       if (user) {
-        // Check if user account is deactivated
-        if (db) {
-          try {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (userDoc.exists()) {
-              const userData = userDoc.data();
-              if (userData.status === 'deactivated') {
-                // User account is deactivated, sign them out
-                await signOut(authInstance);
-                Alert.alert(
-                  'Account Deactivated',
-                  'Your account has been deactivated. Please contact the administrator for assistance.'
-                );
-                router.replace('/login');
-                setLoading(false);
-                return;
-              }
-            }
-          } catch (error) {
-            console.error('Error checking user status:', error);
-          }
-        }
-        // User is authenticated and active, redirect to dashboard
-        router.replace('/dashboard');
+        // User is authenticated - redirect to login for now
+        // (You can change this to your main screen when you create it)
+        router.replace('/login');
       } else {
         // User is not authenticated, redirect to login
         router.replace('/login');
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
   }, [router]);
 
   // Show loading screen while checking auth state
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#111827" />
-        <Text style={styles.loadingText}>Loading...</Text>
-      </View>
-    );
-  }
-
-  return null;
+  return (
+    <View style={styles.container}>
+      <ActivityIndicator size="large" color="#1877F2" />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -73,11 +44,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#ffffff',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 14,
-    color: '#6b7280',
   },
 });
 

@@ -88,7 +88,8 @@ export default function Login() {
         }
       }
 
-      router.replace('/dashboard');
+      // Dashboard screen removed - add navigation to appropriate screen here
+      // router.replace('/dashboard');
     } catch (error: any) {
       let errorMessage = 'An error occurred during login';
       if (error.code === 'auth/invalid-email') {
