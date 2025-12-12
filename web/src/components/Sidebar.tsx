@@ -73,18 +73,18 @@ function Sidebar({ onHoverChange }: SidebarProps) {
           {!isHovered ? (
             <img 
               src="/logo.png" 
-              alt="Subsibuddy Logo" 
+              alt="Subdibuddy Logo" 
               className="w-8 h-8 object-contain"
             />
           ) : (
             <>
               <img 
                 src="/logo.png" 
-                alt="Subsibuddy Logo" 
+                alt="Subdibuddy Logo" 
                 className="w-8 h-8 object-contain"
               />
               <h2 className="text-gray-900 text-base font-medium m-0 whitespace-nowrap animate-fadeIn">
-                Subsibuddy
+                Subdibuddy
               </h2>
             </>
           )}

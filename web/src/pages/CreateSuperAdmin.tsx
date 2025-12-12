@@ -78,7 +78,7 @@ function CreateSuperAdmin() {
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm w-full max-w-[400px] p-8 flex flex-col items-center m-auto box-border">
         <img 
           src="/logo.png" 
-          alt="Subsibuddy Logo" 
+          alt="Subdibuddy Logo" 
           className="w-24 h-24 object-contain mb-6"
         />
         <h1 className="text-2xl text-gray-900 font-normal mb-2">Create Admin Account</h1>
@@ -106,7 +106,7 @@ function CreateSuperAdmin() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder="admin@subsibuddy.com"
+              placeholder="admin@subdibuddy.com"
               disabled={loading}
               className="p-3 border border-gray-300 rounded-md text-sm bg-white text-gray-900 transition-colors focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900 placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
             />

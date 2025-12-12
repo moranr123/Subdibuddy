@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Subsibuddy",
-    "slug": "subsibuddy",
+    "name": "Subdibuddy",
+    "slug": "subdibuddy",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
@@ -16,7 +16,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.subsibuddy.app",
+      "bundleIdentifier": "com.subdibuddy.app",
       "config": {
         "googleMapsApiKey": "AIzaSyByXb-FgYHiNhVIsK00kM1jdXYr_OerV7Q"
       }
@@ -26,7 +26,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.subsibuddy.app",
+      "package": "com.subdibuddy.app",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyByXb-FgYHiNhVIsK00kM1jdXYr_OerV7Q"
@@ -41,7 +41,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Subsibuddy to use your location to help you find nearby services."
+          "locationAlwaysAndWhenInUsePermission": "Allow Subdibuddy to use your location to help you find nearby services."
         }
       ],
       [
@@ -51,7 +51,7 @@
         }
       ]
     ],
-    "scheme": "subsibuddy",
+    "scheme": "subdibuddy",
     "sdkVersion": "53.0.0",
     "runtimeVersion": {
       "policy": "sdkVersion"

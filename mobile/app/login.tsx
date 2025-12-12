@@ -1,8 +1,9 @@
 import { useState, useCallback } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Dimensions, Image } from 'react-native';
 import { useRouter } from 'expo-router';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { getAuthService } from '../firebase/config';
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { getAuthService, db } from '../firebase/config';
 
 const { width } = Dimensions.get('window');
 
@@ -27,20 +28,67 @@ export default function Login() {
 
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(authInstance, email.trim(), password);
+      const trimmedInput = email.trim();
+      const hasAtSymbol = trimmedInput.includes('@');
+      
+      // Validate phone number format if it's not an email
+      if (!hasAtSymbol) {
+        // Remove spaces, dashes, and parentheses for validation
+        const cleanedPhone = trimmedInput.replace(/[\s\-\(\)]/g, '');
+        // Check if it's all digits and has reasonable length (at least 10 digits)
+        if (!/^\d+$/.test(cleanedPhone) || cleanedPhone.length < 10) {
+          Alert.alert('Invalid Input', 'Please enter a valid email address or phone number (at least 10 digits)');
+          setLoading(false);
+          return;
+        }
+      }
+      
+      // Format the username: if it's a phone number, append @subdibuddy.local
+      // This matches the format used during signup
+      const username = hasAtSymbol ? trimmedInput : `${trimmedInput}@subdibuddy.local`;
+      
+      const userCredential = await signInWithEmailAndPassword(authInstance, username, password);
+      const user = userCredential.user;
+
+      // Check if user is in pendingUsers collection (not approved yet)
+      if (db && user) {
+        const pendingUserDoc = await getDoc(doc(db, 'pendingUsers', user.uid));
+        if (pendingUserDoc.exists()) {
+          // User is still pending approval
+          await signOut(authInstance);
+          Alert.alert(
+            'Account Pending Approval',
+            'Your account is pending admin approval. Please wait for approval before logging in.'
+          );
+          return;
+        }
+        
+        // Check if user exists in users collection (approved)
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (!userDoc.exists()) {
+          // User doesn't exist in either collection (might have been rejected)
+          await signOut(authInstance);
+          Alert.alert(
+            'Account Not Found',
+            'Your account is not found. Please contact the administrator for assistance.'
+          );
+          return;
+        }
+      }
+
       router.replace('/dashboard');
     } catch (error: any) {
       let errorMessage = 'An error occurred during login';
       if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email address';
+        errorMessage = 'Invalid email address or phone number format';
       } else if (error.code === 'auth/user-disabled') {
         errorMessage = 'This account has been disabled';
       } else if (error.code === 'auth/user-not-found') {
-        errorMessage = 'No account found with this email';
+        errorMessage = 'No account found with this email or phone number';
       } else if (error.code === 'auth/wrong-password') {
         errorMessage = 'Incorrect password';
       } else if (error.code === 'auth/invalid-credential') {
-        errorMessage = 'Invalid email or password';
+        errorMessage = 'Invalid email/phone number or password';
       } else if (error.code === 'auth/network-request-failed') {
         errorMessage = 'Network error. Please check your connection';
       } else if (error.message) {
@@ -55,20 +103,22 @@ export default function Login() {
   return (
     <View style={styles.container}>
       <View style={styles.card}>
-        <View style={styles.logoBadge}>
-          <Text style={styles.logoText}>S</Text>
-        </View>
+        <Image 
+          source={require('../assets/logo.png')} 
+          style={styles.logo}
+          resizeMode="contain"
+        />
         <Text style={styles.subtitle}>Sign in to continue</Text>
 
         <View style={styles.form}>
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>Email or Phone Number</Text>
             <TextInput
               style={styles.input}
-              placeholder="admin@subsibuddy.com"
+              placeholder="your.email@example.com or 09XX XXX XXXX"
               value={email}
               onChangeText={setEmail}
-              keyboardType="email-address"
+              keyboardType="default"
               autoCapitalize="none"
               autoCorrect={false}
               placeholderTextColor="#999"
@@ -146,19 +196,10 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     alignItems: 'center',
   },
-  logoBadge: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    backgroundColor: '#111827',
-    justifyContent: 'center',
-    alignItems: 'center',
+  logo: {
+    width: width > 400 ? 200 : 160,
+    height: width > 400 ? 80 : 64,
     marginBottom: 24,
-  },
-  logoText: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '500',
   },
   subtitle: {
     color: '#6b7280',

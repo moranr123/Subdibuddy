@@ -1,6 +1,6 @@
 # Assets Directory
 
-This directory contains images and other assets for the Subsibuddy mobile app.
+This directory contains images and other assets for the Subdibuddy mobile app.
 
 ## Required Assets
 

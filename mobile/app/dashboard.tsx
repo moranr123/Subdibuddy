@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, Modal, TextInput, ActivityIndicator, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, Modal, TextInput, ActivityIndicator, Animated, Dimensions, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useEffect, useState, useCallback, useMemo, memo, useRef } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -344,10 +344,12 @@ function DashboardScreen() {
         <View style={styles.sidebarContent}>
           <View style={styles.sidebarHeader}>
             <View style={styles.sidebarHeaderContent}>
-              <View style={styles.sidebarLogoBadge}>
-                <Text style={styles.sidebarLogoText}>S</Text>
-              </View>
-              <Text style={styles.sidebarTitle}>Subsibuddy</Text>
+              <Image 
+                source={require('../assets/logo.png')} 
+                style={styles.sidebarLogo}
+                resizeMode="contain"
+              />
+              <Text style={styles.sidebarTitle}>Subdibuddy</Text>
             </View>
             <TouchableOpacity onPress={closeSidebar} style={styles.sidebarCloseButton}>
               <Text style={styles.sidebarCloseText}>✕</Text>
@@ -837,18 +839,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  sidebarLogoBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
-    backgroundColor: '#111827',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sidebarLogoText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '500',
+  sidebarLogo: {
+    width: 100,
+    height: 40,
   },
   sidebarTitle: {
     fontSize: 16,

@@ -1,389 +1,1635 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Modal, Dimensions } from 'react-native';
+import { useState, useCallback, useMemo } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Modal, Dimensions, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
-import { getAuthService, db } from '../firebase/config';
-import { WebView } from 'react-native-webview';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebase/config';
+import * as ImagePicker from 'expo-image-picker';
 
 const { width, height } = Dimensions.get('window');
+const isSmallScreen = width < 375;
+const isMediumScreen = width >= 375 && width < 414;
+const isLargeScreen = width >= 414;
 
-interface Location {
-  latitude: number;
-  longitude: number;
+interface IDImages {
+  front: string | null;
+  back: string | null;
 }
 
+interface DocumentImages {
+  [key: string]: string | null;
+}
+
+const TOTAL_STEPS = 5;
+
 export default function Signup() {
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  const [currentStep, setCurrentStep] = useState(1);
+  
+  // Step 1: Email/Phone and Password
+  const [emailOrPhone, setEmailOrPhone] = useState('');
+  const [isEmail, setIsEmail] = useState(true);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [location, setLocation] = useState<Location | null>(null);
-  const [showFullMap, setShowFullMap] = useState(false);
-  const fullMapWebViewRef = useRef<WebView>(null);
+  
+  // Step 2: Personal Info
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [birthdate, setBirthdate] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [age, setAge] = useState<number | null>(null);
+  const [tempDate, setTempDate] = useState<Date>(new Date());
+  const [sex, setSex] = useState<'male' | 'female' | ''>('');
+  const [showSexPicker, setShowSexPicker] = useState(false);
+  
+  // Step 3: Address
+  const [block, setBlock] = useState('');
+  const [lot, setLot] = useState('');
+  const [street, setStreet] = useState('');
+  const [showBlockPicker, setShowBlockPicker] = useState(false);
+  const [showLotPicker, setShowLotPicker] = useState(false);
+  const [showStreetPicker, setShowStreetPicker] = useState(false);
+  
+  // Step 4: Tenant and ID
+  const [isTenant, setIsTenant] = useState(false);
+  const [tenantRelation, setTenantRelation] = useState('');
+  const [showRelationPicker, setShowRelationPicker] = useState(false);
+  const [idImages, setIdImages] = useState<IDImages>({ front: null, back: null });
+  const [documentImages, setDocumentImages] = useState<DocumentImages>({});
+  
+  // Step 5: Terms
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  
+  // Error states
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  // Other
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
-  const mapHTML = useMemo(() => {
-    const lat = location?.latitude || 14.5995;
-    const lng = location?.longitude || 120.9842;
-    
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-          <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-          <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-          <style>
-            body { margin: 0; padding: 0; }
-            #map { width: 100%; height: 100vh; }
-          </style>
-        </head>
-        <body>
-          <div id="map"></div>
-          <script>
-            const map = L.map('map').setView([${lat}, ${lng}], 15);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-              attribution: '© OpenStreetMap contributors',
-              maxZoom: 19
-            }).addTo(map);
-            
-            let marker = L.marker([${lat}, ${lng}], { draggable: true }).addTo(map);
-            
-            marker.on('dragend', function(e) {
-              const pos = marker.getLatLng();
-              window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'location',
-                latitude: pos.lat,
-                longitude: pos.lng
-              }));
-            });
-            
-            map.on('click', function(e) {
-              marker.setLatLng(e.latlng);
-              window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'location',
-                latitude: e.latlng.lat,
-                longitude: e.latlng.lng
-              }));
-            });
-          </script>
-        </body>
-      </html>
-    `;
-  }, [location]);
+  // Calculate age from birthdate
+  const calculateAge = useCallback((date: Date) => {
+    const today = new Date();
+    let calculatedAge = today.getFullYear() - date.getFullYear();
+    const monthDiff = today.getMonth() - date.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < date.getDate())) {
+      calculatedAge--;
+    }
+    return calculatedAge;
+  }, []);
 
-  const smallMapHTML = useMemo(() => {
-    const lat = location?.latitude || 14.5995;
-    const lng = location?.longitude || 120.9842;
-    
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-          <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-          <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-          <style>
-            body { margin: 0; padding: 0; }
-            #map { width: 100%; height: 100%; }
-          </style>
-        </head>
-        <body>
-          <div id="map"></div>
-          <script>
-            const map = L.map('map').setView([${lat}, ${lng}], 15);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-              attribution: '© OpenStreetMap contributors',
-              maxZoom: 19
-            }).addTo(map);
-            
-            L.marker([${lat}, ${lng}]).addTo(map);
-          </script>
-        </body>
-      </html>
-    `;
-  }, [location]);
+  const handleDateChange = useCallback((selectedDate: Date) => {
+    setBirthdate(selectedDate);
+    const calculatedAge = calculateAge(selectedDate);
+    setAge(calculatedAge);
+    setShowDatePicker(false);
+  }, [calculateAge]);
 
-  const handleMapMessage = useCallback((event: any) => {
+  const handleDatePickerOpen = useCallback(() => {
+    setTempDate(birthdate || new Date());
+    setShowDatePicker(true);
+  }, [birthdate]);
+
+  const handleDatePickerConfirm = useCallback(() => {
+    handleDateChange(tempDate);
+  }, [tempDate, handleDateChange]);
+
+  const getDaysInMonth = useCallback((year: number, month: number) => {
+    return new Date(year, month + 1, 0).getDate();
+  }, []);
+
+  const getMonthOptions = useCallback(() => {
+    return [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+  }, []);
+
+  const getYearOptions = useCallback(() => {
+    const currentYear = new Date().getFullYear();
+    const years = [];
+    for (let i = currentYear; i >= currentYear - 100; i--) {
+      years.push(i);
+    }
+    return years;
+  }, []);
+
+  const formatDate = useCallback((date: Date) => {
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  }, []);
+
+  // Detect if input is email or phone
+  const handleEmailOrPhoneChange = useCallback((text: string) => {
+    setEmailOrPhone(text);
+    const hasAtSymbol = text.includes('@');
+    const isAllDigits = /^\d+$/.test(text.replace(/[\s\-\(\)]/g, ''));
+    setIsEmail(hasAtSymbol || (!isAllDigits && text.length > 0));
+  }, []);
+
+  // Image picker for ID
+  const pickImage = useCallback(async (side: 'front' | 'back', source: 'camera' | 'gallery') => {
     try {
-      const data = JSON.parse(event.nativeEvent.data);
-      if (data.type === 'location') {
-        setLocation({
-          latitude: data.latitude,
-          longitude: data.longitude,
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Please grant camera permissions to take a photo');
+          return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
         });
+
+        if (!result.canceled && result.assets[0]) {
+          setIdImages(prev => ({
+            ...prev,
+            [side]: result.assets[0].uri,
+          }));
+        }
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Please grant camera roll permissions to upload ID');
+          return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets[0]) {
+          setIdImages(prev => ({
+            ...prev,
+            [side]: result.assets[0].uri,
+          }));
+        }
       }
     } catch (error) {
-      console.error('Error parsing map message:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
+  }, []);
+
+  const showImageSourcePicker = useCallback((side: 'front' | 'back') => {
+    Alert.alert(
+      'Select Image Source',
+      'Choose how you want to add your ID',
+      [
+        {
+          text: 'Camera',
+          onPress: () => pickImage(side, 'camera'),
+        },
+        {
+          text: 'Gallery',
+          onPress: () => pickImage(side, 'gallery'),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true }
+    );
+  }, [pickImage]);
+
+  const pickDocument = useCallback(async (docKey: string, source: 'camera' | 'gallery') => {
+    try {
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Please grant camera permissions to take a photo');
+          return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets[0]) {
+          setDocumentImages(prev => ({
+            ...prev,
+            [docKey]: result.assets[0].uri,
+          }));
+        }
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Please grant camera roll permissions to upload document');
+          return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets[0]) {
+          setDocumentImages(prev => ({
+            ...prev,
+            [docKey]: result.assets[0].uri,
+          }));
+        }
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to pick document. Please try again.');
+    }
+  }, []);
+
+  const showDocumentSourcePicker = useCallback((docKey: string) => {
+    Alert.alert(
+      'Select Image Source',
+      'Choose how you want to add your document',
+      [
+        {
+          text: 'Camera',
+          onPress: () => pickDocument(docKey, 'camera'),
+        },
+        {
+          text: 'Gallery',
+          onPress: () => pickDocument(docKey, 'gallery'),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true }
+    );
+  }, [pickDocument]);
+
+  // Address options
+  const blockOptions = ['Block 1', 'Block 2', 'Block 3', 'Block 4', 'Block 5', 'Block 6', 'Block 7', 'Block 8', 'Block 9', 'Block 10'];
+  const lotOptions = ['Lot 1', 'Lot 2', 'Lot 3', 'Lot 4', 'Lot 5', 'Lot 6', 'Lot 7', 'Lot 8', 'Lot 9', 'Lot 10'];
+  const streetOptions = ['Main Street', 'First Street', 'Second Street', 'Third Street', 'Fourth Street', 'Fifth Street'];
+  const relationOptions = ['Son', 'Daughter', 'Spouse', 'Parent', 'Sibling', 'Relative', 'Friend', 'Other'];
+
+  // Navigation
+  const nextStep = useCallback(() => {
+    if (currentStep < TOTAL_STEPS) {
+      setCurrentStep(currentStep + 1);
+    }
+  }, [currentStep]);
+
+  const prevStep = useCallback(() => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  }, [currentStep]);
+
+  // Clear errors for a specific field
+  const clearError = useCallback((field: string) => {
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[field];
+      return newErrors;
+    });
+  }, []);
+
+  // Set error for a specific field
+  const setError = useCallback((field: string, message: string) => {
+    setErrors(prev => ({ ...prev, [field]: message }));
+  }, []);
+
+  // Validation for each step
+  const validateStep = useCallback((step: number): boolean => {
+    const newErrors: Record<string, string> = {};
+    let isValid = true;
+
+    switch (step) {
+      case 1:
+        if (!emailOrPhone.trim()) {
+          newErrors.emailOrPhone = 'Email or phone number is required';
+          isValid = false;
+        } else if (isEmail) {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(emailOrPhone.trim())) {
+            newErrors.emailOrPhone = 'Please enter a valid email address';
+            isValid = false;
+          }
+        } else {
+          const phoneRegex = /^[0-9]{10,11}$/;
+          const cleanPhone = emailOrPhone.replace(/[\s\-\(\)]/g, '');
+          if (!phoneRegex.test(cleanPhone)) {
+            newErrors.emailOrPhone = 'Please enter a valid phone number (10-11 digits)';
+            isValid = false;
+          }
+        }
+
+        if (!password) {
+          newErrors.password = 'Password is required';
+          isValid = false;
+        } else if (password.length < 6) {
+          newErrors.password = 'Password must be at least 6 characters';
+          isValid = false;
+        } else if (password.length > 50) {
+          newErrors.password = 'Password must be less than 50 characters';
+          isValid = false;
+        }
+
+        if (!confirmPassword) {
+          newErrors.confirmPassword = 'Please confirm your password';
+          isValid = false;
+        } else if (password !== confirmPassword) {
+          newErrors.confirmPassword = 'Passwords do not match';
+          isValid = false;
+        }
+        break;
+
+      case 2:
+        if (!firstName.trim()) {
+          newErrors.firstName = 'First name is required';
+          isValid = false;
+        } else if (firstName.trim().length < 2) {
+          newErrors.firstName = 'First name must be at least 2 characters';
+          isValid = false;
+        } else if (firstName.trim().length > 50) {
+          newErrors.firstName = 'First name must be less than 50 characters';
+          isValid = false;
+        }
+
+        if (middleName.trim() && middleName.trim().length > 50) {
+          newErrors.middleName = 'Middle name must be less than 50 characters';
+          isValid = false;
+        }
+
+        if (!lastName.trim()) {
+          newErrors.lastName = 'Last name is required';
+          isValid = false;
+        } else if (lastName.trim().length < 2) {
+          newErrors.lastName = 'Last name must be at least 2 characters';
+          isValid = false;
+        } else if (lastName.trim().length > 50) {
+          newErrors.lastName = 'Last name must be less than 50 characters';
+          isValid = false;
+        }
+
+        if (!birthdate) {
+          newErrors.birthdate = 'Please select your birthdate';
+          isValid = false;
+        } else if (birthdate > new Date()) {
+          newErrors.birthdate = 'Birthdate cannot be in the future';
+          isValid = false;
+        } else {
+          const today = new Date();
+          const age = calculateAge(birthdate);
+          if (age < 13) {
+            newErrors.birthdate = 'You must be at least 13 years old to register';
+            isValid = false;
+          } else if (age > 120) {
+            newErrors.birthdate = 'Please enter a valid birthdate';
+            isValid = false;
+          }
+        }
+
+        if (!sex) {
+          newErrors.sex = 'Please select your sex';
+          isValid = false;
+        }
+        break;
+
+      case 3:
+        if (!block) {
+          newErrors.block = 'Please select a block';
+          isValid = false;
+        }
+        if (!lot) {
+          newErrors.lot = 'Please select a lot';
+          isValid = false;
+        }
+        if (!street) {
+          newErrors.street = 'Please select a street';
+          isValid = false;
+        }
+        break;
+
+      case 4:
+        if (isTenant && !tenantRelation) {
+          newErrors.tenantRelation = 'Please select your relation to the homeowner';
+          isValid = false;
+        }
+        if (!idImages.front) {
+          newErrors.idFront = 'Please upload the front of your valid ID';
+          isValid = false;
+        }
+        if (!idImages.back) {
+          newErrors.idBack = 'Please upload the back of your valid ID';
+          isValid = false;
+        }
+        break;
+
+      case 5:
+        if (!acceptedTerms) {
+          newErrors.terms = 'Please accept the terms and conditions to continue';
+          isValid = false;
+        }
+        break;
+
+      default:
+        break;
+    }
+
+    setErrors(newErrors);
+    return isValid;
+  }, [emailOrPhone, isEmail, password, confirmPassword, firstName, middleName, lastName, birthdate, sex, block, lot, street, isTenant, tenantRelation, idImages, acceptedTerms, calculateAge]);
+
+  const handleNext = useCallback(() => {
+    if (validateStep(currentStep)) {
+      // Clear errors when moving to next step
+      setErrors({});
+      nextStep();
+    }
+  }, [currentStep, validateStep, nextStep]);
+
+  const handlePrev = useCallback(() => {
+    // Clear errors when going back
+    setErrors({});
+    prevStep();
+  }, [prevStep]);
+
+  // Upload image to Firebase Storage
+  const uploadImageToStorage = useCallback(async (uri: string, path: string): Promise<string | null> => {
+    if (!storage) {
+      console.error('Storage is not initialized');
+      return null;
+    }
+
+    try {
+      // For React Native, convert the local URI to a blob using XMLHttpRequest
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload = function() {
+          resolve(xhr.response);
+        };
+        xhr.onerror = function() {
+          reject(new Error('Failed to load image'));
+        };
+        xhr.responseType = 'blob';
+        xhr.open('GET', uri, true);
+        xhr.send(null);
+      });
+      
+      // Create a reference to the file location
+      const storageRef = ref(storage, path);
+      
+      // Upload the file
+      await uploadBytes(storageRef, blob);
+      
+      // Get the download URL
+      const downloadURL = await getDownloadURL(storageRef);
+      return downloadURL;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      return null;
     }
   }, []);
 
   const handleSignUp = useCallback(async () => {
-    if (!fullName.trim() || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (!validateStep(5)) {
+      // Scroll to first error if any
       return;
     }
 
-    if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+    if (!storage) {
+      setError('general', 'Storage service is not available. Please try again later.');
+      Alert.alert('Error', 'Storage service is not available. Please try again later.');
       return;
     }
 
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
-      return;
-    }
-
-    if (!acceptedTerms) {
-      Alert.alert('Error', 'Please accept the terms and conditions');
-      return;
-    }
-
-    if (!location) {
-      Alert.alert('Error', 'Please select your location on the map');
-      return;
-    }
-
-    const authInstance = getAuthService();
-    if (!authInstance) {
-      Alert.alert('Error', 'Authentication service is not available');
+    if (!db) {
+      setError('general', 'Database service is not available. Please try again later.');
+      Alert.alert('Error', 'Database service is not available. Please try again later.');
       return;
     }
 
     setLoading(true);
+    setErrors({}); // Clear previous errors
+    
     try {
-      const userCredential = await createUserWithEmailAndPassword(authInstance, email.trim(), password);
-      const user = userCredential.user;
+      // Generate a unique ID for the pending user (using timestamp + random)
+      const pendingUserId = `pending_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const username = isEmail ? emailOrPhone.trim() : `${emailOrPhone.trim()}@subdibuddy.local`;
       
-      if (db && user && location) {
-        await setDoc(doc(db, 'users', user.uid), {
-          fullName: fullName.trim(),
-          email: email.trim(),
-          location: {
-            latitude: location.latitude,
-            longitude: location.longitude,
-          },
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-        });
+      // Upload images to Firebase Storage (using pendingUserId instead of user.uid)
+      let idFrontURL: string | null = null;
+      let idBackURL: string | null = null;
+      const documentURLs: Record<string, string> = {};
+
+      if (idImages.front) {
+        idFrontURL = await uploadImageToStorage(idImages.front, `pendingUsers/${pendingUserId}/id-front.jpg`);
+        if (!idFrontURL) {
+          throw new Error('Failed to upload ID front image');
+        }
       }
 
-      Alert.alert('Success', 'Account created successfully!', [
-        {
-          text: 'OK',
-          onPress: () => router.replace('/dashboard'),
+      if (idImages.back) {
+        idBackURL = await uploadImageToStorage(idImages.back, `pendingUsers/${pendingUserId}/id-back.jpg`);
+        if (!idBackURL) {
+          throw new Error('Failed to upload ID back image');
+        }
+      }
+
+      // Upload documents
+      for (const [key, uri] of Object.entries(documentImages)) {
+        if (uri) {
+          const docURL = await uploadImageToStorage(uri, `pendingUsers/${pendingUserId}/documents/${key}.jpg`);
+          if (docURL) {
+            documentURLs[key] = docURL;
+          }
+        }
+      }
+      
+      // Save to pendingUsers collection WITHOUT creating Firebase Auth account
+      await setDoc(doc(db, 'pendingUsers', pendingUserId), {
+        username: username, // Store the username format for Auth creation later
+        password: password, // Store password temporarily (will be used when admin approves)
+        firstName: firstName.trim(),
+        middleName: middleName.trim() || null,
+        lastName: lastName.trim(),
+        fullName: `${firstName.trim()} ${middleName.trim() ? middleName.trim() + ' ' : ''}${lastName.trim()}`.trim(),
+        birthdate: Timestamp.fromDate(birthdate!),
+        age: age,
+        sex: sex,
+        address: {
+          block: block,
+          lot: lot,
+          street: street,
         },
-      ]);
+        email: isEmail ? emailOrPhone.trim() : null,
+        phone: !isEmail ? emailOrPhone.trim() : null,
+        isTenant: isTenant,
+        tenantRelation: isTenant ? tenantRelation : null,
+        idFront: idFrontURL,
+        idBack: idBackURL,
+        documents: documentURLs,
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+
+      Alert.alert(
+        'Application Submitted', 
+        'Your application has been submitted successfully. Please wait for admin approval before you can log in. You will be notified once your account is approved.',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.replace('/login'),
+          },
+        ]
+      );
     } catch (error: any) {
-      let errorMessage = 'An error occurred during signup';
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = 'This email is already registered';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email address';
-      } else if (error.code === 'auth/weak-password') {
-        errorMessage = 'Password is too weak';
+      let errorMessage = 'An error occurred during application submission. Please try again.';
+      let errorField = 'general';
+      
+      if (error.code === 'permission-denied') {
+        errorMessage = 'Permission denied. Please check your database permissions.';
+      } else if (error.code === 'unavailable') {
+        errorMessage = 'Service is temporarily unavailable. Please try again later.';
       } else if (error.message) {
         errorMessage = error.message;
       }
-      Alert.alert('Signup Failed', errorMessage);
+      
+      setError(errorField, errorMessage);
+      Alert.alert('Application Failed', errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [fullName, email, password, confirmPassword, acceptedTerms, location, router, db]);
+  }, [
+    emailOrPhone, isEmail, password, firstName, middleName, lastName, birthdate, age, sex,
+    block, lot, street, isTenant, tenantRelation, idImages, documentImages, validateStep, setError, uploadImageToStorage
+  ]);
 
-  const isButtonDisabled = useMemo(() => {
-    return !fullName.trim() || !email || !password || !confirmPassword || !acceptedTerms || !location || loading;
-  }, [fullName, email, password, confirmPassword, acceptedTerms, location, loading]);
+  // Progress bar
+  const progress = (currentStep / TOTAL_STEPS) * 100;
+
+  // Render step content
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 1:
+        return (
+          <View style={styles.stepContent}>
+            <Text style={styles.stepTitle}>Create Your Account</Text>
+            <Text style={styles.stepSubtitle}>Step 1 of {TOTAL_STEPS}</Text>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Email or Phone Number *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder={isEmail ? "your.email@example.com" : "09XX XXX XXXX"}
+                value={emailOrPhone}
+                onChangeText={handleEmailOrPhoneChange}
+                keyboardType={isEmail ? "email-address" : "phone-pad"}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholderTextColor="#999"
+                editable={!loading}
+              />
+              <TouchableOpacity
+                style={styles.switchButton}
+                onPress={() => setIsEmail(!isEmail)}
+                disabled={loading}
+              >
+                <Text style={styles.switchButtonText}>
+                  Switch to {isEmail ? 'Phone' : 'Email'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Password *</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={[styles.passwordInput, errors.password && styles.inputError]}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    clearError('password');
+                    if (confirmPassword && text !== confirmPassword) {
+                      clearError('confirmPassword');
+                    }
+                  }}
+                  secureTextEntry={!showPassword}
+                  placeholderTextColor="#999"
+                  editable={!loading}
+                />
+                <TouchableOpacity
+                  style={styles.eyeButton}
+                  onPress={() => setShowPassword(!showPassword)}
+                  disabled={loading}
+                >
+                  <Text style={styles.eyeIcon}>{showPassword ? 'Hide' : 'Show'}</Text>
+                </TouchableOpacity>
+              </View>
+              {errors.password && (
+                <Text style={styles.errorText}>{errors.password}</Text>
+              )}
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Confirm Password *</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={[styles.passwordInput, errors.confirmPassword && styles.inputError]}
+                  placeholder="Confirm your password"
+                  value={confirmPassword}
+                  onChangeText={(text) => {
+                    setConfirmPassword(text);
+                    clearError('confirmPassword');
+                  }}
+                  secureTextEntry={!showConfirmPassword}
+                  placeholderTextColor="#999"
+                  editable={!loading}
+                />
+                <TouchableOpacity
+                  style={styles.eyeButton}
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  disabled={loading}
+                >
+                  <Text style={styles.eyeIcon}>{showConfirmPassword ? 'Hide' : 'Show'}</Text>
+                </TouchableOpacity>
+              </View>
+              {errors.confirmPassword && (
+                <Text style={styles.errorText}>{errors.confirmPassword}</Text>
+              )}
+            </View>
+
+            {/* Navigation Buttons */}
+            <View style={styles.formNavigationButtonsStep1}>
+              <TouchableOpacity
+                style={[styles.nextButtonInline, styles.nextButtonInlineFull]}
+                onPress={handleNext}
+                disabled={loading}
+              >
+                <Text style={styles.nextButtonTextInline}>Next</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.signInLinkInline}
+                onPress={() => router.push('/login')}
+                disabled={loading}
+              >
+                <Text style={styles.signInLinkTextInline}>
+                  Already have an account? <Text style={styles.signInLinkBoldInline}>Sign In</Text>
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+
+      case 2:
+        return (
+          <View style={styles.stepContent}>
+            <Text style={styles.stepTitle}>Personal Information</Text>
+            <Text style={styles.stepSubtitle}>Step 2 of {TOTAL_STEPS}</Text>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>First Name *</Text>
+              <TextInput
+                style={[styles.input, errors.firstName && styles.inputError]}
+                placeholder="Enter your first name"
+                value={firstName}
+                onChangeText={(text) => {
+                  setFirstName(text);
+                  clearError('firstName');
+                }}
+                autoCapitalize="words"
+                placeholderTextColor="#999"
+                editable={!loading}
+              />
+              {errors.firstName && (
+                <Text style={styles.errorText}>{errors.firstName}</Text>
+              )}
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Middle Name (Optional)</Text>
+              <TextInput
+                style={[styles.input, errors.middleName && styles.inputError]}
+                placeholder="Enter your middle name"
+                value={middleName}
+                onChangeText={(text) => {
+                  setMiddleName(text);
+                  clearError('middleName');
+                }}
+                autoCapitalize="words"
+                placeholderTextColor="#999"
+                editable={!loading}
+              />
+              {errors.middleName && (
+                <Text style={styles.errorText}>{errors.middleName}</Text>
+              )}
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Last Name *</Text>
+              <TextInput
+                style={[styles.input, errors.lastName && styles.inputError]}
+                placeholder="Enter your last name"
+                value={lastName}
+                onChangeText={(text) => {
+                  setLastName(text);
+                  clearError('lastName');
+                }}
+                autoCapitalize="words"
+                placeholderTextColor="#999"
+                editable={!loading}
+              />
+              {errors.lastName && (
+                <Text style={styles.errorText}>{errors.lastName}</Text>
+              )}
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Birthdate *</Text>
+              <TouchableOpacity
+                style={[styles.datePickerButton, errors.birthdate && styles.inputError]}
+                onPress={() => {
+                  handleDatePickerOpen();
+                  clearError('birthdate');
+                }}
+                disabled={loading}
+              >
+                <Text style={[styles.datePickerText, !birthdate && styles.datePickerPlaceholder]}>
+                  {birthdate ? formatDate(birthdate) : 'Select your birthdate'}
+                </Text>
+                {birthdate && age !== null && (
+                  <Text style={styles.ageText}>Age: {age}</Text>
+                )}
+              </TouchableOpacity>
+              {errors.birthdate && (
+                <Text style={styles.errorText}>{errors.birthdate}</Text>
+              )}
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Sex *</Text>
+              <TouchableOpacity
+                style={[styles.pickerButton, errors.sex && styles.inputError]}
+                onPress={() => {
+                  setShowSexPicker(true);
+                  clearError('sex');
+                }}
+                disabled={loading}
+              >
+                <Text style={[styles.pickerText, !sex && styles.pickerPlaceholder]}>
+                  {sex ? (sex === 'male' ? 'Male' : 'Female') : 'Select your sex'}
+                </Text>
+                <Text style={styles.pickerIcon}>▼</Text>
+              </TouchableOpacity>
+              {errors.sex && (
+                <Text style={styles.errorText}>{errors.sex}</Text>
+              )}
+            </View>
+
+            {/* Navigation Buttons */}
+            <View style={styles.formNavigationButtons}>
+              <TouchableOpacity
+                style={styles.backButtonInline}
+                onPress={handlePrev}
+                disabled={loading}
+              >
+                <Text style={styles.backButtonTextInline}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.nextButtonInline}
+                onPress={handleNext}
+                disabled={loading}
+              >
+                <Text style={styles.nextButtonTextInline}>Next</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+
+      case 3:
+        return (
+          <View style={styles.stepContent}>
+            <Text style={styles.stepTitle}>Address</Text>
+            <Text style={styles.stepSubtitle}>Step 3 of {TOTAL_STEPS}</Text>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Block *</Text>
+              <TouchableOpacity
+                style={[styles.pickerButton, errors.block && styles.inputError]}
+                onPress={() => {
+                  setShowBlockPicker(true);
+                  clearError('block');
+                }}
+                disabled={loading}
+              >
+                <Text style={[styles.pickerText, !block && styles.pickerPlaceholder]}>
+                  {block || 'Select Block'}
+                </Text>
+                <Text style={styles.pickerIcon}>▼</Text>
+              </TouchableOpacity>
+              {errors.block && (
+                <Text style={styles.errorText}>{errors.block}</Text>
+              )}
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Lot *</Text>
+              <TouchableOpacity
+                style={[styles.pickerButton, errors.lot && styles.inputError]}
+                onPress={() => {
+                  setShowLotPicker(true);
+                  clearError('lot');
+                }}
+                disabled={loading}
+              >
+                <Text style={[styles.pickerText, !lot && styles.pickerPlaceholder]}>
+                  {lot || 'Select Lot'}
+                </Text>
+                <Text style={styles.pickerIcon}>▼</Text>
+              </TouchableOpacity>
+              {errors.lot && (
+                <Text style={styles.errorText}>{errors.lot}</Text>
+              )}
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Street *</Text>
+              <TouchableOpacity
+                style={[styles.pickerButton, errors.street && styles.inputError]}
+                onPress={() => {
+                  setShowStreetPicker(true);
+                  clearError('street');
+                }}
+                disabled={loading}
+              >
+                <Text style={[styles.pickerText, !street && styles.pickerPlaceholder]}>
+                  {street || 'Select Street'}
+                </Text>
+                <Text style={styles.pickerIcon}>▼</Text>
+              </TouchableOpacity>
+              {errors.street && (
+                <Text style={styles.errorText}>{errors.street}</Text>
+              )}
+            </View>
+
+            {/* Navigation Buttons */}
+            <View style={styles.formNavigationButtons}>
+              <TouchableOpacity
+                style={styles.backButtonInline}
+                onPress={handlePrev}
+                disabled={loading}
+              >
+                <Text style={styles.backButtonTextInline}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.nextButtonInline}
+                onPress={handleNext}
+                disabled={loading}
+              >
+                <Text style={styles.nextButtonTextInline}>Next</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+
+      case 4:
+        return (
+          <View style={styles.stepContent}>
+            <Text style={styles.stepTitle}>Tenant & ID Verification</Text>
+            <Text style={styles.stepSubtitle}>Step 4 of {TOTAL_STEPS}</Text>
+
+            <View style={styles.formGroup}>
+              <TouchableOpacity
+                style={styles.checkboxContainer}
+                onPress={() => setIsTenant(!isTenant)}
+                disabled={loading}
+              >
+                <View style={styles.checkbox}>
+                  <Text style={styles.checkboxIcon}>{isTenant ? '✓' : ''}</Text>
+                </View>
+                <Text style={styles.checkboxLabel}>
+                  I am a tenant
+                </Text>
+              </TouchableOpacity>
+
+              {isTenant && (
+                <>
+                  <TouchableOpacity
+                    style={[styles.pickerButton, styles.pickerButtonMargin, errors.tenantRelation && styles.inputError]}
+                    onPress={() => {
+                      setShowRelationPicker(true);
+                      clearError('tenantRelation');
+                    }}
+                    disabled={loading}
+                  >
+                    <Text style={[styles.pickerText, !tenantRelation && styles.pickerPlaceholder]}>
+                      {tenantRelation || 'Select relation to homeowner'}
+                    </Text>
+                    <Text style={styles.pickerIcon}>▼</Text>
+                  </TouchableOpacity>
+                  {errors.tenantRelation && (
+                    <Text style={styles.errorText}>{errors.tenantRelation}</Text>
+                  )}
+                </>
+              )}
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Valid ID *</Text>
+              <Text style={styles.subLabel}>Upload front and back of your valid ID</Text>
+              
+              <View style={styles.idContainer}>
+                <View style={styles.idItem}>
+                  <Text style={styles.idLabel}>Front {errors.idFront && <Text style={styles.errorText}>*</Text>}</Text>
+                  {idImages.front ? (
+                    <Image source={{ uri: idImages.front }} style={styles.idImage} />
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.idUploadButton, errors.idFront && styles.idUploadButtonError]}
+                      onPress={() => {
+                        showImageSourcePicker('front');
+                        clearError('idFront');
+                      }}
+                      disabled={loading}
+                    >
+                      <Text style={styles.idUploadText}>Upload Front</Text>
+                    </TouchableOpacity>
+                  )}
+                  {errors.idFront && (
+                    <Text style={styles.errorText}>{errors.idFront}</Text>
+                  )}
+                </View>
+
+                <View style={styles.idItem}>
+                  <Text style={styles.idLabel}>Back {errors.idBack && <Text style={styles.errorText}>*</Text>}</Text>
+                  {idImages.back ? (
+                    <Image source={{ uri: idImages.back }} style={styles.idImage} />
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.idUploadButton, errors.idBack && styles.idUploadButtonError]}
+                      onPress={() => {
+                        showImageSourcePicker('back');
+                        clearError('idBack');
+                      }}
+                      disabled={loading}
+                    >
+                      <Text style={styles.idUploadText}>Upload Back</Text>
+                    </TouchableOpacity>
+                  )}
+                  {errors.idBack && (
+                    <Text style={styles.errorText}>{errors.idBack}</Text>
+                  )}
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Documents (Optional)</Text>
+              <Text style={styles.subLabel}>Upload any additional documents</Text>
+              
+              <View style={styles.documentsContainer}>
+                {['Document 1', 'Document 2', 'Document 3'].map((docName, index) => {
+                  const docKey = `doc${index + 1}`;
+                  return (
+                    <View key={docKey} style={styles.documentItem}>
+                      <Text style={styles.documentLabel}>{docName}</Text>
+                      {documentImages[docKey] ? (
+                        <View style={styles.documentImageContainer}>
+                          <Image source={{ uri: documentImages[docKey]! }} style={styles.documentImage} />
+                          <TouchableOpacity
+                            style={styles.removeDocumentButton}
+                            onPress={() => {
+                              setDocumentImages(prev => {
+                                const newDocs = { ...prev };
+                                delete newDocs[docKey];
+                                return newDocs;
+                              });
+                            }}
+                            disabled={loading}
+                          >
+                            <Text style={styles.removeDocumentText}>Remove</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.documentUploadButton}
+                          onPress={() => {
+                            showDocumentSourcePicker(docKey);
+                          }}
+                          disabled={loading}
+                        >
+                          <Text style={styles.documentUploadText}>Upload {docName}</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Navigation Buttons */}
+            <View style={styles.formNavigationButtons}>
+              <TouchableOpacity
+                style={styles.backButtonInline}
+                onPress={handlePrev}
+                disabled={loading}
+              >
+                <Text style={styles.backButtonTextInline}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.nextButtonInline}
+                onPress={handleNext}
+                disabled={loading}
+              >
+                <Text style={styles.nextButtonTextInline}>Next</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+
+      case 5:
+        return (
+          <View style={styles.stepContent}>
+            <Text style={styles.stepTitle}>Review & Terms</Text>
+            <Text style={styles.stepSubtitle}>Step 5 of {TOTAL_STEPS}</Text>
+
+            <ScrollView 
+              style={styles.reviewContainer}
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+            >
+              <Text style={styles.reviewSectionTitle}>Account Information</Text>
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Email/Phone:</Text>
+                <Text style={styles.reviewValue}>{emailOrPhone}</Text>
+              </View>
+
+              <Text style={styles.reviewSectionTitle}>Personal Information</Text>
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Full Name:</Text>
+                <Text style={styles.reviewValue}>
+                  {firstName} {middleName ? middleName + ' ' : ''}{lastName}
+                </Text>
+              </View>
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>First Name:</Text>
+                <Text style={styles.reviewValue}>{firstName || 'N/A'}</Text>
+              </View>
+              {middleName && (
+                <View style={styles.reviewSection}>
+                  <Text style={styles.reviewLabel}>Middle Name:</Text>
+                  <Text style={styles.reviewValue}>{middleName}</Text>
+                </View>
+              )}
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Last Name:</Text>
+                <Text style={styles.reviewValue}>{lastName || 'N/A'}</Text>
+              </View>
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Birthdate:</Text>
+                <Text style={styles.reviewValue}>
+                  {birthdate ? formatDate(birthdate) : 'N/A'}
+                </Text>
+              </View>
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Age:</Text>
+                <Text style={styles.reviewValue}>{age !== null ? age : 'N/A'}</Text>
+              </View>
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Sex:</Text>
+                <Text style={styles.reviewValue}>
+                  {sex ? (sex === 'male' ? 'Male' : 'Female') : 'N/A'}
+                </Text>
+              </View>
+
+              <Text style={styles.reviewSectionTitle}>Address</Text>
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Block:</Text>
+                <Text style={styles.reviewValue}>{block || 'N/A'}</Text>
+              </View>
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Lot:</Text>
+                <Text style={styles.reviewValue}>{lot || 'N/A'}</Text>
+              </View>
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Street:</Text>
+                <Text style={styles.reviewValue}>{street || 'N/A'}</Text>
+              </View>
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Full Address:</Text>
+                <Text style={styles.reviewValue}>{block}, {lot}, {street}</Text>
+              </View>
+
+              <Text style={styles.reviewSectionTitle}>Tenant Information</Text>
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Is Tenant:</Text>
+                <Text style={styles.reviewValue}>{isTenant ? 'Yes' : 'No'}</Text>
+              </View>
+              {isTenant && (
+                <View style={styles.reviewSection}>
+                  <Text style={styles.reviewLabel}>Relation to Homeowner:</Text>
+                  <Text style={styles.reviewValue}>{tenantRelation || 'N/A'}</Text>
+                </View>
+              )}
+
+              <Text style={styles.reviewSectionTitle}>ID Verification</Text>
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>ID Front:</Text>
+                {idImages.front ? (
+                  <Image source={{ uri: idImages.front }} style={styles.reviewImage} />
+                ) : (
+                  <Text style={styles.reviewValue}>Not uploaded</Text>
+                )}
+              </View>
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>ID Back:</Text>
+                {idImages.back ? (
+                  <Image source={{ uri: idImages.back }} style={styles.reviewImage} />
+                ) : (
+                  <Text style={styles.reviewValue}>Not uploaded</Text>
+                )}
+              </View>
+
+              {documentImages && Object.keys(documentImages).length > 0 && (
+                <>
+                  <Text style={styles.reviewSectionTitle}>Documents</Text>
+                  {Object.entries(documentImages).map(([key, uri]) => (
+                    uri && (
+                      <View key={key} style={styles.reviewSection}>
+                        <Text style={styles.reviewLabel}>
+                          {key.replace('doc', 'Document ')}:
+                        </Text>
+                        <Image source={{ uri }} style={styles.reviewImage} />
+                      </View>
+                    )
+                  ))}
+                </>
+              )}
+            </ScrollView>
+
+            <View style={styles.formGroup}>
+              <View style={styles.checkboxContainer}>
+                <TouchableOpacity
+                  style={[styles.checkbox, errors.terms && styles.checkboxError]}
+                  onPress={() => {
+                    setAcceptedTerms(!acceptedTerms);
+                    clearError('terms');
+                  }}
+                  disabled={loading}
+                >
+                  <Text style={styles.checkboxIcon}>{acceptedTerms ? '✓' : ''}</Text>
+                </TouchableOpacity>
+                <Text style={styles.checkboxLabel}>
+                  I accept the terms and conditions
+                </Text>
+              </View>
+              {errors.terms && (
+                <Text style={styles.errorText}>{errors.terms}</Text>
+              )}
+            </View>
+
+            {/* Navigation Buttons */}
+            <View style={styles.formNavigationButtons}>
+              <TouchableOpacity
+                style={styles.backButtonInline}
+                onPress={handlePrev}
+                disabled={loading}
+              >
+                <Text style={styles.backButtonTextInline}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.submitButtonInline, 
+                  styles.submitButtonInlineFull,
+                  (loading || !acceptedTerms) && styles.submitButtonInlineDisabled
+                ]}
+                onPress={handleSignUp}
+                disabled={loading || !acceptedTerms}
+              >
+                {loading ? (
+                  <View style={styles.buttonContentInline}>
+                    <ActivityIndicator size="small" color="#ffffff" />
+                    <Text style={styles.submitButtonTextInline}>Creating account...</Text>
+                  </View>
+                ) : (
+                  <Text style={[
+                    styles.submitButtonTextInline,
+                    (loading || !acceptedTerms) && styles.submitButtonTextInlineDisabled
+                  ]}>Sign Up</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+
+      default:
+        return null;
+    }
+  };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      <View style={styles.card}>
-        <View style={styles.logoBadge}>
-          <Text style={styles.logoText}>S</Text>
-        </View>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      enabled={true}
+    >
+      <View style={styles.header}>
+        <Image 
+          source={require('../assets/logo.png')} 
+          style={styles.logo}
+          resizeMode="contain"
+        />
         <Text style={styles.title}>Create Account</Text>
-        <Text style={styles.subtitle}>Sign up to get started</Text>
-
-        <View style={styles.form}>
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Full Name</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your full name"
-              value={fullName}
-              onChangeText={setFullName}
-              autoCapitalize="words"
-              placeholderTextColor="#999"
-              editable={!loading}
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="your.email@example.com"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholderTextColor="#999"
-              editable={!loading}
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Password</Text>
-            <View style={styles.passwordContainer}>
-              <TextInput
-                style={styles.passwordInput}
-                placeholder="Enter your password"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                placeholderTextColor="#999"
-                editable={!loading}
-              />
-              <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={() => setShowPassword(!showPassword)}
-                disabled={loading}
-              >
-                <Text style={styles.eyeIcon}>{showPassword ? 'Hide' : 'Show'}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Confirm Password</Text>
-            <View style={styles.passwordContainer}>
-              <TextInput
-                style={styles.passwordInput}
-                placeholder="Confirm your password"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry={!showConfirmPassword}
-                placeholderTextColor="#999"
-                editable={!loading}
-              />
-              <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                disabled={loading}
-              >
-                <Text style={styles.eyeIcon}>{showConfirmPassword ? 'Hide' : 'Show'}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Select Your Location</Text>
-            <TouchableOpacity
-              style={styles.mapContainer}
-              onPress={() => setShowFullMap(true)}
-              disabled={loading}
-            >
-              <WebView
-                source={{ html: smallMapHTML }}
-                style={styles.smallMap}
-                scrollEnabled={false}
-                zoomEnabled={false}
-                pointerEvents="none"
-              />
-              <View style={styles.mapOverlay}>
-                <Text style={styles.mapOverlayText}>Tap to select location</Text>
-              </View>
-            </TouchableOpacity>
-            {location && (
-              <Text style={styles.locationText}>
-                Location: {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-              </Text>
-            )}
-          </View>
-
-          <View style={styles.checkboxContainer}>
-            <TouchableOpacity
-              style={styles.checkbox}
-              onPress={() => setAcceptedTerms(!acceptedTerms)}
-              disabled={loading}
-            >
-              <Text style={styles.checkboxIcon}>{acceptedTerms ? '✓' : ''}</Text>
-            </TouchableOpacity>
-            <Text style={styles.checkboxLabel}>
-              I accept the terms and conditions
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.submitButton, isButtonDisabled && styles.submitButtonDisabled]}
-            onPress={handleSignUp}
-            disabled={isButtonDisabled}
-          >
-            {loading ? (
-              <View style={styles.buttonContent}>
-                <ActivityIndicator size="small" color="#ffffff" />
-                <Text style={styles.submitButtonText}>Creating account...</Text>
-              </View>
-            ) : (
-              <Text style={styles.submitButtonText}>Sign Up</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.loginLink}
-            onPress={() => router.push('/login')}
-            disabled={loading}
-          >
-            <Text style={styles.loginLinkText}>
-              Already have an account? <Text style={styles.loginLinkBold}>Sign In</Text>
-            </Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
-      <Modal
-        visible={showFullMap}
-        animationType="slide"
-        onRequestClose={() => setShowFullMap(false)}
-      >
-        <View style={styles.fullMapContainer}>
-          <View style={styles.fullMapHeader}>
-            <Text style={styles.fullMapTitle}>Select Your Location</Text>
-            <TouchableOpacity
-              style={styles.fullMapCloseButton}
-              onPress={() => setShowFullMap(false)}
-            >
-              <Text style={styles.fullMapCloseText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-          <WebView
-            ref={fullMapWebViewRef}
-            source={{ html: mapHTML }}
-            style={styles.fullMap}
-            onMessage={handleMapMessage}
-          />
-          <View style={styles.fullMapFooter}>
-            <TouchableOpacity
-              style={[styles.confirmButton, !location && styles.confirmButtonDisabled]}
-              onPress={() => {
-                if (location) {
-                  setShowFullMap(false);
-                }
-              }}
-              disabled={!location}
-            >
-              <Text style={styles.confirmButtonText}>Confirm Location</Text>
-            </TouchableOpacity>
-          </View>
+      {/* Progress Bar */}
+      <View style={styles.progressContainer}>
+        <View style={styles.progressBar}>
+          <View style={[styles.progressFill, { width: `${progress}%` }]} />
         </View>
+        <Text style={styles.progressText}>Step {currentStep} of {TOTAL_STEPS}</Text>
+      </View>
+
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+      >
+        <View style={styles.card}>
+          {renderStepContent()}
+        </View>
+      </ScrollView>
+
+      {/* Date Picker Modal */}
+      <Modal
+        visible={showDatePicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDatePicker(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowDatePicker(false)}
+        >
+          <View style={styles.datePickerModalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Birthdate</Text>
+              <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.datePickerContainer}>
+              <View style={styles.datePickerColumn}>
+                <Text style={styles.datePickerLabel}>Month</Text>
+                <ScrollView style={styles.datePickerScroll}>
+                  {getMonthOptions().map((month, index) => (
+                    <TouchableOpacity
+                      key={month}
+                      style={[
+                        styles.datePickerOption,
+                        tempDate.getMonth() === index && styles.datePickerOptionSelected
+                      ]}
+                      onPress={() => {
+                        const newDate = new Date(tempDate);
+                        newDate.setMonth(index);
+                        const daysInMonth = getDaysInMonth(newDate.getFullYear(), index);
+                        if (newDate.getDate() > daysInMonth) {
+                          newDate.setDate(daysInMonth);
+                        }
+                        setTempDate(newDate);
+                      }}
+                    >
+                      <Text style={[
+                        styles.datePickerOptionText,
+                        tempDate.getMonth() === index && styles.datePickerOptionTextSelected
+                      ]}>
+                        {month}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.datePickerColumn}>
+                <Text style={styles.datePickerLabel}>Day</Text>
+                <ScrollView style={styles.datePickerScroll}>
+                  {Array.from({ length: getDaysInMonth(tempDate.getFullYear(), tempDate.getMonth()) }, (_, i) => i + 1).map((day) => (
+                    <TouchableOpacity
+                      key={day}
+                      style={[
+                        styles.datePickerOption,
+                        tempDate.getDate() === day && styles.datePickerOptionSelected
+                      ]}
+                      onPress={() => {
+                        const newDate = new Date(tempDate);
+                        newDate.setDate(day);
+                        setTempDate(newDate);
+                      }}
+                    >
+                      <Text style={[
+                        styles.datePickerOptionText,
+                        tempDate.getDate() === day && styles.datePickerOptionTextSelected
+                      ]}>
+                        {day}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.datePickerColumn}>
+                <Text style={styles.datePickerLabel}>Year</Text>
+                <ScrollView style={styles.datePickerScroll}>
+                  {getYearOptions().map((year) => (
+                    <TouchableOpacity
+                      key={year}
+                      style={[
+                        styles.datePickerOption,
+                        tempDate.getFullYear() === year && styles.datePickerOptionSelected
+                      ]}
+                      onPress={() => {
+                        const newDate = new Date(tempDate);
+                        newDate.setFullYear(year);
+                        const daysInMonth = getDaysInMonth(year, newDate.getMonth());
+                        if (newDate.getDate() > daysInMonth) {
+                          newDate.setDate(daysInMonth);
+                        }
+                        setTempDate(newDate);
+                      }}
+                    >
+                      <Text style={[
+                        styles.datePickerOptionText,
+                        tempDate.getFullYear() === year && styles.datePickerOptionTextSelected
+                      ]}>
+                        {year}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+            <View style={styles.datePickerFooter}>
+              <TouchableOpacity
+                style={styles.datePickerCancelButton}
+                onPress={() => setShowDatePicker(false)}
+              >
+                <Text style={styles.datePickerCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.datePickerConfirmButton}
+                onPress={handleDatePickerConfirm}
+              >
+                <Text style={styles.datePickerConfirmText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
       </Modal>
-    </ScrollView>
+
+      {/* Sex Picker Modal */}
+      <Modal
+        visible={showSexPicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSexPicker(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowSexPicker(false)}
+        >
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Sex</Text>
+              <TouchableOpacity onPress={() => setShowSexPicker(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScrollView}>
+              <TouchableOpacity
+                style={styles.modalOption}
+                onPress={() => {
+                  setSex('male');
+                  setShowSexPicker(false);
+                }}
+              >
+                <Text style={styles.modalOptionText}>Male</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalOption}
+                onPress={() => {
+                  setSex('female');
+                  setShowSexPicker(false);
+                }}
+              >
+                <Text style={styles.modalOptionText}>Female</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Block Picker Modal */}
+      <Modal
+        visible={showBlockPicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowBlockPicker(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowBlockPicker(false)}
+        >
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Block</Text>
+              <TouchableOpacity onPress={() => setShowBlockPicker(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScrollView}>
+              {blockOptions.map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setBlock(option);
+                    setShowBlockPicker(false);
+                  }}
+                >
+                  <Text style={styles.modalOptionText}>{option}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Lot Picker Modal */}
+      <Modal
+        visible={showLotPicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowLotPicker(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowLotPicker(false)}
+        >
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Lot</Text>
+              <TouchableOpacity onPress={() => setShowLotPicker(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScrollView}>
+              {lotOptions.map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setLot(option);
+                    setShowLotPicker(false);
+                  }}
+                >
+                  <Text style={styles.modalOptionText}>{option}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Street Picker Modal */}
+      <Modal
+        visible={showStreetPicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowStreetPicker(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowStreetPicker(false)}
+        >
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Street</Text>
+              <TouchableOpacity onPress={() => setShowStreetPicker(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScrollView}>
+              {streetOptions.map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setStreet(option);
+                    setShowStreetPicker(false);
+                  }}
+                >
+                  <Text style={styles.modalOptionText}>{option}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Relation Picker Modal */}
+      <Modal
+        visible={showRelationPicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowRelationPicker(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowRelationPicker(false)}
+        >
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Relation</Text>
+              <TouchableOpacity onPress={() => setShowRelationPicker(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScrollView}>
+              {relationOptions.map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setTenantRelation(option);
+                    setShowRelationPicker(false);
+                  }}
+                >
+                  <Text style={styles.modalOptionText}>{option}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -392,67 +1638,176 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f9fafb',
   },
-  contentContainer: {
-    padding: 20,
+  header: {
+    paddingTop: Platform.OS === 'ios' ? 50 : 35,
+    paddingBottom: Math.max(10, height * 0.012),
+    paddingHorizontal: Math.max(16, width * 0.05),
     alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  logo: {
+    width: Math.min(width * 0.35, 140),
+    height: Math.min(width * 0.14, 56),
+    maxWidth: 140,
+    maxHeight: 56,
+    minWidth: 100,
+    minHeight: 40,
+    marginBottom: Math.max(8, height * 0.01),
+  },
+  title: {
+    fontSize: Math.max(16, Math.min(width * 0.045, 20)),
+    fontWeight: '400',
+    color: '#111827',
+  },
+  progressContainer: {
+    padding: Math.max(12, width * 0.04),
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#111827',
+    borderRadius: 2,
+  },
+  progressText: {
+    fontSize: Math.max(11, Math.min(width * 0.03, 13)),
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: Math.max(12, width * 0.05),
+    alignItems: 'center',
+    paddingBottom: Math.max(20, height * 0.03),
   },
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
-    padding: width > 400 ? 32 : 24,
+    padding: Math.max(16, Math.min(width * 0.08, 32)),
     borderWidth: 1,
     borderColor: '#e5e7eb',
     width: '100%',
-    maxWidth: 500,
+    maxWidth: Math.min(width * 0.95, 500),
+    minWidth: Math.min(width * 0.9, 320),
   },
-  logoBadge: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    backgroundColor: '#111827',
-    justifyContent: 'center',
-    alignItems: 'center',
-    alignSelf: 'center',
-    marginBottom: 24,
+  stepContent: {
+    width: '100%',
   },
-  logoText: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '500',
-  },
-  title: {
-    fontSize: 20,
+  stepTitle: {
+    fontSize: Math.max(18, Math.min(width * 0.05, 22)),
     fontWeight: '400',
     color: '#111827',
-    textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  subtitle: {
+  stepSubtitle: {
+    fontSize: Math.max(12, Math.min(width * 0.035, 15)),
     color: '#6b7280',
-    textAlign: 'center',
-    marginBottom: 24,
-    fontSize: 14,
+    marginBottom: Math.max(16, height * 0.02),
   },
   form: {
     width: '100%',
-    gap: 20,
+    gap: 16,
   },
   formGroup: {
-    gap: 8,
+    gap: Math.max(4, width * 0.015),
+    marginBottom: Math.max(12, height * 0.015),
   },
   label: {
     color: '#374151',
     fontWeight: '400',
-    fontSize: 14,
+    fontSize: Math.max(13, Math.min(width * 0.037, 15)),
+  },
+  subLabel: {
+    color: '#6b7280',
+    fontSize: Math.max(11, Math.min(width * 0.03, 13)),
+    marginBottom: 8,
   },
   input: {
+    padding: Math.max(10, width * 0.03),
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    fontSize: Math.max(13, Math.min(width * 0.037, 15)),
+    backgroundColor: '#ffffff',
+    color: '#111827',
+    minHeight: 44,
+  },
+  inputError: {
+    borderColor: '#ef4444',
+    borderWidth: 1.5,
+  },
+  errorText: {
+    fontSize: Math.max(11, Math.min(width * 0.03, 13)),
+    color: '#ef4444',
+    marginTop: 4,
+  },
+  datePickerButton: {
     padding: 12,
     borderWidth: 1,
     borderColor: '#d1d5db',
     borderRadius: 8,
-    fontSize: 14,
     backgroundColor: '#ffffff',
+  },
+  datePickerText: {
+    fontSize: 14,
     color: '#111827',
+  },
+  datePickerPlaceholder: {
+    color: '#9ca3af',
+  },
+  ageText: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 4,
+  },
+  pickerButton: {
+    padding: Math.max(10, width * 0.03),
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    minHeight: 44,
+  },
+  pickerButtonMargin: {
+    marginTop: 8,
+  },
+  pickerText: {
+    fontSize: Math.max(13, Math.min(width * 0.037, 15)),
+    color: '#111827',
+    flex: 1,
+  },
+  pickerPlaceholder: {
+    color: '#9ca3af',
+  },
+  pickerIcon: {
+    fontSize: Math.max(10, Math.min(width * 0.028, 12)),
+    color: '#6b7280',
+    marginLeft: 8,
+  },
+  switchButton: {
+    marginTop: 8,
+    padding: 8,
+    alignItems: 'center',
+  },
+  switchButtonText: {
+    fontSize: 12,
+    color: '#111827',
+    textDecorationLine: 'underline',
   },
   passwordContainer: {
     position: 'relative',
@@ -479,41 +1834,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
   },
-  mapContainer: {
-    height: 200,
-    borderRadius: 8,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    position: 'relative',
-  },
-  smallMap: {
-    width: '100%',
-    height: '100%',
-  },
-  mapOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
-  },
-  mapOverlayText: {
-    color: '#111827',
-    fontSize: 14,
-    fontWeight: '400',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    padding: 8,
-    borderRadius: 8,
-  },
-  locationText: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 4,
-  },
   checkboxContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -529,6 +1849,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
   },
+  checkboxError: {
+    borderColor: '#ef4444',
+    borderWidth: 1.5,
+  },
   checkboxIcon: {
     color: '#111827',
     fontSize: 12,
@@ -539,12 +1863,194 @@ const styles = StyleSheet.create({
     color: '#374151',
     fontSize: 14,
   },
-  submitButton: {
-    backgroundColor: '#111827',
-    padding: 12,
+  idContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  idItem: {
+    flex: 1,
+    gap: 8,
+  },
+  idLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  idImage: {
+    width: '100%',
+    height: 120,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  idUploadButton: {
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderStyle: 'dashed',
     borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f9fafb',
+  },
+  idUploadButtonError: {
+    borderColor: '#ef4444',
+    borderWidth: 1.5,
+    backgroundColor: '#fef2f2',
+  },
+  idUploadText: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  documentsContainer: {
     marginTop: 8,
+    gap: 12,
+  },
+  documentItem: {
+    gap: 8,
+  },
+  documentLabel: {
+    fontSize: 12,
+    color: '#374151',
+    fontWeight: '400',
+  },
+  documentImageContainer: {
+    gap: 8,
+  },
+  documentImage: {
+    width: '100%',
+    height: 120,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  removeDocumentButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: '#fee2e2',
+    alignItems: 'center',
+  },
+  removeDocumentText: {
+    fontSize: 12,
+    color: '#dc2626',
+    fontWeight: '500',
+  },
+  documentUploadButton: {
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderStyle: 'dashed',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f9fafb',
+  },
+  documentUploadText: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  reviewContainer: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 24,
+    maxHeight: height * 0.5,
+  },
+  reviewSectionTitle: {
+    fontSize: Math.max(14, Math.min(width * 0.038, 16)),
+    color: '#111827',
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  reviewSection: {
+    marginBottom: 12,
+  },
+  reviewLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 4,
+    fontWeight: '500',
+  },
+  reviewValue: {
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '400',
+  },
+  reviewImage: {
+    width: '100%',
+    height: 150,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    marginTop: 4,
+    resizeMode: 'cover',
+  },
+  navigationContainer: {
+    flexDirection: 'row',
+    padding: Math.max(12, width * 0.04),
+    gap: Math.max(8, width * 0.02),
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  backButton: {
+    flex: 1,
+    padding: Math.max(10, width * 0.03),
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  backButtonText: {
+    fontSize: Math.max(13, Math.min(width * 0.037, 15)),
+    color: '#374151',
+    fontWeight: '500',
+  },
+  signInButton: {
+    padding: Math.max(10, width * 0.03),
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    minHeight: 44,
+    justifyContent: 'center',
+    marginRight: Math.max(8, width * 0.02),
+  },
+  signInButtonText: {
+    fontSize: Math.max(13, Math.min(width * 0.037, 15)),
+    color: '#374151',
+    fontWeight: '400',
+  },
+  nextButton: {
+    flex: 1,
+    padding: Math.max(10, width * 0.03),
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#111827',
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  nextButtonFull: {
+    flex: 1,
+  },
+  nextButtonText: {
+    fontSize: Math.max(13, Math.min(width * 0.037, 15)),
+    color: '#ffffff',
+    fontWeight: '500',
+  },
+  submitButton: {
+    padding: Math.max(10, width * 0.03),
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#111827',
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  submitButtonFull: {
+    flex: 1,
   },
   submitButtonDisabled: {
     opacity: 0.5,
@@ -556,12 +2062,104 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: Math.max(13, Math.min(width * 0.037, 15)),
     fontWeight: '400',
   },
-  loginLink: {
-    marginTop: 16,
+  formNavigationButtons: {
+    flexDirection: 'row',
+    marginTop: Math.max(20, height * 0.025),
+    gap: Math.max(8, width * 0.02),
+    paddingTop: Math.max(16, height * 0.02),
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  formNavigationButtonsStep1: {
+    flexDirection: 'column',
+    marginTop: Math.max(20, height * 0.025),
+    gap: Math.max(12, height * 0.015),
+    paddingTop: Math.max(16, height * 0.02),
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  backButtonInline: {
+    flex: 1,
+    padding: Math.max(12, width * 0.033),
+    borderRadius: 8,
     alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  backButtonTextInline: {
+    fontSize: Math.max(14, Math.min(width * 0.038, 16)),
+    color: '#374151',
+    fontWeight: '500',
+  },
+  nextButtonInline: {
+    flex: 1,
+    padding: Math.max(12, width * 0.033),
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#111827',
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  nextButtonInlineFull: {
+    flex: 1,
+  },
+  nextButtonTextInline: {
+    fontSize: Math.max(14, Math.min(width * 0.038, 16)),
+    color: '#ffffff',
+    fontWeight: '500',
+  },
+  submitButtonInline: {
+    flex: 1,
+    padding: Math.max(12, width * 0.033),
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#111827',
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  submitButtonInlineFull: {
+    flex: 1,
+  },
+  submitButtonInlineDisabled: {
+    backgroundColor: '#d1d5db',
+    opacity: 0.6,
+  },
+  submitButtonTextInline: {
+    fontSize: Math.max(14, Math.min(width * 0.038, 16)),
+    color: '#ffffff',
+    fontWeight: '500',
+  },
+  submitButtonTextInlineDisabled: {
+    color: '#6b7280',
+  },
+  buttonContentInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  signInLinkInline: {
+    width: '100%',
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  signInLinkTextInline: {
+    color: '#6b7280',
+    fontSize: 14,
+  },
+  signInLinkBoldInline: {
+    color: '#111827',
+    fontWeight: '500',
+  },
+  loginLink: {
+    padding: 16,
+    paddingTop: 16,
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
   },
   loginLinkText: {
     color: '#6b7280',
@@ -571,56 +2169,136 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontWeight: '500',
   },
-  fullMapContainer: {
+  modalOverlay: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Math.max(16, width * 0.05),
   },
-  fullMapHeader: {
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    maxHeight: Math.min(height * 0.8, 600),
+    paddingBottom: Math.max(16, height * 0.02),
+    width: '100%',
+    maxWidth: Math.min(width * 0.9, 400),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  modalScrollView: {
+    maxHeight: Math.min(height * 0.6, 500),
+  },
+  modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: Math.max(12, width * 0.04),
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
-    backgroundColor: '#ffffff',
   },
-  fullMapTitle: {
-    fontSize: 18,
+  modalTitle: {
+    fontSize: Math.max(16, Math.min(width * 0.045, 20)),
     fontWeight: '400',
     color: '#111827',
-  },
-  fullMapCloseButton: {
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  fullMapCloseText: {
-    fontSize: 20,
-    color: '#6b7280',
-  },
-  fullMap: {
     flex: 1,
   },
-  fullMapFooter: {
+  modalCloseText: {
+    fontSize: Math.max(20, Math.min(width * 0.06, 24)),
+    color: '#6b7280',
+    padding: 4,
+  },
+  modalOption: {
+    padding: Math.max(14, width * 0.04),
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  modalOptionText: {
+    fontSize: Math.max(14, Math.min(width * 0.04, 17)),
+    color: '#111827',
+  },
+  datePickerModalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    maxHeight: Math.min(height * 0.8, 600),
+    width: '100%',
+    maxWidth: Math.min(width * 0.9, 400),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  datePickerContainer: {
+    flexDirection: 'row',
+    height: 300,
+    padding: 16,
+  },
+  datePickerColumn: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  datePickerLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#6b7280',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  datePickerScroll: {
+    flex: 1,
+  },
+  datePickerOption: {
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 4,
+    alignItems: 'center',
+  },
+  datePickerOptionSelected: {
+    backgroundColor: '#111827',
+  },
+  datePickerOptionText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  datePickerOptionTextSelected: {
+    color: '#ffffff',
+    fontWeight: '500',
+  },
+  datePickerFooter: {
+    flexDirection: 'row',
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
-    backgroundColor: '#ffffff',
+    gap: 12,
   },
-  confirmButton: {
-    backgroundColor: '#111827',
-    padding: 14,
+  datePickerCancelButton: {
+    flex: 1,
+    padding: 12,
     borderRadius: 8,
     alignItems: 'center',
+    backgroundColor: '#f3f4f6',
   },
-  confirmButtonDisabled: {
-    opacity: 0.5,
-  },
-  confirmButtonText: {
-    color: '#ffffff',
+  datePickerCancelText: {
     fontSize: 14,
-    fontWeight: '400',
+    color: '#374151',
+    fontWeight: '500',
+  },
+  datePickerConfirmButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#111827',
+  },
+  datePickerConfirmText: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '500',
   },
 });
-
