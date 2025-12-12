@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { onAuthStateChanged } from 'firebase/auth'
 import { collection, getDocs } from 'firebase/firestore'
 import { auth, db } from '../firebase/config'
+import { isSuperadmin } from '../utils/auth'
 import Layout from '../components/Layout'
 
 interface StatCardProps {
@@ -37,9 +38,17 @@ function Dashboard() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        setUser(currentUser)
+        // Check if user is a superadmin
+        const isAdmin = await isSuperadmin(currentUser)
+        if (isAdmin) {
+          setUser(currentUser)
+        } else {
+          // User is not a superadmin, sign them out and redirect
+          await auth.signOut()
+          navigate('/')
+        }
       } else {
         navigate('/')
       }
@@ -62,12 +71,12 @@ function Dashboard() {
         getDocs(collection(db, 'visitors')),
       ]);
 
-      // Count users (excluding superadmins - only count residents)
+      // Count users (excluding superadmins and archived residents - only count active residents)
       let totalUsers = 0;
       usersSnapshot.forEach((doc) => {
         const data = doc.data();
-        // Only count residents, not superadmins
-        if (data.role !== 'superadmin') {
+        // Only count residents, not superadmins or archived residents
+        if (data.role !== 'superadmin' && data.status !== 'archived') {
           totalUsers++;
         }
       });

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, query, orderBy, updateDoc, doc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
+import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
 
 interface Complaint {
@@ -23,9 +24,17 @@ function Complaints() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        setUser(currentUser);
+        // Check if user is a superadmin
+        const isAdmin = await isSuperadmin(currentUser);
+        if (isAdmin) {
+          setUser(currentUser);
+        } else {
+          // User is not a superadmin, sign them out and redirect
+          await auth.signOut();
+          navigate('/');
+        }
       } else {
         navigate('/');
       }

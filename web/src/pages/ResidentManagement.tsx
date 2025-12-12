@@ -1,9 +1,10 @@
 import { useEffect, useState, memo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { onAuthStateChanged } from 'firebase/auth';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, getDocs, query, orderBy, doc, updateDoc, deleteDoc, setDoc, getDoc, Timestamp } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../firebase/config';
+import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
 
 interface UserLocation {
@@ -33,7 +34,7 @@ interface Resident {
   idBack?: string;
   documents?: Record<string, string>;
   location?: UserLocation;
-  status?: 'pending' | 'approved' | 'rejected';
+  status?: 'pending' | 'approved' | 'rejected' | 'deactivated' | 'archived';
   createdAt?: any;
   updatedAt?: any;
 }
@@ -47,20 +48,42 @@ function ResidentManagement() {
   const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'applications' | 'registered'>('applications');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isApproving, setIsApproving] = useState(false); // Flag to prevent redirect during approval
+  const location = useLocation();
   const navigate = useNavigate();
+  
+  // Determine active view from URL
+  const activeView = location.pathname.includes('/registered') ? 'registered' : 'applications';
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      // Don't redirect if we're in the middle of approving a user
+      if (isApproving) {
+        console.log('Approval in progress, skipping auth state check');
+        return;
+      }
+      
       if (currentUser) {
-        setUser(currentUser);
+        // Check if user is a superadmin
+        const isAdmin = await isSuperadmin(currentUser);
+        if (isAdmin) {
+          setUser(currentUser);
+        } else {
+          // User is not a superadmin, sign them out and redirect
+          await auth.signOut();
+          navigate('/');
+        }
       } else {
-        navigate('/');
+        // Only redirect if not approving
+        if (!isApproving) {
+          navigate('/');
+        }
       }
     });
 
     return () => unsubscribe();
-  }, [navigate]);
+  }, [navigate, isApproving]);
 
   const fetchResidents = useCallback(async () => {
     if (!db) {
@@ -74,8 +97,8 @@ function ResidentManagement() {
       
       const residentsData: Resident[] = [];
       
-      // Fetch based on active tab
-      if (activeTab === 'applications') {
+      // Fetch based on active view
+      if (activeView === 'applications') {
         // Fetch from pendingUsers collection
         let querySnapshot;
         try {
@@ -112,10 +135,16 @@ function ResidentManagement() {
             console.log('Skipping superadmin:', doc.id);
             return;
           }
+          // Filter out archived residents - they should be in archivedUsers collection
+          // This is a safety check in case any archived residents are still in users collection
+          if (data.status === 'archived') {
+            console.log('Skipping archived resident:', doc.id);
+            return;
+          }
           residentsData.push({
             id: doc.id,
             ...data,
-            status: 'approved', // All users are approved
+            status: data.status || 'approved', // Use actual status or default to approved
           } as Resident);
         });
       }
@@ -127,7 +156,7 @@ function ResidentManagement() {
         return bDate - aDate;
       });
       
-      console.log(`Fetched ${residentsData.length} residents from ${activeTab === 'applications' ? 'pendingUsers' : 'users'}`);
+      console.log(`Fetched ${residentsData.length} residents from ${activeView === 'applications' ? 'pendingUsers' : 'users'}`);
       setResidents(residentsData);
     } catch (error: any) {
       console.error('Error fetching residents:', error);
@@ -140,7 +169,7 @@ function ResidentManagement() {
     } finally {
       setLoading(false);
     }
-  }, [db, activeTab]);
+  }, [db, activeView]);
 
   useEffect(() => {
     if (user) {
@@ -152,7 +181,14 @@ function ResidentManagement() {
         alert('Database connection error. Please refresh the page.');
       }
     }
-  }, [user, db, fetchResidents]);
+  }, [user, db, fetchResidents, activeView]);
+  
+  // Redirect to applications if on base route
+  useEffect(() => {
+    if (location.pathname === '/resident-management') {
+      navigate('/resident-management/applications', { replace: true });
+    }
+  }, [location.pathname, navigate]);
 
   const handleLocationClick = useCallback((location: UserLocation) => {
     setSelectedLocation(location);
@@ -172,44 +208,160 @@ function ResidentManagement() {
     setShowDetailsModal(true);
   }, []);
 
-  const handleApprove = useCallback(async (residentId: string) => {
-    if (!db || !auth) return;
+  const handleApprove = useCallback(async (residentId: string): Promise<boolean> => {
+    if (!db || !auth) {
+      console.error('Database or auth not available');
+      return false;
+    }
+    
+    // Get current activeView to ensure we refresh the correct view
+    const currentView = location.pathname.includes('/registered') ? 'registered' : 'applications';
+    console.log(`Approving resident ${residentId} from ${currentView} view`);
     
     setProcessingStatus(residentId);
     try {
       // Get the pending user data
       const pendingUserRef = doc(db, 'pendingUsers', residentId);
+      console.log(`Fetching pending user document: ${residentId}`);
       const pendingUserSnap = await getDoc(pendingUserRef);
       
       if (!pendingUserSnap.exists()) {
+        console.error(`Pending user document ${residentId} does not exist`);
         throw new Error('Pending user not found');
       }
       
       const pendingUserData = pendingUserSnap.data();
+      console.log('Pending user data retrieved:', { username: pendingUserData.username, hasPassword: !!pendingUserData.password });
       const { username, password, ...userData } = pendingUserData;
       
       if (!username || !password) {
+        console.error('Missing username or password in pending user data');
         throw new Error('Missing username or password in pending user data');
       }
       
-      // Create Firebase Auth account
-      const userCredential = await createUserWithEmailAndPassword(auth, username, password);
+      // Store current admin user info before creating new user
+      const currentAdmin = auth.currentUser;
+      if (!currentAdmin) {
+        throw new Error('Admin session not found. Please log in again.');
+      }
+      const adminEmail = currentAdmin.email;
+      const adminUid = currentAdmin.uid;
+      console.log(`Current admin: ${adminEmail} (${adminUid})`);
+      
+      // Set flag to prevent redirect during approval
+      setIsApproving(true);
+      
+      // Create a separate Firebase app instance for user creation
+      // This prevents the new user from replacing the admin session
+      const { initializeApp, getApps, getApp } = await import('firebase/app');
+      const { getAuth: getAuthSeparate, createUserWithEmailAndPassword: createUserSeparate, signOut: signOutSeparate } = await import('firebase/auth');
+      
+      // Use a separate app instance with a different name
+      let separateApp;
+      const existingApps = getApps();
+      const separateAppName = 'userCreationApp';
+      
+      try {
+        // Try to get existing app instance
+        separateApp = getApp(separateAppName);
+      } catch (e) {
+        // App doesn't exist, create it with the same config as the main app
+        const firebaseConfig = {
+          apiKey: "AIzaSyAcWeoaUkuWyODs2dLwP9wblhGm7uBg6HA",
+          authDomain: "subsibuddy-88108.firebaseapp.com",
+          projectId: "subsibuddy-88108",
+          storageBucket: "subsibuddy-88108.firebasestorage.app",
+          messagingSenderId: "9632330814",
+          appId: "1:9632330814:web:a40032aa07f294eb0dcd6f",
+          measurementId: "G-YTVMYLV5J2"
+        };
+        separateApp = initializeApp(firebaseConfig, separateAppName);
+      }
+      
+      const separateAuth = getAuthSeparate(separateApp);
+      
+      // Create Firebase Auth account using the separate auth instance
+      // This won't affect the main admin session
+      console.log('Creating Firebase Auth account with separate instance...');
+      const userCredential = await createUserSeparate(separateAuth, username, password);
       const user = userCredential.user;
+      console.log(`Firebase Auth account created with UID: ${user.uid}`);
       
       // Move to users collection with the Firebase Auth UID
+      console.log(`Saving to users collection with UID: ${user.uid}`);
       await setDoc(doc(db, 'users', user.uid), {
         ...userData,
         status: 'approved',
         updatedAt: Timestamp.now(),
       });
+      console.log('User saved to users collection successfully');
       
       // Delete from pendingUsers collection
+      console.log(`Deleting pending user document: ${residentId}`);
       await deleteDoc(pendingUserRef);
+      console.log(`Successfully deleted pending user ${residentId} from pendingUsers collection`);
       
-      // Update local state - remove from list
-      setResidents(prev => prev.filter(r => r.id !== residentId));
+      // Sign out the newly created user from the separate auth instance
+      console.log('Signing out newly created user from separate instance...');
+      await signOutSeparate(separateAuth);
+      
+      // Verify admin session is still intact
+      const adminStillLoggedIn = auth.currentUser;
+      if (!adminStillLoggedIn || adminStillLoggedIn.uid !== adminUid) {
+        console.warn('Admin session was lost. This should not happen with separate app instance.');
+        throw new Error('Admin session was lost during approval. Please try again.');
+      }
+      console.log('Admin session preserved successfully');
+      
+      // Clear the approval flag
+      setIsApproving(false);
+      
+      // Update local state - remove from list immediately
+      setResidents(prev => {
+        const beforeCount = prev.length;
+        const filtered = prev.filter(r => r.id !== residentId);
+        console.log(`Removed resident ${residentId} from local state. Before: ${beforeCount}, After: ${filtered.length}`);
+        return filtered;
+      });
       
       alert('Resident approved successfully');
+      
+      // Refresh the list from database to ensure UI is up to date
+      // Only refresh if we're on the applications view
+      if (currentView === 'applications') {
+        console.log('Refreshing applications list after approval');
+        // Add a small delay to ensure Firestore has propagated the deletion
+        await new Promise(resolve => setTimeout(resolve, 500));
+        await fetchResidents();
+        console.log('Applications list refreshed');
+      }
+      
+      // Update local state - remove from list immediately for better UX
+      setResidents(prev => {
+        const beforeCount = prev.length;
+        const filtered = prev.filter(r => {
+          const shouldKeep = r.id !== residentId;
+          if (!shouldKeep) {
+            console.log(`Filtering out resident: ${r.id} (matches ${residentId})`);
+          }
+          return shouldKeep;
+        });
+        console.log(`Removed resident ${residentId} from local state. Before: ${beforeCount}, After: ${filtered.length}`);
+        return filtered;
+      });
+      
+      alert('Resident approved successfully');
+      
+      // Refresh the list from database to ensure UI is up to date
+      // Only refresh if we're on the applications view
+      if (currentView === 'applications') {
+        console.log('Refreshing applications list after approval');
+        // Add a small delay to ensure Firestore has propagated the deletion
+        await new Promise(resolve => setTimeout(resolve, 500));
+        await fetchResidents();
+        console.log('Applications list refreshed');
+      }
+      return true;
     } catch (error: any) {
       console.error('Error approving resident:', error);
       let errorMessage = `Failed to approve resident: ${error.message}`;
@@ -217,17 +369,18 @@ function ResidentManagement() {
         errorMessage = 'This email or phone number is already registered. Please check the pending user data.';
       }
       alert(errorMessage);
+      return false;
     } finally {
       setProcessingStatus(null);
     }
-  }, [db, auth]);
+  }, [db, auth, fetchResidents, location.pathname]);
 
-  const handleReject = useCallback(async (residentId: string) => {
-    if (!db) return;
+  const handleReject = useCallback(async (residentId: string): Promise<boolean> => {
+    if (!db) return false;
     
     const reason = prompt('Please provide a reason for rejection:');
     if (!reason || reason.trim() === '') {
-      return;
+      return false;
     }
     
     setProcessingStatus(residentId);
@@ -238,10 +391,115 @@ function ResidentManagement() {
       // Update local state - remove from list
       setResidents(prev => prev.filter(r => r.id !== residentId));
       
+      // Refresh the list to ensure UI is up to date
+      await fetchResidents();
+      
       alert('Application rejected and removed');
+      return true;
     } catch (error: any) {
       console.error('Error rejecting resident:', error);
       alert(`Failed to reject application: ${error.message}`);
+      return false;
+    } finally {
+      setProcessingStatus(null);
+    }
+  }, [db, fetchResidents]);
+
+  const handleDeactivate = useCallback(async (residentId: string) => {
+    if (!db) return;
+    
+    if (!window.confirm('Are you sure you want to deactivate this resident? They will not be able to log in until reactivated.')) {
+      return;
+    }
+    
+    setProcessingStatus(residentId);
+    try {
+      const residentRef = doc(db, 'users', residentId);
+      await updateDoc(residentRef, {
+        status: 'deactivated',
+        updatedAt: Timestamp.now(),
+      });
+      
+      // Update local state
+      setResidents(prev => prev.map(r => 
+        r.id === residentId ? { ...r, status: 'deactivated' } : r
+      ));
+      
+      alert('Resident deactivated successfully');
+    } catch (error: any) {
+      console.error('Error deactivating resident:', error);
+      alert(`Failed to deactivate resident: ${error.message}`);
+    } finally {
+      setProcessingStatus(null);
+    }
+  }, [db]);
+
+  const handleActivate = useCallback(async (residentId: string) => {
+    if (!db) return;
+    
+    if (!window.confirm('Are you sure you want to activate this resident? They will be able to log in again.')) {
+      return;
+    }
+    
+    setProcessingStatus(residentId);
+    try {
+      const residentRef = doc(db, 'users', residentId);
+      await updateDoc(residentRef, {
+        status: 'approved',
+        updatedAt: Timestamp.now(),
+      });
+      
+      // Update local state
+      setResidents(prev => prev.map(r => 
+        r.id === residentId ? { ...r, status: 'approved' } : r
+      ));
+      
+      alert('Resident activated successfully');
+    } catch (error: any) {
+      console.error('Error activating resident:', error);
+      alert(`Failed to activate resident: ${error.message}`);
+    } finally {
+      setProcessingStatus(null);
+    }
+  }, [db]);
+
+  const handleArchive = useCallback(async (residentId: string) => {
+    if (!db) return;
+    
+    if (!window.confirm('Are you sure you want to archive this resident? Archived residents will be moved to archive and can be restored later.')) {
+      return;
+    }
+    
+    setProcessingStatus(residentId);
+    try {
+      // Get the resident data from users collection
+      const residentRef = doc(db, 'users', residentId);
+      const residentDoc = await getDoc(residentRef);
+      
+      if (!residentDoc.exists()) {
+        throw new Error('Resident not found');
+      }
+      
+      const residentData = residentDoc.data();
+      
+      // Move to archivedUsers collection
+      await setDoc(doc(db, 'archivedUsers', residentId), {
+        ...residentData,
+        status: 'archived',
+        archivedAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+      
+      // Delete from users collection
+      await deleteDoc(residentRef);
+      
+      // Update local state - remove from list
+      setResidents(prev => prev.filter(r => r.id !== residentId));
+      
+      alert('Resident archived successfully');
+    } catch (error: any) {
+      console.error('Error archiving resident:', error);
+      alert(`Failed to archive resident: ${error.message}`);
     } finally {
       setProcessingStatus(null);
     }
@@ -253,6 +511,10 @@ function ResidentManagement() {
         return <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">Approved</span>;
       case 'rejected':
         return <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">Rejected</span>;
+      case 'deactivated':
+        return <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">Deactivated</span>;
+      case 'archived':
+        return <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">Archived</span>;
       case 'pending':
       default:
         return <span className="px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800">Pending</span>;
@@ -264,7 +526,9 @@ function ResidentManagement() {
       <div className="min-h-screen bg-white w-full">
         <header className="bg-white text-gray-900 py-4 border-b border-gray-200 sticky top-0 z-[100]">
           <div className="w-full m-0 px-8 flex justify-between items-center">
-            <h1 className="text-xl m-0 text-gray-900 font-normal">Resident Management</h1>
+            <h1 className="text-xl m-0 text-gray-900 font-normal">
+              {activeView === 'applications' ? 'Applications' : 'Registered Residents'}
+            </h1>
             <div className="flex items-center gap-5">
               <span className="text-sm text-gray-500 font-normal">{user?.email || ''}</span>
             </div>
@@ -275,43 +539,51 @@ function ResidentManagement() {
           <div className="flex flex-col gap-6 w-full max-w-full">
             <div className="w-full bg-white rounded-xl p-8 border border-gray-100 shadow-sm">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="m-0 text-gray-900 text-lg font-normal">Residents</h2>
-                <button 
-                  className="bg-gray-900 text-white border-none px-4 py-2 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={fetchResidents} 
-                  disabled={loading}
-                >
-                  {loading ? 'Loading...' : 'Refresh'}
-                </button>
+                <h2 className="m-0 text-gray-900 text-lg font-normal">
+                  {activeView === 'applications' ? 'Pending Applications' : 'Registered Residents'}
+                </h2>
+                {activeView === 'applications' && (
+                  <button 
+                    className="bg-gray-900 text-white border-none px-4 py-2 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={fetchResidents} 
+                    disabled={loading}
+                  >
+                    {loading ? 'Loading...' : 'Refresh'}
+                  </button>
+                )}
               </div>
 
-              {/* Tab Buttons */}
-              <div className="flex gap-2 mb-6 border-b border-gray-200">
-                <button
-                  className={`px-4 py-2 text-sm font-medium transition-all ${
-                    activeTab === 'applications'
-                      ? 'text-gray-900 border-b-2 border-gray-900'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                  onClick={() => setActiveTab('applications')}
-                >
-                  Applications
-                </button>
-                <button
-                  className={`px-4 py-2 text-sm font-medium transition-all ${
-                    activeTab === 'registered'
-                      ? 'text-gray-900 border-b-2 border-gray-900'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                  onClick={() => setActiveTab('registered')}
-                >
-                  Registered
-                </button>
-              </div>
+              {activeView === 'registered' && (
+                <div className="mb-6">
+                  <input
+                    type="text"
+                    placeholder="Search by name, email, or phone..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  />
+                </div>
+              )}
 
               {(() => {
-                // No need to filter - residents are already fetched from the correct collection
-                const filteredResidents = residents;
+                // Filter residents based on search query (only for registered view)
+                let filteredResidents = residents;
+                if (activeView === 'registered' && searchQuery.trim()) {
+                  const query = searchQuery.toLowerCase().trim();
+                  filteredResidents = residents.filter(resident => {
+                    const fullName = (resident.fullName || '').toLowerCase();
+                    const firstName = (resident.firstName || '').toLowerCase();
+                    const lastName = (resident.lastName || '').toLowerCase();
+                    const email = (resident.email || '').toLowerCase();
+                    const phone = (resident.phone || '').toLowerCase();
+                    
+                    return fullName.includes(query) ||
+                           firstName.includes(query) ||
+                           lastName.includes(query) ||
+                           email.includes(query) ||
+                           phone.includes(query);
+                  });
+                }
 
                 return (
                   <>
@@ -320,12 +592,12 @@ function ResidentManagement() {
                     ) : filteredResidents.length === 0 ? (
                       <div className="text-center py-20 px-5 text-gray-600">
                         <p className="text-base font-normal text-gray-600">
-                          {activeTab === 'applications' 
+                          {activeView === 'applications' 
                             ? 'No pending applications found.' 
                             : 'No registered residents found.'}
                         </p>
                         <p className="text-xs text-gray-400 mt-2.5">
-                          {activeTab === 'applications'
+                          {activeView === 'applications'
                             ? 'New signups will appear here for approval.'
                             : 'Approved residents will appear here.'}
                         </p>
@@ -361,7 +633,7 @@ function ResidentManagement() {
                               >
                                 View Details
                               </button>
-                              {resident.status === 'pending' && (
+                              {activeView === 'applications' && (
                                 <>
                                   <button
                                     className="bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -378,6 +650,33 @@ function ResidentManagement() {
                                     {processingStatus === resident.id ? 'Processing...' : 'Reject'}
                                   </button>
                                 </>
+                              )}
+                              {activeView === 'registered' && resident.status !== 'deactivated' && resident.status !== 'archived' && (
+                                <button
+                                  className="bg-orange-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => handleDeactivate(resident.id)}
+                                  disabled={processingStatus === resident.id}
+                                >
+                                  {processingStatus === resident.id ? 'Processing...' : 'Deactivate'}
+                                </button>
+                              )}
+                              {activeView === 'registered' && resident.status === 'deactivated' && (
+                                <button
+                                  className="bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => handleActivate(resident.id)}
+                                  disabled={processingStatus === resident.id}
+                                >
+                                  {processingStatus === resident.id ? 'Processing...' : 'Activate'}
+                                </button>
+                              )}
+                              {activeView === 'registered' && resident.status !== 'archived' && (
+                                <button
+                                  className="bg-purple-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => handleArchive(resident.id)}
+                                  disabled={processingStatus === resident.id}
+                                >
+                                  {processingStatus === resident.id ? 'Processing...' : 'Archive'}
+                                </button>
                               )}
                             </div>
                           </td>
@@ -543,29 +842,71 @@ function ResidentManagement() {
                 )}
               </div>
               <div className="px-6 py-5 border-t border-gray-200 flex justify-end gap-3">
-                {selectedResident.status === 'pending' && (
+                {activeView === 'applications' && (
                   <>
                     <button
-                      className="bg-green-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-green-700"
-                      onClick={() => {
-                        handleApprove(selectedResident.id);
-                        setShowDetailsModal(false);
+                      className="bg-green-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={async () => {
+                        const success = await handleApprove(selectedResident.id);
+                        // Only close modal on success
+                        if (success) {
+                          setShowDetailsModal(false);
+                        }
                       }}
                       disabled={processingStatus === selectedResident.id}
                     >
                       {processingStatus === selectedResident.id ? 'Processing...' : 'Approve'}
                     </button>
                     <button
-                      className="bg-red-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-red-700"
-                      onClick={() => {
-                        handleReject(selectedResident.id);
-                        setShowDetailsModal(false);
+                      className="bg-red-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={async () => {
+                        const success = await handleReject(selectedResident.id);
+                        // Only close modal on success
+                        if (success) {
+                          setShowDetailsModal(false);
+                        }
                       }}
                       disabled={processingStatus === selectedResident.id}
                     >
                       {processingStatus === selectedResident.id ? 'Processing...' : 'Reject'}
                     </button>
                   </>
+                )}
+                {activeView === 'registered' && selectedResident.status !== 'deactivated' && selectedResident.status !== 'archived' && (
+                  <button
+                    className="bg-orange-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => {
+                      handleDeactivate(selectedResident.id);
+                      setShowDetailsModal(false);
+                    }}
+                    disabled={processingStatus === selectedResident.id}
+                  >
+                    {processingStatus === selectedResident.id ? 'Processing...' : 'Deactivate'}
+                  </button>
+                )}
+                {activeView === 'registered' && selectedResident.status === 'deactivated' && (
+                  <button
+                    className="bg-green-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => {
+                      handleActivate(selectedResident.id);
+                      setShowDetailsModal(false);
+                    }}
+                    disabled={processingStatus === selectedResident.id}
+                  >
+                    {processingStatus === selectedResident.id ? 'Processing...' : 'Activate'}
+                  </button>
+                )}
+                {activeView === 'registered' && selectedResident.status !== 'archived' && (
+                  <button
+                    className="bg-purple-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => {
+                      handleArchive(selectedResident.id);
+                      setShowDetailsModal(false);
+                    }}
+                    disabled={processingStatus === selectedResident.id}
+                  >
+                    {processingStatus === selectedResident.id ? 'Processing...' : 'Archive'}
+                  </button>
                 )}
                 <button
                   className="bg-gray-900 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-gray-800"

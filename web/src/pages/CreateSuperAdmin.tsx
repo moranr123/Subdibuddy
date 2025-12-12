@@ -38,14 +38,13 @@ function CreateSuperAdmin() {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Add user role to Firestore
-      // Note: This is NOT a resident - superadmin accounts should not appear in resident lists
-      await setDoc(doc(db, 'users', user.uid), {
+      // Store superadmin in separate collection (NOT in users collection)
+      // Superadmin accounts should not be in the users collection
+      await setDoc(doc(db, 'superadmins', user.uid), {
         email: user.email,
         role: 'superadmin',
         createdAt: new Date().toISOString(),
         isActive: true
-        // Intentionally NOT including resident fields like: fullName, location, etc.
       });
 
       setSuccess(true);

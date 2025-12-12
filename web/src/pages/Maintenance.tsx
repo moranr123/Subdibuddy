@@ -2,6 +2,7 @@ import { useEffect, useState, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase/config';
+import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
 
 function Maintenance() {
@@ -9,9 +10,17 @@ function Maintenance() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        setUser(currentUser);
+        // Check if user is a superadmin
+        const isAdmin = await isSuperadmin(currentUser);
+        if (isAdmin) {
+          setUser(currentUser);
+        } else {
+          // User is not a superadmin, sign them out and redirect
+          await auth.signOut();
+          navigate('/');
+        }
       } else {
         navigate('/');
       }

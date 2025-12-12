@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshCon
 import { useRouter } from 'expo-router';
 import { useEffect, useState, useCallback, useMemo, memo, useRef } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, getDocs, query, orderBy, where, Timestamp, addDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, where, Timestamp, addDoc, doc, getDoc } from 'firebase/firestore';
 import { getAuthService, db } from '../firebase/config';
 
 interface Announcement {
@@ -44,8 +44,29 @@ function DashboardScreen() {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(authInstance, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(authInstance, async (currentUser) => {
       if (currentUser) {
+        // Check if user account is deactivated
+        if (db) {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              if (userData.status === 'deactivated') {
+                // User account is deactivated, sign them out
+                await signOut(authInstance);
+                Alert.alert(
+                  'Account Deactivated',
+                  'Your account has been deactivated. Please contact the administrator for assistance.'
+                );
+                router.replace('/');
+                return;
+              }
+            }
+          } catch (error) {
+            console.error('Error checking user status:', error);
+          }
+        }
         setUser(currentUser);
       } else {
         router.replace('/');

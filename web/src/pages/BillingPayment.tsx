@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, query, orderBy, addDoc, updateDoc, doc, where, Timestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
+import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
 
 interface Payment {
@@ -60,9 +61,17 @@ function BillingPayment() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        setUser(currentUser);
+        // Check if user is a superadmin
+        const isAdmin = await isSuperadmin(currentUser);
+        if (isAdmin) {
+          setUser(currentUser);
+        } else {
+          // User is not a superadmin, sign them out and redirect
+          await auth.signOut();
+          navigate('/');
+        }
       } else {
         navigate('/');
       }
@@ -148,6 +157,10 @@ function BillingPayment() {
         const data = doc.data();
         // Filter out superadmin accounts - only include residents
         if (data.role === 'superadmin') {
+          return;
+        }
+        // Filter out archived residents - they should not appear in billing assignments
+        if (data.status === 'archived') {
           return;
         }
         residentsData.push({

@@ -1,4 +1,4 @@
-import { ReactNode, useState, memo } from 'react';
+import { ReactNode, memo } from 'react';
 import Sidebar from './Sidebar';
 
 interface LayoutProps {
@@ -6,14 +6,10 @@ interface LayoutProps {
 }
 
 function Layout({ children }: LayoutProps) {
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
-
   return (
     <div className="flex min-h-screen bg-white w-full">
-      <Sidebar onHoverChange={setIsSidebarExpanded} />
-      <main className={`flex-1 min-h-screen transition-all duration-300 ease-in-out ${
-        isSidebarExpanded ? 'ml-[260px] w-[calc(100%-260px)]' : 'ml-[64px] w-[calc(100%-64px)]'
-      }`}>
+      <Sidebar />
+      <main className="flex-1 min-h-screen ml-[260px] md:ml-[220px] w-[calc(100%-260px)] md:w-[calc(100%-220px)]">
         {children}
       </main>
     </div>

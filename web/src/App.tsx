@@ -9,6 +9,7 @@ import VisitorPreRegistration from './pages/VisitorPreRegistration'
 import ResidentManagement from './pages/ResidentManagement'
 import BillingPayment from './pages/BillingPayment'
 import Maintenance from './pages/Maintenance'
+import Archived from './pages/Archived'
 
 function App() {
   const routes = useMemo(() => (
@@ -19,8 +20,11 @@ function App() {
       <Route path="/complaints" element={<Complaints />} />
       <Route path="/visitor-pre-registration" element={<VisitorPreRegistration />} />
       <Route path="/resident-management" element={<ResidentManagement />} />
+      <Route path="/resident-management/applications" element={<ResidentManagement />} />
+      <Route path="/resident-management/registered" element={<ResidentManagement />} />
       <Route path="/billing-payment" element={<BillingPayment />} />
       <Route path="/maintenance" element={<Maintenance />} />
+      <Route path="/archived" element={<Archived />} />
       <Route path="/create-superadmin" element={<CreateSuperAdmin />} />
     </Routes>
   ), []);

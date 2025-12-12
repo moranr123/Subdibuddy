@@ -74,6 +74,18 @@ export default function Login() {
           );
           return;
         }
+        
+        // Check if user account is deactivated
+        const userData = userDoc.data();
+        if (userData.status === 'deactivated') {
+          // User account is deactivated
+          await signOut(authInstance);
+          Alert.alert(
+            'Account Deactivated',
+            'Your account has been deactivated. Please contact the administrator for assistance.'
+          );
+          return;
+        }
       }
 
       router.replace('/dashboard');

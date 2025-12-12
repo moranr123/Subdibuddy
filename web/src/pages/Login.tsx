@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { auth } from '../firebase/config'
+import { isSuperadmin } from '../utils/auth'
 
 const ErrorMessage = memo(({ error }: { error: string }) => {
   if (!error) return null;
@@ -35,7 +36,20 @@ function Login() {
     setLoading(true)
 
     try {
-      await signInWithEmailAndPassword(auth, email, password)
+      const userCredential = await signInWithEmailAndPassword(auth, email, password)
+      const user = userCredential.user
+
+      // Check if user is a superadmin
+      const isAdmin = await isSuperadmin(user)
+      
+      if (!isAdmin) {
+        // User is not a superadmin, sign them out
+        await auth.signOut()
+        setError('Access denied. Only superadmin accounts can access the admin panel.')
+        return
+      }
+
+      // User is a valid superadmin, allow access
       navigate('/dashboard')
     } catch (err: any) {
       let errorMessage = 'An error occurred during login';
