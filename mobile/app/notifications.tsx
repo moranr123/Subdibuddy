@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, onSnapshot, orderBy, updateDoc, doc, Timestamp, where, deleteDoc } from 'firebase/firestore';
+import { FontAwesome5 } from '@expo/vector-icons';
 import { getAuthService, db } from '../firebase/config';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
@@ -24,6 +25,8 @@ export default function Notifications() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sidebarAnimation = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [filteredNotifications, setFilteredNotifications] = useState<Notification[]>([]);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'complaint' | 'vehicle_registration'>('all');
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
 
@@ -161,6 +164,35 @@ export default function Notifications() {
     return created.toLocaleDateString();
   };
 
+  const getNotificationIcon = (type: string) => {
+    if (type === 'vehicle_registration' || type === 'vehicle_registration_status') {
+      return { name: 'car', color: '#1877F2' };
+    } else if (type === 'complaint' || type === 'complaint_status') {
+      return { name: 'exclamation-triangle', color: '#f59e0b' };
+    } else {
+      return { name: 'bell', color: '#6b7280' };
+    }
+  };
+
+  // Filter notifications based on active filter
+  useEffect(() => {
+    if (activeFilter === 'all') {
+      setFilteredNotifications(notifications);
+    } else if (activeFilter === 'complaint') {
+      setFilteredNotifications(
+        notifications.filter(n => 
+          n.type === 'complaint' || n.type === 'complaint_status'
+        )
+      );
+    } else if (activeFilter === 'vehicle_registration') {
+      setFilteredNotifications(
+        notifications.filter(n => 
+          n.type === 'vehicle_registration' || n.type === 'vehicle_registration_status'
+        )
+      );
+    }
+  }, [notifications, activeFilter]);
+
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
   return (
@@ -189,19 +221,72 @@ export default function Notifications() {
               </TouchableOpacity>
             )}
           </View>
+
+          {/* Filter Buttons */}
+          <View style={styles.filterContainer}>
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                activeFilter === 'all' && styles.filterButtonActive
+              ]}
+              onPress={() => setActiveFilter('all')}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                activeFilter === 'all' && styles.filterButtonTextActive
+              ]}>
+                All
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                activeFilter === 'complaint' && styles.filterButtonActive
+              ]}
+              onPress={() => setActiveFilter('complaint')}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                activeFilter === 'complaint' && styles.filterButtonTextActive
+              ]}>
+                Complaints
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                activeFilter === 'vehicle_registration' && styles.filterButtonActive
+              ]}
+              onPress={() => setActiveFilter('vehicle_registration')}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                activeFilter === 'vehicle_registration' && styles.filterButtonTextActive
+              ]}>
+                Vehicle
+              </Text>
+            </TouchableOpacity>
+          </View>
           
           {loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#1877F2" />
             </View>
-          ) : notifications.length === 0 ? (
+          ) : filteredNotifications.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>No notifications</Text>
-              <Text style={styles.emptySubtext}>You're all caught up!</Text>
+              <Text style={styles.emptySubtext}>
+                {notifications.length === 0 
+                  ? "You're all caught up!" 
+                  : `No ${activeFilter === 'all' ? '' : activeFilter === 'complaint' ? 'complaint ' : 'vehicle registration '}notifications`}
+              </Text>
             </View>
           ) : (
             <View style={styles.notificationsList}>
-              {notifications.map((notification) => (
+              {filteredNotifications.map((notification) => (
                 <View
                   key={notification.id}
                   style={[
@@ -221,14 +306,27 @@ export default function Notifications() {
                     }}
                     activeOpacity={0.7}
                   >
-                    <View style={styles.notificationHeader}>
-                      <Text style={styles.notificationSubject}>
-                        {notification.subject || 'Complaint Update'}
-                      </Text>
-                      {!notification.isRead && (
-                        <View style={styles.unreadDot} />
-                      )}
-                    </View>
+                    <View style={styles.notificationRow}>
+                      <View style={styles.iconContainer}>
+                        <FontAwesome5 
+                          name={getNotificationIcon(notification.type).name as any} 
+                          size={20} 
+                          color={getNotificationIcon(notification.type).color} 
+                          solid
+                        />
+                      </View>
+                      <View style={styles.notificationTextContainer}>
+                        <View style={styles.notificationHeader}>
+                          <Text style={styles.notificationSubject}>
+                            {notification.subject || 
+                              (notification.type === 'vehicle_registration' || notification.type === 'vehicle_registration_status' 
+                                ? 'Vehicle Registration Update' 
+                                : 'Complaint Update')}
+                          </Text>
+                          {!notification.isRead && (
+                            <View style={styles.unreadDot} />
+                          )}
+                        </View>
                     <Text style={styles.notificationMessage}>
                       {notification.message}
                     </Text>
@@ -246,9 +344,11 @@ export default function Notifications() {
                         </Text>
                       </View>
                     )}
-                    <Text style={styles.notificationTime}>
-                      {formatTimeAgo(notification.createdAt)}
-                    </Text>
+                        <Text style={styles.notificationTime}>
+                          {formatTimeAgo(notification.createdAt)}
+                        </Text>
+                      </View>
+                    </View>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.deleteButton}
@@ -285,7 +385,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 16,
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    gap: 8,
     marginBottom: 20,
+  },
+  filterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#e5e7eb',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  filterButtonActive: {
+    backgroundColor: '#1877F2',
+    borderColor: '#1877F2',
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6b7280',
+  },
+  filterButtonTextActive: {
+    color: '#ffffff',
+    fontWeight: '600',
   },
   title: {
     fontSize: 24,
@@ -344,6 +470,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   notificationContent: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  notificationRow: {
+    flexDirection: 'row',
+    flex: 1,
+  },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0f2f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    flexShrink: 0,
+  },
+  notificationTextContainer: {
     flex: 1,
   },
   deleteButton: {

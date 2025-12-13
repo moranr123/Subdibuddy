@@ -1,7 +1,7 @@
 import { useEffect, useState, memo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs, query, orderBy, doc, setDoc, deleteDoc, getDoc, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, doc, setDoc, deleteDoc, getDoc, Timestamp, addDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
@@ -90,12 +90,17 @@ function Archived() {
   const [filteredArchivedResidents, setFilteredArchivedResidents] = useState<Resident[]>([]);
   const [filteredArchivedVehicleRegistrations, setFilteredArchivedVehicleRegistrations] = useState<ArchivedVehicleRegistration[]>([]);
   const [vehicleRegistrationUserNames, setVehicleRegistrationUserNames] = useState<Record<string, string>>({});
+  const [complaintUserNames, setComplaintUserNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [loadingComplaints, setLoadingComplaints] = useState(false);
   const [loadingVehicleRegistrations, setLoadingVehicleRegistrations] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [viewingComplaint, setViewingComplaint] = useState<ArchivedComplaint | null>(null);
+  const [showComplaintModal, setShowComplaintModal] = useState(false);
+  const [viewingVehicleRegistration, setViewingVehicleRegistration] = useState<ArchivedVehicleRegistration | null>(null);
+  const [showVehicleRegistrationModal, setShowVehicleRegistrationModal] = useState(false);
   const [filterDate, setFilterDate] = useState<string>('');
   const [showDateFilter, setShowDateFilter] = useState(false);
   const navigate = useNavigate();
@@ -326,6 +331,44 @@ function Archived() {
     fetchUserNames();
   }, [db, archivedVehicleRegistrations]);
 
+  // Fetch user names for archived complaints
+  useEffect(() => {
+    if (!db || archivedComplaints.length === 0) return;
+
+    const fetchUserNames = async () => {
+      const userIds = [...new Set(archivedComplaints.map(c => c.userId))];
+      const namesMap: Record<string, string> = {};
+
+      for (const userId of userIds) {
+        if (complaintUserNames[userId]) {
+          namesMap[userId] = complaintUserNames[userId];
+          continue;
+        }
+
+        try {
+          const userDoc = await getDoc(doc(db, 'users', userId));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            const fullName = userData.fullName || 
+              `${userData.firstName || ''} ${userData.lastName || ''}`.trim() ||
+              userData.email ||
+              'Unknown User';
+            namesMap[userId] = fullName;
+          } else {
+            namesMap[userId] = archivedComplaints.find(c => c.userId === userId)?.userEmail || 'Unknown User';
+          }
+        } catch (error) {
+          console.error(`Error fetching user ${userId}:`, error);
+          namesMap[userId] = archivedComplaints.find(c => c.userId === userId)?.userEmail || 'Unknown User';
+        }
+      }
+
+      setComplaintUserNames(prev => ({ ...prev, ...namesMap }));
+    };
+
+    fetchUserNames();
+  }, [db, archivedComplaints]);
+
   useEffect(() => {
     if (user && db) {
       if (activeFilter === 'registered-residents') {
@@ -387,6 +430,112 @@ function Archived() {
       setProcessingStatus(null);
     }
   }, [db]);
+
+  const handleRestoreComplaint = useCallback(async (complaintId: string) => {
+    if (!db) return;
+    
+    if (!window.confirm('Are you sure you want to restore this complaint? It will be moved back to the complaints screen.')) {
+      return;
+    }
+    
+    setProcessingStatus(complaintId);
+    try {
+      // Get the complaint data from archivedComplaints collection
+      const archivedRef = doc(db, 'archivedComplaints', complaintId);
+      const archivedDoc = await getDoc(archivedRef);
+      
+      if (!archivedDoc.exists()) {
+        throw new Error('Archived complaint not found');
+      }
+      
+      const complaintData = archivedDoc.data();
+      
+      // Remove archivedAt and archivedBy fields
+      const { archivedAt, archivedBy, originalId, ...restoredData } = complaintData;
+      
+      // Move back to complaints collection
+      await addDoc(collection(db, 'complaints'), {
+        ...restoredData,
+        updatedAt: Timestamp.now(),
+      });
+      
+      // Delete from archivedComplaints collection
+      await deleteDoc(archivedRef);
+      
+      // Update local state - remove from archived list
+      setArchivedComplaints(prev => prev.filter(c => c.id !== complaintId));
+      
+      alert('Complaint restored successfully');
+    } catch (error: any) {
+      console.error('Error restoring complaint:', error);
+      alert(`Failed to restore complaint: ${error.message}`);
+    } finally {
+      setProcessingStatus(null);
+    }
+  }, [db]);
+
+  const handleRestoreVehicleRegistration = useCallback(async (registrationId: string) => {
+    if (!db) return;
+    
+    if (!window.confirm('Are you sure you want to restore this vehicle registration? It will be moved back to the vehicle registration screen.')) {
+      return;
+    }
+    
+    setProcessingStatus(registrationId);
+    try {
+      // Get the registration data from archivedVehicleRegistrations collection
+      const archivedRef = doc(db, 'archivedVehicleRegistrations', registrationId);
+      const archivedDoc = await getDoc(archivedRef);
+      
+      if (!archivedDoc.exists()) {
+        throw new Error('Archived vehicle registration not found');
+      }
+      
+      const registrationData = archivedDoc.data();
+      
+      // Remove archivedAt and archivedBy fields
+      const { archivedAt, archivedBy, originalId, ...restoredData } = registrationData;
+      
+      // Move back to vehicleRegistrations collection
+      await addDoc(collection(db, 'vehicleRegistrations'), {
+        ...restoredData,
+        updatedAt: Timestamp.now(),
+      });
+      
+      // Delete from archivedVehicleRegistrations collection
+      await deleteDoc(archivedRef);
+      
+      // Update local state - remove from archived list
+      setArchivedVehicleRegistrations(prev => prev.filter(r => r.id !== registrationId));
+      
+      alert('Vehicle registration restored successfully');
+    } catch (error: any) {
+      console.error('Error restoring vehicle registration:', error);
+      alert(`Failed to restore vehicle registration: ${error.message}`);
+    } finally {
+      setProcessingStatus(null);
+    }
+  }, [db]);
+
+  const handleViewComplaint = useCallback((complaint: ArchivedComplaint) => {
+    setViewingComplaint(complaint);
+    setShowComplaintModal(true);
+  }, []);
+
+  const handleCloseComplaintModal = useCallback(() => {
+    setShowComplaintModal(false);
+    setViewingComplaint(null);
+  }, []);
+
+  const handleViewVehicleRegistration = useCallback((registration: ArchivedVehicleRegistration) => {
+    setViewingVehicleRegistration(registration);
+    setShowVehicleRegistrationModal(true);
+  }, []);
+
+  const handleCloseVehicleRegistrationModal = useCallback(() => {
+    setShowVehicleRegistrationModal(false);
+    setViewingVehicleRegistration(null);
+  }, []);
 
   const applyDateFilterComplaints = useCallback((complaintsList: ArchivedComplaint[]) => {
     if (!filterDate) {
@@ -625,13 +774,16 @@ function Archived() {
                               <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Description</th>
                               <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
                               <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Archived At</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
                             </tr>
                           </thead>
                           <tbody>
                             {(filterDate ? filteredArchivedComplaints : archivedComplaints).map((complaint) => (
                               <tr key={complaint.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
                                 <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(complaint.createdAt)}</td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{complaint.userEmail}</td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                                  {complaintUserNames[complaint.userId] || complaint.userEmail || 'Unknown User'}
+                                </td>
                                 <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{complaint.subject}</td>
                                 <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top max-w-[300px] break-words whitespace-pre-wrap">
                                   {complaint.description}
@@ -642,6 +794,23 @@ function Archived() {
                                   </span>
                                 </td>
                                 <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(complaint.archivedAt)}</td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                                  <div className="flex gap-2 items-center">
+                                    <button
+                                      className="bg-gray-900 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-800"
+                                      onClick={() => handleViewComplaint(complaint)}
+                                    >
+                                      View
+                                    </button>
+                                    <button
+                                      className="bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      onClick={() => handleRestoreComplaint(complaint.id)}
+                                      disabled={processingStatus === complaint.id}
+                                    >
+                                      {processingStatus === complaint.id ? 'Processing...' : 'Restore'}
+                                    </button>
+                                  </div>
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -744,6 +913,7 @@ function Archived() {
                               <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Type</th>
                               <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
                               <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Archived At</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -772,6 +942,23 @@ function Archived() {
                                   </span>
                                 </td>
                                 <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(registration.archivedAt)}</td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                                  <div className="flex gap-2 items-center">
+                                    <button
+                                      className="bg-gray-900 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-800"
+                                      onClick={() => handleViewVehicleRegistration(registration)}
+                                    >
+                                      View
+                                    </button>
+                                    <button
+                                      className="bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      onClick={() => handleRestoreVehicleRegistration(registration.id)}
+                                      disabled={processingStatus === registration.id}
+                                    >
+                                      {processingStatus === registration.id ? 'Processing...' : 'Restore'}
+                                    </button>
+                                  </div>
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -924,6 +1111,200 @@ function Archived() {
                 <button
                   className="bg-gray-900 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-gray-800"
                   onClick={() => setShowDetailsModal(false)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* View Complaint Modal */}
+        {showComplaintModal && viewingComplaint && (
+          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-5" onClick={handleCloseComplaintModal}>
+            <div className="bg-white rounded-2xl w-full max-w-[600px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center px-6 py-5 border-b border-gray-200">
+                <h3 className="m-0 text-gray-900 text-xl font-normal">Archived Complaint Details</h3>
+                <button 
+                  className="bg-none border-none text-2xl text-gray-600 cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded transition-all hover:bg-gray-100 hover:text-gray-900"
+                  onClick={handleCloseComplaintModal}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="overflow-y-auto px-6 py-5">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Subject</label>
+                    <p className="text-gray-900 font-medium">{viewingComplaint.subject}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Description</label>
+                    <p className="text-gray-900 whitespace-pre-wrap">{viewingComplaint.description}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">User Email</label>
+                    <p className="text-gray-900">{viewingComplaint.userEmail}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Status</label>
+                    <span className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block bg-purple-600">
+                      {viewingComplaint.status.toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Created At</label>
+                    <p className="text-gray-900">{formatDate(viewingComplaint.createdAt)}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Archived At</label>
+                    <p className="text-gray-900">{formatDate(viewingComplaint.archivedAt)}</p>
+                  </div>
+                  {viewingComplaint.rejectionReason && (
+                    <div>
+                      <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Rejection Reason</label>
+                      <p className="text-gray-900">{viewingComplaint.rejectionReason}</p>
+                    </div>
+                  )}
+                  {viewingComplaint.imageURL && (
+                    <div>
+                      <label className="text-xs text-gray-500 uppercase tracking-wide mb-2 block">Image</label>
+                      <img 
+                        src={viewingComplaint.imageURL} 
+                        alt="Complaint Image" 
+                        className="w-full rounded-lg border border-gray-200"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="px-6 py-5 border-t border-gray-200 flex justify-end gap-3">
+                <button
+                  className="bg-green-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => {
+                    handleRestoreComplaint(viewingComplaint.id);
+                    setShowComplaintModal(false);
+                  }}
+                  disabled={processingStatus === viewingComplaint.id}
+                >
+                  {processingStatus === viewingComplaint.id ? 'Processing...' : 'Restore'}
+                </button>
+                <button
+                  className="bg-gray-900 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-gray-800"
+                  onClick={handleCloseComplaintModal}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* View Vehicle Registration Modal */}
+        {showVehicleRegistrationModal && viewingVehicleRegistration && (
+          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-5" onClick={handleCloseVehicleRegistrationModal}>
+            <div className="bg-white rounded-2xl w-full max-w-[600px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center px-6 py-5 border-b border-gray-200">
+                <h3 className="m-0 text-gray-900 text-xl font-normal">Archived Vehicle Registration Details</h3>
+                <button 
+                  className="bg-none border-none text-2xl text-gray-600 cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded transition-all hover:bg-gray-100 hover:text-gray-900"
+                  onClick={handleCloseVehicleRegistrationModal}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="overflow-y-auto px-6 py-5">
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Plate Number</label>
+                    <p className="text-gray-900 font-medium">{viewingVehicleRegistration.plateNumber}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Status</label>
+                    <span
+                      className="px-2.5 py-1 rounded text-xs font-semibold uppercase tracking-wide text-white inline-block"
+                      style={{ 
+                        backgroundColor: viewingVehicleRegistration.status === 'approved' ? '#4CAF50' : 
+                                        viewingVehicleRegistration.status === 'rejected' ? '#ef4444' : '#FFA500' 
+                      }}
+                    >
+                      {viewingVehicleRegistration.status.toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Make</label>
+                    <p className="text-gray-900 font-medium">{viewingVehicleRegistration.make}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Model</label>
+                    <p className="text-gray-900 font-medium">{viewingVehicleRegistration.model}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Year</label>
+                    <p className="text-gray-900 font-medium">{viewingVehicleRegistration.year}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Color</label>
+                    <p className="text-gray-900 font-medium">{viewingVehicleRegistration.color}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Vehicle Type</label>
+                    <p className="text-gray-900 font-medium">{viewingVehicleRegistration.vehicleType}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">User Email</label>
+                    <p className="text-gray-900 font-medium">{viewingVehicleRegistration.userEmail}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Submitted Date</label>
+                    <p className="text-gray-900 font-medium">{formatDate(viewingVehicleRegistration.createdAt)}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Archived At</label>
+                    <p className="text-gray-900 font-medium">{formatDate(viewingVehicleRegistration.archivedAt)}</p>
+                  </div>
+                  {viewingVehicleRegistration.rejectionReason && (
+                    <div className="col-span-2">
+                      <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Rejection Reason</label>
+                      <p className="text-gray-900 font-medium">{viewingVehicleRegistration.rejectionReason}</p>
+                    </div>
+                  )}
+                </div>
+                {viewingVehicleRegistration.vehicleImageURL && (
+                  <div className="mb-4">
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-2 block">Vehicle Image</label>
+                    <img 
+                      src={viewingVehicleRegistration.vehicleImageURL} 
+                      alt="Vehicle Image" 
+                      className="w-full rounded-lg border border-gray-200"
+                    />
+                  </div>
+                )}
+                {viewingVehicleRegistration.registrationImageURL && (
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-2 block">Registration Document</label>
+                    <img 
+                      src={viewingVehicleRegistration.registrationImageURL} 
+                      alt="Registration Document" 
+                      className="w-full rounded-lg border border-gray-200"
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="px-6 py-5 border-t border-gray-200 flex justify-end gap-3">
+                <button
+                  className="bg-green-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => {
+                    handleRestoreVehicleRegistration(viewingVehicleRegistration.id);
+                    setShowVehicleRegistrationModal(false);
+                  }}
+                  disabled={processingStatus === viewingVehicleRegistration.id}
+                >
+                  {processingStatus === viewingVehicleRegistration.id ? 'Processing...' : 'Restore'}
+                </button>
+                <button
+                  className="bg-gray-900 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-gray-800"
+                  onClick={handleCloseVehicleRegistrationModal}
                 >
                   Close
                 </button>

@@ -31,6 +31,13 @@ interface Notification {
   createdAt: Timestamp;
 }
 
+interface UnifiedNotification {
+  id: string;
+  type: 'application' | 'complaint' | 'vehicle_registration';
+  createdAt: Timestamp;
+  data: PendingApplication | Notification;
+}
+
 function Header({ title }: HeaderProps) {
   const [notificationCount, setNotificationCount] = useState(0);
   const [pendingApplications, setPendingApplications] = useState<PendingApplication[]>([]);
@@ -58,6 +65,12 @@ function Header({ title }: HeaderProps) {
           phone: data.phone,
           createdAt: data.createdAt,
         });
+      });
+      // Sort by createdAt descending (newest first)
+      applications.sort((a, b) => {
+        const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+        const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+        return bTime - aTime;
       });
       setPendingApplications(applications);
     }, (error) => {
@@ -87,6 +100,17 @@ function Header({ title }: HeaderProps) {
           }
         }
       });
+      // Sort by createdAt descending (newest first)
+      complaintNotifs.sort((a, b) => {
+        const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+        const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+        return bTime - aTime;
+      });
+      vehicleNotifs.sort((a, b) => {
+        const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+        const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+        return bTime - aTime;
+      });
       setComplaintNotifications(complaintNotifs);
       setVehicleRegistrationNotifications(vehicleNotifs);
     }, (error) => {
@@ -98,6 +122,50 @@ function Header({ title }: HeaderProps) {
       unsubscribe2();
     };
   }, []);
+
+  // Combine and sort all notifications by newest first
+  const allNotifications = (() => {
+    const unified: UnifiedNotification[] = [];
+    
+    // Add pending applications
+    pendingApplications.forEach(app => {
+      unified.push({
+        id: app.id,
+        type: 'application',
+        createdAt: app.createdAt || Timestamp.now(),
+        data: app,
+      });
+    });
+    
+    // Add complaint notifications
+    complaintNotifications.forEach(notif => {
+      unified.push({
+        id: notif.id,
+        type: 'complaint',
+        createdAt: notif.createdAt,
+        data: notif,
+      });
+    });
+    
+    // Add vehicle registration notifications
+    vehicleRegistrationNotifications.forEach(notif => {
+      unified.push({
+        id: notif.id,
+        type: 'vehicle_registration',
+        createdAt: notif.createdAt,
+        data: notif,
+      });
+    });
+    
+    // Sort by createdAt descending (newest first)
+    unified.sort((a, b) => {
+      const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+      const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+      return bTime - aTime;
+    });
+    
+    return unified;
+  })();
 
   // Calculate total notification count
   useEffect(() => {
@@ -203,112 +271,118 @@ function Header({ title }: HeaderProps) {
                     </div>
                   ) : (
                     <div>
-                      {pendingApplications.map((application) => (
-                        <div
-                          key={application.id}
-                          className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors"
-                          onClick={handleViewApplications}
-                        >
-                          <div className="flex items-start gap-3">
-                            {/* Avatar */}
-                            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                              <span className="text-white text-sm font-medium">
-                                {getInitials(application.fullName)}
-                              </span>
-                            </div>
-                            
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex-1">
-                                  <p className="text-sm font-medium text-gray-900 line-clamp-1">
-                                    {application.fullName || 'New Resident'}
-                                  </p>
-                                  <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
-                                    {application.email || application.phone || 'No contact info'}
+                      {allNotifications.map((unified) => {
+                        if (unified.type === 'application') {
+                          const application = unified.data as PendingApplication;
+                          return (
+                            <div
+                              key={unified.id}
+                              className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors"
+                              onClick={handleViewApplications}
+                            >
+                              <div className="flex items-start gap-3">
+                                {/* Avatar */}
+                                <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-white text-sm font-medium">
+                                    {getInitials(application.fullName)}
+                                  </span>
+                                </div>
+                                
+                                {/* Content */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium text-gray-900 line-clamp-1">
+                                        {application.fullName || 'New Resident'}
+                                      </p>
+                                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
+                                        {application.email || application.phone || 'No contact info'}
+                                      </p>
+                                    </div>
+                                    <span className="text-xs text-gray-400 whitespace-nowrap">
+                                      {formatTimeAgo(application.createdAt)}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-600 mt-1.5">
+                                    New resident application submitted
                                   </p>
                                 </div>
-                                <span className="text-xs text-gray-400 whitespace-nowrap">
-                                  {formatTimeAgo(application.createdAt)}
-                                </span>
                               </div>
-                              <p className="text-xs text-gray-600 mt-1.5">
-                                New resident application submitted
-                              </p>
                             </div>
-                          </div>
-                        </div>
-                      ))}
-                      
-                      {complaintNotifications.map((notification) => (
-                        <div
-                          key={notification.id}
-                          className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors"
-                          onClick={handleViewComplaints}
-                        >
-                          <div className="flex items-start gap-3">
-                            {/* Avatar */}
-                            <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center flex-shrink-0">
-                              <span className="text-white text-sm font-medium">
-                                {getInitials(notification.userEmail || 'User')}
-                              </span>
-                            </div>
-                            
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex-1">
-                                  <p className="text-sm font-medium text-gray-900 line-clamp-1">
-                                    {notification.userEmail || 'User'}
-                                  </p>
-                                  <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
-                                    {notification.subject || 'Complaint'}
+                          );
+                        } else if (unified.type === 'complaint') {
+                          const notification = unified.data as Notification;
+                          return (
+                            <div
+                              key={unified.id}
+                              className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors"
+                              onClick={handleViewComplaints}
+                            >
+                              <div className="flex items-start gap-3">
+                                {/* Avatar */}
+                                <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-white text-sm font-medium">
+                                    {getInitials(notification.userEmail || 'User')}
+                                  </span>
+                                </div>
+                                
+                                {/* Content */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium text-gray-900 line-clamp-1">
+                                        {notification.userEmail || 'User'}
+                                      </p>
+                                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
+                                        {notification.subject || 'Complaint'}
+                                      </p>
+                                    </div>
+                                    <span className="text-xs text-gray-400 whitespace-nowrap">
+                                      {formatTimeAgo(notification.createdAt)}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-600 mt-1.5">
+                                    {notification.message}
                                   </p>
                                 </div>
-                                <span className="text-xs text-gray-400 whitespace-nowrap">
-                                  {formatTimeAgo(notification.createdAt)}
-                                </span>
                               </div>
-                              <p className="text-xs text-gray-600 mt-1.5">
-                                {notification.message}
-                              </p>
                             </div>
-                          </div>
-                        </div>
-                      ))}
-                      
-                      {vehicleRegistrationNotifications.map((notification) => (
-                        <div
-                          key={notification.id}
-                          className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors"
-                          onClick={handleViewVehicleRegistrations}
-                        >
-                          <div className="flex items-start gap-3">
-                            {/* Avatar */}
-                            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                              <span className="text-white text-sm font-medium">🚗</span>
-                            </div>
-                            
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex-1">
-                                  <p className="text-sm font-medium text-gray-900 line-clamp-1">
-                                    Vehicle Registration
+                          );
+                        } else {
+                          const notification = unified.data as Notification;
+                          return (
+                            <div
+                              key={unified.id}
+                              className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors"
+                              onClick={handleViewVehicleRegistrations}
+                            >
+                              <div className="flex items-start gap-3">
+                                {/* Avatar */}
+                                <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-white text-sm font-medium">🚗</span>
+                                </div>
+                                
+                                {/* Content */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium text-gray-900 line-clamp-1">
+                                        Vehicle Registration
+                                      </p>
+                                    </div>
+                                    <span className="text-xs text-gray-400 whitespace-nowrap">
+                                      {formatTimeAgo(notification.createdAt)}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-600 mt-1.5">
+                                    {notification.message}
                                   </p>
                                 </div>
-                                <span className="text-xs text-gray-400 whitespace-nowrap">
-                                  {formatTimeAgo(notification.createdAt)}
-                                </span>
                               </div>
-                              <p className="text-xs text-gray-600 mt-1.5">
-                                {notification.message}
-                              </p>
                             </div>
-                          </div>
-                        </div>
-                      ))}
-                      
+                          );
+                        }
+                      })}
                     </div>
                   )}
                 </div>
