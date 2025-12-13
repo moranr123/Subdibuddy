@@ -18,9 +18,23 @@ interface PendingApplication {
   isRead?: boolean;
 }
 
+interface Notification {
+  id: string;
+  type: string;
+  complaintId?: string;
+  userId?: string;
+  userEmail?: string;
+  subject?: string;
+  message: string;
+  recipientType: string;
+  isRead: boolean;
+  createdAt: Timestamp;
+}
+
 function Header({ title }: HeaderProps) {
   const [notificationCount, setNotificationCount] = useState(0);
   const [pendingApplications, setPendingApplications] = useState<PendingApplication[]>([]);
+  const [complaintNotifications, setComplaintNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -29,15 +43,11 @@ function Header({ title }: HeaderProps) {
     if (!db) return;
 
     // Set up real-time listener for pending applications
-    // Notifications persist until the application is deleted from pendingUsers
-    // (i.e., when approved or rejected). They will not disappear just from viewing.
-    const q = query(collection(db, 'pendingUsers'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const q1 = query(collection(db, 'pendingUsers'), orderBy('createdAt', 'desc'));
+    const unsubscribe1 = onSnapshot(q1, (snapshot) => {
       const applications: PendingApplication[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
-        // Only include applications that still exist in pendingUsers
-        // They will automatically disappear when approved/rejected (deleted from pendingUsers)
         applications.push({
           id: doc.id,
           firstName: data.firstName,
@@ -48,15 +58,43 @@ function Header({ title }: HeaderProps) {
           createdAt: data.createdAt,
         });
       });
-      // Update state - notifications persist until deleted from database
       setPendingApplications(applications);
-      setNotificationCount(applications.length);
     }, (error) => {
       console.error('Error listening to pending applications:', error);
     });
 
-    return () => unsubscribe();
+    // Set up real-time listener for complaint notifications (admin)
+    const q2 = query(
+      collection(db, 'notifications'),
+      orderBy('createdAt', 'desc')
+    );
+    const unsubscribe2 = onSnapshot(q2, (snapshot) => {
+      const notifications: Notification[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        // Only show admin notifications that are unread
+        if (data.recipientType === 'admin' && !data.isRead) {
+          notifications.push({
+            id: doc.id,
+            ...data,
+          } as Notification);
+        }
+      });
+      setComplaintNotifications(notifications);
+    }, (error) => {
+      console.error('Error listening to complaint notifications:', error);
+    });
+
+    return () => {
+      unsubscribe1();
+      unsubscribe2();
+    };
   }, []);
+
+  // Calculate total notification count
+  useEffect(() => {
+    setNotificationCount(pendingApplications.length + complaintNotifications.length);
+  }, [pendingApplications, complaintNotifications]);
 
   // Close notification dropdown when clicking outside
   useEffect(() => {
@@ -78,6 +116,11 @@ function Header({ title }: HeaderProps) {
   const handleViewApplications = () => {
     setShowNotifications(false);
     navigate('/resident-management/applications');
+  };
+
+  const handleViewComplaints = () => {
+    setShowNotifications(false);
+    navigate('/complaints');
   };
 
   const formatTimeAgo = (timestamp: Timestamp | undefined) => {
@@ -178,6 +221,43 @@ function Header({ title }: HeaderProps) {
                               </div>
                               <p className="text-xs text-gray-600 mt-1.5">
                                 New resident application submitted
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {complaintNotifications.map((notification) => (
+                        <div
+                          key={notification.id}
+                          className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors"
+                          onClick={handleViewComplaints}
+                        >
+                          <div className="flex items-start gap-3">
+                            {/* Avatar */}
+                            <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center flex-shrink-0">
+                              <span className="text-white text-sm font-medium">
+                                {getInitials(notification.userEmail || 'User')}
+                              </span>
+                            </div>
+                            
+                            {/* Content */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-gray-900 line-clamp-1">
+                                    {notification.userEmail || 'User'}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
+                                    {notification.subject || 'Complaint'}
+                                  </p>
+                                </div>
+                                <span className="text-xs text-gray-400 whitespace-nowrap">
+                                  {formatTimeAgo(notification.createdAt)}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-600 mt-1.5">
+                                {notification.message}
                               </p>
                             </div>
                           </div>

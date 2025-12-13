@@ -1,5 +1,5 @@
 import { useEffect, useState, memo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, query, orderBy, doc, setDoc, deleteDoc, getDoc, Timestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
@@ -43,14 +43,36 @@ type FilterType =
   | 'maintenance'
   | 'all';
 
+interface ArchivedComplaint {
+  id: string;
+  subject: string;
+  description: string;
+  userId: string;
+  userEmail: string;
+  status: string;
+  rejectionReason?: string;
+  imageURL?: string;
+  createdAt: any;
+  updatedAt?: any;
+  archivedAt: any;
+  archivedBy: string;
+}
+
 function Archived() {
   const [user, setUser] = useState<any>(null);
+  const [searchParams] = useSearchParams();
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [archivedResidents, setArchivedResidents] = useState<Resident[]>([]);
+  const [archivedComplaints, setArchivedComplaints] = useState<ArchivedComplaint[]>([]);
+  const [filteredArchivedComplaints, setFilteredArchivedComplaints] = useState<ArchivedComplaint[]>([]);
+  const [filteredArchivedResidents, setFilteredArchivedResidents] = useState<Resident[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingComplaints, setLoadingComplaints] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [filterDate, setFilterDate] = useState<string>('');
+  const [showDateFilter, setShowDateFilter] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -72,6 +94,58 @@ function Archived() {
 
     return () => unsubscribe();
   }, [navigate]);
+
+  // Set filter from URL parameter
+  useEffect(() => {
+    const filterParam = searchParams.get('filter');
+    if (filterParam && ['announcement', 'complaints', 'visitor-pre-registration', 'residents-applications', 'registered-residents', 'billings-payments', 'maintenance'].includes(filterParam)) {
+      setActiveFilter(filterParam as FilterType);
+    }
+  }, [searchParams]);
+
+  const fetchArchivedComplaints = useCallback(async () => {
+    if (!db) {
+      console.error('Firestore db is not initialized');
+      return;
+    }
+    
+    try {
+      setLoadingComplaints(true);
+      console.log('Fetching archived complaints from Firestore...');
+      
+      let querySnapshot;
+      try {
+        const q = query(collection(db, 'archivedComplaints'), orderBy('archivedAt', 'desc'));
+        querySnapshot = await getDocs(q);
+      } catch (orderByError: any) {
+        console.warn('orderBy failed, trying without orderBy:', orderByError);
+        querySnapshot = await getDocs(collection(db, 'archivedComplaints'));
+      }
+      
+      const complaintsData: ArchivedComplaint[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        complaintsData.push({
+          id: doc.id,
+          ...data,
+        } as ArchivedComplaint);
+      });
+      
+      complaintsData.sort((a, b) => {
+        const aDate = a.archivedAt?.toDate ? a.archivedAt.toDate().getTime() : 0;
+        const bDate = b.archivedAt?.toDate ? b.archivedAt.toDate().getTime() : 0;
+        return bDate - aDate;
+      });
+      
+      console.log(`Fetched ${complaintsData.length} archived complaints`);
+      setArchivedComplaints(complaintsData);
+    } catch (error: any) {
+      console.error('Error fetching archived complaints:', error);
+      alert(`Failed to load archived complaints: ${error.message || 'Unknown error'}`);
+    } finally {
+      setLoadingComplaints(false);
+    }
+  }, [db]);
 
   const fetchArchivedResidents = useCallback(async () => {
     if (!db) {
@@ -146,14 +220,19 @@ function Archived() {
   }, [db]);
 
   useEffect(() => {
-    if (user && activeFilter === 'registered-residents' && db) {
-      console.log('Fetching archived residents for registered-residents filter');
-      fetchArchivedResidents();
-    } else if (activeFilter !== 'registered-residents') {
-      // Clear archived residents when switching to a different filter
-      setArchivedResidents([]);
+    if (user && db) {
+      if (activeFilter === 'registered-residents') {
+        console.log('Fetching archived residents for registered-residents filter');
+        fetchArchivedResidents();
+      } else if (activeFilter === 'complaints') {
+        fetchArchivedComplaints();
+      } else {
+        // Clear data when switching to a different filter
+        setArchivedResidents([]);
+        setArchivedComplaints([]);
+      }
     }
-  }, [user, activeFilter, db, fetchArchivedResidents]);
+  }, [user, activeFilter, db, fetchArchivedResidents, fetchArchivedComplaints]);
 
   const handleRestore = useCallback(async (residentId: string) => {
     if (!db) return;
@@ -199,6 +278,80 @@ function Archived() {
     }
   }, [db]);
 
+  const applyDateFilterComplaints = useCallback((complaintsList: ArchivedComplaint[]) => {
+    if (!filterDate) {
+      setFilteredArchivedComplaints(complaintsList);
+      return;
+    }
+
+    const selectedDate = new Date(filterDate);
+    const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+
+    const filtered = complaintsList.filter((complaint) => {
+      const complaintDate = complaint.archivedAt?.toDate 
+        ? complaint.archivedAt.toDate() 
+        : complaint.archivedAt 
+        ? new Date(complaint.archivedAt) 
+        : null;
+      
+      if (!complaintDate) return false;
+
+      const complaintDateOnly = new Date(complaintDate.getFullYear(), complaintDate.getMonth(), complaintDate.getDate());
+      
+      return complaintDateOnly.getTime() === selectedDateOnly.getTime();
+    });
+
+    setFilteredArchivedComplaints(filtered);
+  }, [filterDate]);
+
+  const applyDateFilterResidents = useCallback((residentsList: Resident[]) => {
+    if (!filterDate) {
+      setFilteredArchivedResidents(residentsList);
+      return;
+    }
+
+    const selectedDate = new Date(filterDate);
+    const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+
+    const filtered = residentsList.filter((resident) => {
+      // Try archivedAt first, then createdAt
+      const residentDate = (resident as any).archivedAt?.toDate 
+        ? (resident as any).archivedAt.toDate() 
+        : (resident as any).archivedAt 
+        ? new Date((resident as any).archivedAt) 
+        : resident.createdAt?.toDate 
+        ? resident.createdAt.toDate() 
+        : resident.createdAt 
+        ? new Date(resident.createdAt) 
+        : null;
+      
+      if (!residentDate) return false;
+
+      const residentDateOnly = new Date(residentDate.getFullYear(), residentDate.getMonth(), residentDate.getDate());
+      
+      return residentDateOnly.getTime() === selectedDateOnly.getTime();
+    });
+
+    setFilteredArchivedResidents(filtered);
+  }, [filterDate]);
+
+  useEffect(() => {
+    if (activeFilter === 'complaints') {
+      applyDateFilterComplaints(archivedComplaints);
+    } else if (activeFilter === 'registered-residents') {
+      applyDateFilterResidents(archivedResidents);
+    }
+  }, [archivedComplaints, archivedResidents, filterDate, activeFilter, applyDateFilterComplaints, applyDateFilterResidents]);
+
+  const handleDateFilter = useCallback(() => {
+    setShowDateFilter(!showDateFilter);
+  }, [showDateFilter]);
+
+  const handleClearDateFilter = useCallback(() => {
+    setFilterDate('');
+    setShowDateFilter(false);
+  }, []);
+
   const handleViewDetails = useCallback((resident: Resident) => {
     setSelectedResident(resident);
     setShowDetailsModal(true);
@@ -238,7 +391,49 @@ function Archived() {
         <main className="w-full max-w-full m-0 p-10 box-border">
           <div className="flex flex-col gap-6 w-full max-w-full">
             <div className="w-full bg-white rounded-xl p-8 border border-gray-100 shadow-sm">
-              <h2 className="m-0 text-gray-900 text-lg font-normal mb-6">Filter by Category</h2>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="m-0 text-gray-900 text-lg font-normal">Filter by Category</h2>
+                {activeFilter !== 'all' && (
+                  <button
+                    className="px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-200"
+                    onClick={handleDateFilter}
+                  >
+                    Filter by Date
+                  </button>
+                )}
+              </div>
+
+              {showDateFilter && activeFilter !== 'all' && (
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-end gap-4">
+                    <div className="w-48">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Date</label>
+                      <input
+                        type="date"
+                        value={filterDate}
+                        onChange={(e) => setFilterDate(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <button
+                      className="px-4 py-2 bg-gray-500 text-white rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-600"
+                      onClick={handleClearDateFilter}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  {filterDate && (
+                    <div className="mt-2 text-xs text-gray-600">
+                      {activeFilter === 'complaints' && (
+                        <>Showing {filteredArchivedComplaints.length} of {archivedComplaints.length} archived complaints</>
+                      )}
+                      {activeFilter === 'registered-residents' && (
+                        <>Showing {filteredArchivedResidents.length} of {archivedResidents.length} archived residents</>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
               
               <div className="flex flex-wrap gap-3 mb-6">
                 {filters.map((filter) => (
@@ -264,11 +459,60 @@ function Archived() {
                     </p>
                   </div>
                 )}
+                {activeFilter === 'complaints' && (
+                  <>
+                    {loadingComplaints && archivedComplaints.length === 0 ? (
+                      <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading archived complaints...</div>
+                    ) : (filterDate ? filteredArchivedComplaints : archivedComplaints).length === 0 ? (
+                      <div className="text-center py-20 px-5 text-gray-600">
+                        <p className="text-base font-normal text-gray-600">
+                          No archived complaints found.
+                        </p>
+                        <p className="text-xs text-gray-400 mt-2.5">
+                          Archived complaints will appear here.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto w-full">
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="bg-gray-50 border-b-2 border-gray-200">
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Date</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">User</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Subject</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Description</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Archived At</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(filterDate ? filteredArchivedComplaints : archivedComplaints).map((complaint) => (
+                              <tr key={complaint.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(complaint.createdAt)}</td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{complaint.userEmail}</td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{complaint.subject}</td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top max-w-[300px] break-words whitespace-pre-wrap">
+                                  {complaint.description}
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 align-top">
+                                  <span className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block bg-purple-600">
+                                    {complaint.status.toUpperCase()}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(complaint.archivedAt)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                )}
                 {activeFilter === 'registered-residents' && (
                   <>
                     {loading && archivedResidents.length === 0 ? (
                       <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading archived residents...</div>
-                    ) : archivedResidents.length === 0 ? (
+                    ) : (filterDate ? filteredArchivedResidents : archivedResidents).length === 0 ? (
                       <div className="text-center py-20 px-5 text-gray-600">
                         <p className="text-base font-normal text-gray-600">
                           No archived residents found.
@@ -290,7 +534,7 @@ function Archived() {
                             </tr>
                           </thead>
                           <tbody>
-                            {archivedResidents.map((resident) => {
+                            {(filterDate ? filteredArchivedResidents : archivedResidents).map((resident) => {
                               // Construct full name from firstName, middleName, lastName if fullName doesn't exist
                               const fullName = resident.fullName || 
                                 [resident.firstName, resident.middleName, resident.lastName]
@@ -333,7 +577,7 @@ function Archived() {
                     )}
                   </>
                 )}
-                {activeFilter !== 'all' && activeFilter !== 'registered-residents' && (
+                {activeFilter !== 'all' && activeFilter !== 'registered-residents' && activeFilter !== 'complaints' && (
                   <div className="text-center py-20 px-5 text-gray-600">
                     <p className="text-base font-normal text-gray-600">
                       Archived {filters.find(f => f.id === activeFilter)?.label} items will appear here

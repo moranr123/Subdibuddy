@@ -18,9 +18,8 @@ export default function Index() {
 
     const unsubscribe = onAuthStateChanged(authInstance, (user) => {
       if (user) {
-        // User is authenticated - redirect to login for now
-        // (You can change this to your main screen when you create it)
-        router.replace('/login');
+        // User is authenticated - redirect to home
+        router.replace('/home');
       } else {
         // User is not authenticated, redirect to login
         router.replace('/login');

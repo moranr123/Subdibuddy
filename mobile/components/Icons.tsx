@@ -68,6 +68,15 @@ export function BellIcon({ size = 20, color = '#000000' }: IconProps) {
   );
 }
 
+export function BillingIcon({ size = 24, color = '#000000' }: IconProps) {
+  return (
+    <View style={[styles.container, { width: size, height: size }]}>
+      <View style={[styles.dollarSign, { borderColor: color }]} />
+      <View style={[styles.dollarLine, { backgroundColor: color }]} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     justifyContent: 'center',
@@ -217,6 +226,22 @@ const styles = StyleSheet.create({
     height: 2,
     borderRadius: 1,
     marginTop: -1,
+  },
+  // Billing Icon (Dollar Sign)
+  dollarSign: {
+    width: 8,
+    height: 16,
+    borderWidth: 1.5,
+    borderRadius: 1,
+    position: 'relative',
+  },
+  dollarLine: {
+    width: 10,
+    height: 1.5,
+    borderRadius: 0.75,
+    position: 'absolute',
+    top: 5,
+    left: -1,
   },
 });
 
