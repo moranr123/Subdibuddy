@@ -77,8 +77,8 @@ function Sidebar() {
                   <button
                     className={`flex items-center gap-3 px-4 py-2.5 mx-2 bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
                       isActive
-                        ? 'bg-blue-50 text-blue-600 font-medium border-l-4 border-blue-600'
-                        : 'hover:bg-gray-50 text-gray-600'
+                        ? 'bg-gray-100 text-[#1877F2] font-semibold'
+                        : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                     }`}
                   >
                     <span className="font-normal text-sm flex-1">
@@ -91,8 +91,8 @@ function Sidebar() {
                       <button
                         className={`flex items-center gap-3 px-4 py-2 w-full bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left ${
                           location.pathname === '/resident-management/applications'
-                            ? 'bg-blue-50 text-blue-600 font-medium border-l-4 border-blue-600'
-                            : 'hover:bg-gray-50 text-gray-600'
+                            ? 'bg-gray-100 text-[#1877F2] font-semibold'
+                            : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                         }`}
                         onClick={() => {
                           handleNavigation('/resident-management/applications');
@@ -104,8 +104,8 @@ function Sidebar() {
                       <button
                         className={`flex items-center gap-3 px-4 py-2 w-full bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left ${
                           location.pathname === '/resident-management/registered'
-                            ? 'bg-blue-50 text-blue-600 font-medium border-l-4 border-blue-600'
-                            : 'hover:bg-gray-50 text-gray-600'
+                            ? 'bg-gray-100 text-[#1877F2] font-semibold'
+                            : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                         }`}
                         onClick={() => {
                           handleNavigation('/resident-management/registered');
@@ -135,8 +135,8 @@ function Sidebar() {
                   <button
                     className={`flex items-center gap-3 px-4 py-2.5 mx-2 bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
                       isActive
-                        ? 'bg-blue-50 text-blue-600 font-medium border-l-4 border-blue-600'
-                        : 'hover:bg-gray-50 text-gray-600'
+                        ? 'bg-gray-100 text-[#1877F2] font-semibold'
+                        : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                     }`}
                   >
                     <span className="font-normal text-sm flex-1">
@@ -149,8 +149,8 @@ function Sidebar() {
                       <button
                         className={`flex items-center gap-3 px-4 py-2 w-full bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left ${
                           location.pathname === '/vehicle-registration/applications'
-                            ? 'bg-blue-50 text-blue-600 font-medium border-l-4 border-blue-600'
-                            : 'hover:bg-gray-50 text-gray-600'
+                            ? 'bg-gray-100 text-[#1877F2] font-semibold'
+                            : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                         }`}
                         onClick={() => {
                           handleNavigation('/vehicle-registration/applications');
@@ -162,8 +162,8 @@ function Sidebar() {
                       <button
                         className={`flex items-center gap-3 px-4 py-2 w-full bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left ${
                           location.pathname === '/vehicle-registration/registered'
-                            ? 'bg-blue-50 text-blue-600 font-medium border-l-4 border-blue-600'
-                            : 'hover:bg-gray-50 text-gray-600'
+                            ? 'bg-gray-100 text-[#1877F2] font-semibold'
+                            : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                         }`}
                         onClick={() => {
                           handleNavigation('/vehicle-registration/registered');
@@ -182,8 +182,8 @@ function Sidebar() {
                 key={item.path}
                 className={`flex items-center gap-3 px-4 py-2.5 mx-2 bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
                   location.pathname === item.path
-                    ? 'bg-blue-50 text-blue-600 font-medium border-l-4 border-blue-600'
-                    : 'hover:bg-gray-50 text-gray-600'
+                    ? 'bg-gray-100 text-[#1877F2] font-semibold'
+                    : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                 }`}
                 onClick={() => handleNavigation(item.path)}
               >

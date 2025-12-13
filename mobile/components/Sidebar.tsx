@@ -16,6 +16,10 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
 
+  const isActive = (route: string) => {
+    return pathname === route;
+  };
+
   const handleSignOut = async () => {
     Alert.alert(
       'Sign Out',
@@ -81,7 +85,7 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
             <TouchableOpacity
               style={[
                 styles.sidebarItem,
-                pathname === '/profile' && styles.sidebarItemActive
+                isActive('/profile') ? styles.sidebarItemActive : null
               ]}
               onPress={() => {
                 onClose();
@@ -91,14 +95,14 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
             >
               <Text style={[
                 styles.sidebarItemText,
-                pathname === '/profile' && styles.sidebarItemTextActive
+                isActive('/profile') ? styles.sidebarItemTextActive : null
               ]}>Profile</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
                 styles.sidebarItem,
-                pathname === '/history' && styles.sidebarItemActive
+                isActive('/history') ? styles.sidebarItemActive : null
               ]}
               onPress={() => {
                 onClose();
@@ -108,14 +112,14 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
             >
               <Text style={[
                 styles.sidebarItemText,
-                pathname === '/history' && styles.sidebarItemTextActive
+                isActive('/history') ? styles.sidebarItemTextActive : null
               ]}>History</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
                 styles.sidebarItem,
-                pathname === '/registered-vehicles' && styles.sidebarItemActive
+                isActive('/registered-vehicles') ? styles.sidebarItemActive : null
               ]}
               onPress={() => {
                 onClose();
@@ -125,7 +129,7 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
             >
               <Text style={[
                 styles.sidebarItemText,
-                pathname === '/registered-vehicles' && styles.sidebarItemTextActive
+                isActive('/registered-vehicles') ? styles.sidebarItemTextActive : null
               ]}>Registered Vehicles</Text>
             </TouchableOpacity>
 
@@ -221,6 +225,8 @@ const styles = StyleSheet.create({
   },
   sidebarItemActive: {
     backgroundColor: '#e5e7eb',
+    borderRadius: 8,
+    marginHorizontal: 8,
   },
   sidebarItemTextActive: {
     color: '#1877F2',
