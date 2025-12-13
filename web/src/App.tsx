@@ -9,6 +9,7 @@ import VisitorPreRegistration from './pages/VisitorPreRegistration'
 import ResidentManagement from './pages/ResidentManagement'
 import BillingPayment from './pages/BillingPayment'
 import Maintenance from './pages/Maintenance'
+import VehicleRegistration from './pages/VehicleRegistration'
 import Archived from './pages/Archived'
 
 function App() {
@@ -24,6 +25,9 @@ function App() {
       <Route path="/resident-management/registered" element={<ResidentManagement />} />
       <Route path="/billing-payment" element={<BillingPayment />} />
       <Route path="/maintenance" element={<Maintenance />} />
+      <Route path="/vehicle-registration" element={<VehicleRegistration />} />
+      <Route path="/vehicle-registration/applications" element={<VehicleRegistration />} />
+      <Route path="/vehicle-registration/registered" element={<VehicleRegistration />} />
       <Route path="/archived" element={<Archived />} />
       <Route path="/create-superadmin" element={<CreateSuperAdmin />} />
     </Routes>

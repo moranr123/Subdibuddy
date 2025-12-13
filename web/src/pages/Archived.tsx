@@ -41,6 +41,7 @@ type FilterType =
   | 'registered-residents' 
   | 'billings-payments' 
   | 'maintenance'
+  | 'vehicle-registration'
   | 'all';
 
 interface ArchivedComplaint {
@@ -58,16 +59,40 @@ interface ArchivedComplaint {
   archivedBy: string;
 }
 
+interface ArchivedVehicleRegistration {
+  id: string;
+  plateNumber: string;
+  make: string;
+  model: string;
+  color: string;
+  year: string;
+  vehicleType: string;
+  registrationImageURL?: string;
+  vehicleImageURL?: string;
+  status: string;
+  rejectionReason?: string;
+  userId: string;
+  userEmail: string;
+  createdAt: any;
+  updatedAt?: any;
+  archivedAt: any;
+  archivedBy: string;
+}
+
 function Archived() {
   const [user, setUser] = useState<any>(null);
   const [searchParams] = useSearchParams();
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [archivedResidents, setArchivedResidents] = useState<Resident[]>([]);
   const [archivedComplaints, setArchivedComplaints] = useState<ArchivedComplaint[]>([]);
+  const [archivedVehicleRegistrations, setArchivedVehicleRegistrations] = useState<ArchivedVehicleRegistration[]>([]);
   const [filteredArchivedComplaints, setFilteredArchivedComplaints] = useState<ArchivedComplaint[]>([]);
   const [filteredArchivedResidents, setFilteredArchivedResidents] = useState<Resident[]>([]);
+  const [filteredArchivedVehicleRegistrations, setFilteredArchivedVehicleRegistrations] = useState<ArchivedVehicleRegistration[]>([]);
+  const [vehicleRegistrationUserNames, setVehicleRegistrationUserNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [loadingComplaints, setLoadingComplaints] = useState(false);
+  const [loadingVehicleRegistrations, setLoadingVehicleRegistrations] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -98,7 +123,7 @@ function Archived() {
   // Set filter from URL parameter
   useEffect(() => {
     const filterParam = searchParams.get('filter');
-    if (filterParam && ['announcement', 'complaints', 'visitor-pre-registration', 'residents-applications', 'registered-residents', 'billings-payments', 'maintenance'].includes(filterParam)) {
+    if (filterParam && ['announcement', 'complaints', 'visitor-pre-registration', 'residents-applications', 'registered-residents', 'billings-payments', 'maintenance', 'vehicle-registration'].includes(filterParam)) {
       setActiveFilter(filterParam as FilterType);
     }
   }, [searchParams]);
@@ -219,6 +244,88 @@ function Archived() {
     }
   }, [db]);
 
+  const fetchArchivedVehicleRegistrations = useCallback(async () => {
+    if (!db) {
+      console.error('Firestore db is not initialized');
+      return;
+    }
+    
+    try {
+      setLoadingVehicleRegistrations(true);
+      console.log('Fetching archived vehicle registrations from Firestore...');
+      
+      let querySnapshot;
+      try {
+        const q = query(collection(db, 'archivedVehicleRegistrations'), orderBy('archivedAt', 'desc'));
+        querySnapshot = await getDocs(q);
+      } catch (orderByError: any) {
+        console.warn('orderBy archivedAt failed, trying without orderBy:', orderByError);
+        querySnapshot = await getDocs(collection(db, 'archivedVehicleRegistrations'));
+      }
+      
+      const registrationsData: ArchivedVehicleRegistration[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        registrationsData.push({
+          id: doc.id,
+          ...data,
+        } as ArchivedVehicleRegistration);
+      });
+      
+      registrationsData.sort((a, b) => {
+        const aDate = a.archivedAt?.toDate ? a.archivedAt.toDate().getTime() : 0;
+        const bDate = b.archivedAt?.toDate ? b.archivedAt.toDate().getTime() : 0;
+        return bDate - aDate;
+      });
+      
+      console.log(`Fetched ${registrationsData.length} archived vehicle registrations`);
+      setArchivedVehicleRegistrations(registrationsData);
+    } catch (error: any) {
+      console.error('Error fetching archived vehicle registrations:', error);
+      alert(`Failed to load archived vehicle registrations: ${error.message || 'Unknown error'}`);
+    } finally {
+      setLoadingVehicleRegistrations(false);
+    }
+  }, [db]);
+
+  // Fetch user names for archived vehicle registrations
+  useEffect(() => {
+    if (!db || archivedVehicleRegistrations.length === 0) return;
+
+    const fetchUserNames = async () => {
+      const userIds = [...new Set(archivedVehicleRegistrations.map(r => r.userId))];
+      const namesMap: Record<string, string> = {};
+
+      for (const userId of userIds) {
+        if (vehicleRegistrationUserNames[userId]) {
+          namesMap[userId] = vehicleRegistrationUserNames[userId];
+          continue;
+        }
+
+        try {
+          const userDoc = await getDoc(doc(db, 'users', userId));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            const fullName = userData.fullName || 
+              `${userData.firstName || ''} ${userData.lastName || ''}`.trim() ||
+              userData.email ||
+              'Unknown User';
+            namesMap[userId] = fullName;
+          } else {
+            namesMap[userId] = archivedVehicleRegistrations.find(r => r.userId === userId)?.userEmail || 'Unknown User';
+          }
+        } catch (error) {
+          console.error(`Error fetching user ${userId}:`, error);
+          namesMap[userId] = archivedVehicleRegistrations.find(r => r.userId === userId)?.userEmail || 'Unknown User';
+        }
+      }
+
+      setVehicleRegistrationUserNames(prev => ({ ...prev, ...namesMap }));
+    };
+
+    fetchUserNames();
+  }, [db, archivedVehicleRegistrations]);
+
   useEffect(() => {
     if (user && db) {
       if (activeFilter === 'registered-residents') {
@@ -226,13 +333,16 @@ function Archived() {
         fetchArchivedResidents();
       } else if (activeFilter === 'complaints') {
         fetchArchivedComplaints();
+      } else if (activeFilter === 'vehicle-registration') {
+        fetchArchivedVehicleRegistrations();
       } else {
         // Clear data when switching to a different filter
         setArchivedResidents([]);
         setArchivedComplaints([]);
+        setArchivedVehicleRegistrations([]);
       }
     }
-  }, [user, activeFilter, db, fetchArchivedResidents, fetchArchivedComplaints]);
+  }, [user, activeFilter, db, fetchArchivedResidents, fetchArchivedComplaints, fetchArchivedVehicleRegistrations]);
 
   const handleRestore = useCallback(async (residentId: string) => {
     if (!db) return;
@@ -335,13 +445,41 @@ function Archived() {
     setFilteredArchivedResidents(filtered);
   }, [filterDate]);
 
+  const applyDateFilterVehicleRegistrations = useCallback((registrationsList: ArchivedVehicleRegistration[]) => {
+    if (!filterDate) {
+      setFilteredArchivedVehicleRegistrations(registrationsList);
+      return;
+    }
+
+    const selectedDate = new Date(filterDate);
+    const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+
+    const filtered = registrationsList.filter((registration) => {
+      const registrationDate = registration.archivedAt?.toDate 
+        ? registration.archivedAt.toDate() 
+        : registration.archivedAt 
+        ? new Date(registration.archivedAt) 
+        : null;
+      
+      if (!registrationDate) return false;
+
+      const registrationDateOnly = new Date(registrationDate.getFullYear(), registrationDate.getMonth(), registrationDate.getDate());
+      
+      return registrationDateOnly.getTime() === selectedDateOnly.getTime();
+    });
+
+    setFilteredArchivedVehicleRegistrations(filtered);
+  }, [filterDate]);
+
   useEffect(() => {
     if (activeFilter === 'complaints') {
       applyDateFilterComplaints(archivedComplaints);
     } else if (activeFilter === 'registered-residents') {
       applyDateFilterResidents(archivedResidents);
+    } else if (activeFilter === 'vehicle-registration') {
+      applyDateFilterVehicleRegistrations(archivedVehicleRegistrations);
     }
-  }, [archivedComplaints, archivedResidents, filterDate, activeFilter, applyDateFilterComplaints, applyDateFilterResidents]);
+  }, [archivedComplaints, archivedResidents, archivedVehicleRegistrations, filterDate, activeFilter, applyDateFilterComplaints, applyDateFilterResidents, applyDateFilterVehicleRegistrations]);
 
   const handleDateFilter = useCallback(() => {
     setShowDateFilter(!showDateFilter);
@@ -381,6 +519,7 @@ function Archived() {
     { id: 'registered-residents' as FilterType, label: 'Registered Residents' },
     { id: 'billings-payments' as FilterType, label: 'Billings & Payments' },
     { id: 'maintenance' as FilterType, label: 'Maintenance' },
+    { id: 'vehicle-registration' as FilterType, label: 'Vehicle Registration' },
   ];
 
   return (
@@ -430,12 +569,15 @@ function Archived() {
                       {activeFilter === 'registered-residents' && (
                         <>Showing {filteredArchivedResidents.length} of {archivedResidents.length} archived residents</>
                       )}
+                      {activeFilter === 'vehicle-registration' && (
+                        <>Showing {filteredArchivedVehicleRegistrations.length} of {archivedVehicleRegistrations.length} archived vehicle registrations</>
+                      )}
                     </div>
                   )}
                 </div>
               )}
               
-              <div className="flex flex-wrap gap-3 mb-6">
+              <div className="flex gap-3 mb-6 overflow-x-auto">
                 {filters.map((filter) => (
                   <button
                     key={filter.id}
@@ -577,7 +719,68 @@ function Archived() {
                     )}
                   </>
                 )}
-                {activeFilter !== 'all' && activeFilter !== 'registered-residents' && activeFilter !== 'complaints' && (
+                {activeFilter === 'vehicle-registration' && (
+                  <>
+                    {loadingVehicleRegistrations && archivedVehicleRegistrations.length === 0 ? (
+                      <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading archived vehicle registrations...</div>
+                    ) : (filterDate ? filteredArchivedVehicleRegistrations : archivedVehicleRegistrations).length === 0 ? (
+                      <div className="text-center py-20 px-5 text-gray-600">
+                        <p className="text-base font-normal text-gray-600">
+                          No archived vehicle registrations found.
+                        </p>
+                        <p className="text-xs text-gray-400 mt-2.5">
+                          Archived vehicle registrations will appear here.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto w-full">
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="bg-gray-50 border-b-2 border-gray-200">
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Date</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">User</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Plate Number</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Vehicle</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Type</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Archived At</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(filterDate ? filteredArchivedVehicleRegistrations : archivedVehicleRegistrations).map((registration) => (
+                              <tr key={registration.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(registration.createdAt)}</td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                                  {vehicleRegistrationUserNames[registration.userId] || registration.userEmail || 'Unknown User'}
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top font-semibold">{registration.plateNumber}</td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                                  {registration.make} {registration.model} ({registration.year})
+                                  <br />
+                                  <span className="text-xs text-gray-500">Color: {registration.color}</span>
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{registration.vehicleType}</td>
+                                <td className="px-4 py-4 border-b border-gray-100 align-top">
+                                  <span
+                                    className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block"
+                                    style={{ 
+                                      backgroundColor: registration.status === 'approved' ? '#4CAF50' : 
+                                                      registration.status === 'rejected' ? '#ef4444' : '#FFA500' 
+                                    }}
+                                  >
+                                    {registration.status.toUpperCase()}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(registration.archivedAt)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                )}
+                {activeFilter !== 'all' && activeFilter !== 'registered-residents' && activeFilter !== 'complaints' && activeFilter !== 'vehicle-registration' && (
                   <div className="text-center py-20 px-5 text-gray-600">
                     <p className="text-base font-normal text-gray-600">
                       Archived {filters.find(f => f.id === activeFilter)?.label} items will appear here

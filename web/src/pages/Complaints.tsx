@@ -29,6 +29,8 @@ function Complaints() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [filterDate, setFilterDate] = useState<string>('');
   const [showDateFilter, setShowDateFilter] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [userNames, setUserNames] = useState<Record<string, string>>({});
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -80,16 +82,15 @@ function Complaints() {
       });
       
       // Sort manually if orderBy wasn't used
-      complaintsData.sort((a, b) => {
-        const aDate = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-        const bDate = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
-        return bDate - aDate;
-      });
-      
-      console.log(`Received ${complaintsData.length} complaints (real-time update)`);
-      setComplaints(complaintsData);
-      applyDateFilter(complaintsData);
-      setLoading(false);
+          complaintsData.sort((a, b) => {
+            const aDate = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+            const bDate = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+            return bDate - aDate;
+          });
+          
+          console.log(`Received ${complaintsData.length} complaints (real-time update)`);
+          setComplaints(complaintsData);
+          setLoading(false);
     }, (error: any) => {
       console.error('Error listening to complaints:', error);
       // If orderBy error, try without orderBy
@@ -128,34 +129,89 @@ function Complaints() {
     return () => unsubscribe();
   }, [user, db]);
 
-  const applyDateFilter = useCallback((complaintsList: Complaint[]) => {
-    if (!filterDate) {
-      setFilteredComplaints(complaintsList);
-      return;
-    }
+  // Fetch user names
+  useEffect(() => {
+    if (!db || complaints.length === 0) return;
 
-    const filtered = complaintsList.filter((complaint) => {
-      const complaintDate = complaint.createdAt?.toDate 
-        ? complaint.createdAt.toDate() 
-        : complaint.createdAt 
-        ? new Date(complaint.createdAt) 
-        : null;
-      
-      if (!complaintDate) return false;
+    const fetchUserNames = async () => {
+      const userIds = [...new Set(complaints.map(c => c.userId))];
+      const namesMap: Record<string, string> = {};
 
-      const complaintDateOnly = new Date(complaintDate.getFullYear(), complaintDate.getMonth(), complaintDate.getDate());
+      for (const userId of userIds) {
+        if (userNames[userId]) {
+          namesMap[userId] = userNames[userId];
+          continue;
+        }
+
+        try {
+          const userDoc = await getDoc(doc(db, 'users', userId));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            const fullName = userData.fullName || 
+              `${userData.firstName || ''} ${userData.lastName || ''}`.trim() ||
+              userData.email ||
+              'Unknown User';
+            namesMap[userId] = fullName;
+          } else {
+            namesMap[userId] = complaints.find(c => c.userId === userId)?.userEmail || 'Unknown User';
+          }
+        } catch (error) {
+          console.error(`Error fetching user ${userId}:`, error);
+          namesMap[userId] = complaints.find(c => c.userId === userId)?.userEmail || 'Unknown User';
+        }
+      }
+
+      setUserNames(prev => ({ ...prev, ...namesMap }));
+    };
+
+    fetchUserNames();
+  }, [db, complaints]);
+
+  const applyFilters = useCallback((complaintsList: Complaint[]) => {
+    let filtered = complaintsList;
+
+    // Apply date filter
+    if (filterDate) {
       const selectedDate = new Date(filterDate);
       const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-      
-      return complaintDateOnly.getTime() === selectedDateOnly.getTime();
-    });
+
+      filtered = filtered.filter((complaint) => {
+        const complaintDate = complaint.createdAt?.toDate 
+          ? complaint.createdAt.toDate() 
+          : complaint.createdAt 
+          ? new Date(complaint.createdAt) 
+          : null;
+        
+        if (!complaintDate) return false;
+
+        const complaintDateOnly = new Date(complaintDate.getFullYear(), complaintDate.getMonth(), complaintDate.getDate());
+        
+        return complaintDateOnly.getTime() === selectedDateOnly.getTime();
+      });
+    }
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((complaint) => {
+        const userName = userNames[complaint.userId] || complaint.userEmail || '';
+        const subject = complaint.subject || '';
+        const description = complaint.description || '';
+        
+        return (
+          userName.toLowerCase().includes(query) ||
+          subject.toLowerCase().includes(query) ||
+          description.toLowerCase().includes(query)
+        );
+      });
+    }
 
     setFilteredComplaints(filtered);
-  }, [filterDate]);
+  }, [filterDate, searchQuery, userNames]);
 
   useEffect(() => {
-    applyDateFilter(complaints);
-  }, [complaints, filterDate, applyDateFilter]);
+    applyFilters(complaints);
+  }, [complaints, filterDate, searchQuery, userNames, applyFilters]);
 
   const handleDateFilter = useCallback(() => {
     setShowDateFilter(!showDateFilter);
@@ -341,6 +397,13 @@ function Complaints() {
               <div className="flex justify-between items-center mb-6">
                 <h2 className="m-0 text-gray-900 text-lg font-normal">Resident Complaints</h2>
                 <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
+                  />
                   <button
                     className="px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-200"
                     onClick={handleDateFilter}
@@ -379,7 +442,7 @@ function Complaints() {
 
               {loading && complaints.length === 0 ? (
                 <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading complaints...</div>
-              ) : (filterDate ? filteredComplaints : complaints).length === 0 ? (
+              ) : (filterDate || searchQuery ? filteredComplaints : complaints).length === 0 ? (
                 <div className="text-center py-20 px-5 text-gray-600">
                   <p className="text-base font-normal text-gray-600">No complaints found.</p>
                 </div>
@@ -397,10 +460,12 @@ function Complaints() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(filterDate ? filteredComplaints : complaints).map((complaint) => (
+                      {(filterDate || searchQuery ? filteredComplaints : complaints).map((complaint) => (
                         <tr key={complaint.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
                           <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(complaint.createdAt)}</td>
-                          <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{complaint.userEmail}</td>
+                          <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                            {userNames[complaint.userId] || complaint.userEmail || 'Unknown User'}
+                          </td>
                           <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{complaint.subject}</td>
                           <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top max-w-[300px] break-words whitespace-pre-wrap">
                             {complaint.description}

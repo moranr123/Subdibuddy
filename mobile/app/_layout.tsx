@@ -17,9 +17,11 @@ export default function RootLayout() {
         <Stack.Screen name="complaints" />
         <Stack.Screen name="billing" />
         <Stack.Screen name="maintenance" />
+        <Stack.Screen name="vehicle-registration" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="profile" />
         <Stack.Screen name="history" />
+        <Stack.Screen name="registered-vehicles" />
       </Stack>
     </>
   );

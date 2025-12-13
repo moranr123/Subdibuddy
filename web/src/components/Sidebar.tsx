@@ -17,11 +17,13 @@ const menuItems: MenuItem[] = [
   { path: '/resident-management', label: 'Resident Management', icon: '⬟' },
   { path: '/billing-payment', label: 'Billing & Payment', icon: '$' },
   { path: '/maintenance', label: 'Maintenance', icon: '⚙' },
+  { path: '/vehicle-registration', label: 'Vehicle Registration', icon: '🚗' },
   { path: '/archived', label: 'Archived', icon: '' },
 ];
 
 function Sidebar() {
   const [residentManagementOpen, setResidentManagementOpen] = useState(false);
+  const [vehicleRegistrationOpen, setVehicleRegistrationOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -108,6 +110,64 @@ function Sidebar() {
                         onClick={() => {
                           handleNavigation('/resident-management/registered');
                           setResidentManagementOpen(false);
+                        }}
+                      >
+                        <span className="text-xs">Registered</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            if (item.path === '/vehicle-registration') {
+              const isActive = location.pathname.startsWith('/vehicle-registration');
+              return (
+                <div 
+                  key={item.path} 
+                  className="relative"
+                  onMouseEnter={() => {
+                    setVehicleRegistrationOpen(true);
+                  }}
+                  onMouseLeave={() => {
+                    setVehicleRegistrationOpen(false);
+                  }}
+                >
+                  <button
+                    className={`flex items-center gap-3 px-4 py-2.5 mx-2 bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
+                      isActive
+                        ? 'bg-blue-50 text-blue-600 font-medium border-l-4 border-blue-600'
+                        : 'hover:bg-gray-50 text-gray-600'
+                    }`}
+                  >
+                    <span className="font-normal text-sm flex-1">
+                      {item.label}
+                    </span>
+                    <span className={`text-xs transition-transform ${vehicleRegistrationOpen ? 'rotate-90' : ''}`}>›</span>
+                  </button>
+                  {vehicleRegistrationOpen && (
+                    <div className="ml-4 mt-1 space-y-1">
+                      <button
+                        className={`flex items-center gap-3 px-4 py-2 w-full bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left ${
+                          location.pathname === '/vehicle-registration/applications'
+                            ? 'bg-blue-50 text-blue-600 font-medium border-l-4 border-blue-600'
+                            : 'hover:bg-gray-50 text-gray-600'
+                        }`}
+                        onClick={() => {
+                          handleNavigation('/vehicle-registration/applications');
+                          setVehicleRegistrationOpen(false);
+                        }}
+                      >
+                        <span className="text-xs">Applications</span>
+                      </button>
+                      <button
+                        className={`flex items-center gap-3 px-4 py-2 w-full bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left ${
+                          location.pathname === '/vehicle-registration/registered'
+                            ? 'bg-blue-50 text-blue-600 font-medium border-l-4 border-blue-600'
+                            : 'hover:bg-gray-50 text-gray-600'
+                        }`}
+                        onClick={() => {
+                          handleNavigation('/vehicle-registration/registered');
+                          setVehicleRegistrationOpen(false);
                         }}
                       >
                         <span className="text-xs">Registered</span>

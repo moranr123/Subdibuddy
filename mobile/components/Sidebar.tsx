@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOut } from 'firebase/auth';
 import { getAuthService } from '../firebase/config';
@@ -13,6 +13,7 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const insets = useSafeAreaInsets();
 
   const handleSignOut = async () => {
@@ -78,25 +79,54 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
 
           <ScrollView style={styles.sidebarMenu}>
             <TouchableOpacity
-              style={styles.sidebarItem}
+              style={[
+                styles.sidebarItem,
+                pathname === '/profile' && styles.sidebarItemActive
+              ]}
               onPress={() => {
                 onClose();
                 router.push('/profile');
               }}
               activeOpacity={0.7}
             >
-              <Text style={styles.sidebarItemText}>Profile</Text>
+              <Text style={[
+                styles.sidebarItemText,
+                pathname === '/profile' && styles.sidebarItemTextActive
+              ]}>Profile</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.sidebarItem}
+              style={[
+                styles.sidebarItem,
+                pathname === '/history' && styles.sidebarItemActive
+              ]}
               onPress={() => {
                 onClose();
                 router.push('/history');
               }}
               activeOpacity={0.7}
             >
-              <Text style={styles.sidebarItemText}>History</Text>
+              <Text style={[
+                styles.sidebarItemText,
+                pathname === '/history' && styles.sidebarItemTextActive
+              ]}>History</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.sidebarItem,
+                pathname === '/registered-vehicles' && styles.sidebarItemActive
+              ]}
+              onPress={() => {
+                onClose();
+                router.push('/registered-vehicles');
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.sidebarItemText,
+                pathname === '/registered-vehicles' && styles.sidebarItemTextActive
+              ]}>Registered Vehicles</Text>
             </TouchableOpacity>
 
             <View style={styles.sidebarDivider} />
@@ -188,6 +218,13 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontWeight: '400',
     letterSpacing: -0.2,
+  },
+  sidebarItemActive: {
+    backgroundColor: '#e5e7eb',
+  },
+  sidebarItemTextActive: {
+    color: '#1877F2',
+    fontWeight: '600',
   },
   sidebarDivider: {
     height: 8,

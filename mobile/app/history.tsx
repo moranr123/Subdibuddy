@@ -226,8 +226,8 @@ export default function History() {
           items.push({
             id: doc.id,
             type: 'vehicle-registration',
-            title: data.vehicleModel || data.plateNumber || 'Vehicle Registration',
-            description: data.description || `${data.make || ''} ${data.model || ''}`.trim(),
+            title: data.plateNumber || 'Vehicle Registration',
+            description: `${data.make || ''} ${data.model || ''} (${data.year || ''})`.trim() || 'Vehicle Registration',
             status: data.status,
             date: data.createdAt,
             ...data,
