@@ -48,7 +48,7 @@ function Sidebar() {
     }
   }, [navigate]);
 
-  // Listen to pending complaints
+  // Listen to pending and in-progress complaints
   useEffect(() => {
     if (!db) return;
 
@@ -56,7 +56,7 @@ function Sidebar() {
 
     const q = query(
       collection(db, 'complaints'),
-      where('status', '==', 'pending')
+      where('status', 'in', ['pending', 'in-progress'])
     );
 
     unsubscribe = onSnapshot(q, (snapshot) => {
@@ -70,7 +70,7 @@ function Sidebar() {
           let count = 0;
           snapshot2.forEach((doc) => {
             const data = doc.data();
-            if (data.status === 'pending') {
+            if (data.status === 'pending' || data.status === 'in-progress') {
               count++;
             }
           });
@@ -84,7 +84,7 @@ function Sidebar() {
     };
   }, [db]);
 
-  // Listen to pending vehicle registrations
+  // Listen to pending and in-progress vehicle registrations
   useEffect(() => {
     if (!db) return;
 
@@ -92,7 +92,7 @@ function Sidebar() {
 
     const q = query(
       collection(db, 'vehicleRegistrations'),
-      where('status', '==', 'pending')
+      where('status', 'in', ['pending', 'in-progress'])
     );
 
     unsubscribe = onSnapshot(q, (snapshot) => {
@@ -106,7 +106,7 @@ function Sidebar() {
           let count = 0;
           snapshot2.forEach((doc) => {
             const data = doc.data();
-            if (data.status === 'pending') {
+            if (data.status === 'pending' || data.status === 'in-progress') {
               count++;
             }
           });
@@ -120,7 +120,7 @@ function Sidebar() {
     };
   }, [db]);
 
-  // Listen to pending maintenance requests
+  // Listen to pending and in-progress maintenance requests
   useEffect(() => {
     if (!db) return;
 
@@ -128,7 +128,7 @@ function Sidebar() {
 
     const q = query(
       collection(db, 'maintenance'),
-      where('status', '==', 'pending')
+      where('status', 'in', ['pending', 'in-progress'])
     );
 
     unsubscribe = onSnapshot(q, (snapshot) => {
@@ -142,7 +142,7 @@ function Sidebar() {
           let count = 0;
           snapshot2.forEach((doc) => {
             const data = doc.data();
-            if (data.status === 'pending') {
+            if (data.status === 'pending' || data.status === 'in-progress') {
               count++;
             }
           });
@@ -205,7 +205,7 @@ function Sidebar() {
                   <button
                     className={`flex items-center gap-3 px-4 py-2.5 mx-2 bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
                       isActive
-                        ? 'bg-gray-100 text-[#1877F2] font-semibold'
+                        ? 'bg-[#1877F2] text-white font-semibold'
                         : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                     }`}
                   >
@@ -224,7 +224,7 @@ function Sidebar() {
                       <button
                         className={`flex items-center gap-3 px-4 py-2 w-full bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left ${
                           location.pathname === '/resident-management/applications'
-                            ? 'bg-gray-100 text-[#1877F2] font-semibold'
+                            ? 'bg-[#1877F2] text-white font-semibold'
                             : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                         }`}
                         onClick={() => {
@@ -237,7 +237,7 @@ function Sidebar() {
                       <button
                         className={`flex items-center gap-3 px-4 py-2 w-full bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left ${
                           location.pathname === '/resident-management/registered'
-                            ? 'bg-gray-100 text-[#1877F2] font-semibold'
+                            ? 'bg-[#1877F2] text-white font-semibold'
                             : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                         }`}
                         onClick={() => {
@@ -268,7 +268,7 @@ function Sidebar() {
                   <button
                     className={`flex items-center gap-3 px-4 py-2.5 mx-2 bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
                       isActive
-                        ? 'bg-gray-100 text-[#1877F2] font-semibold'
+                        ? 'bg-[#1877F2] text-white font-semibold'
                         : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                     }`}
                   >
@@ -287,7 +287,7 @@ function Sidebar() {
                       <button
                         className={`flex items-center gap-3 px-4 py-2 w-full bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left ${
                           location.pathname === '/vehicle-registration/applications'
-                            ? 'bg-gray-100 text-[#1877F2] font-semibold'
+                            ? 'bg-[#1877F2] text-white font-semibold'
                             : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                         }`}
                         onClick={() => {
@@ -300,7 +300,7 @@ function Sidebar() {
                       <button
                         className={`flex items-center gap-3 px-4 py-2 w-full bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left ${
                           location.pathname === '/vehicle-registration/registered'
-                            ? 'bg-gray-100 text-[#1877F2] font-semibold'
+                            ? 'bg-[#1877F2] text-white font-semibold'
                             : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                         }`}
                         onClick={() => {
@@ -328,7 +328,7 @@ function Sidebar() {
                 key={item.path}
                 className={`flex items-center gap-3 px-4 py-2.5 mx-2 bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
                   location.pathname === item.path
-                    ? 'bg-gray-100 text-[#1877F2] font-semibold'
+                    ? 'bg-[#1877F2] text-white font-semibold'
                     : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                 }`}
                 onClick={() => handleNavigation(item.path)}
