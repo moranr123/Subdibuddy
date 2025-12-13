@@ -186,14 +186,14 @@ export default function Complaints() {
   }, []);
 
   const handleEdit = useCallback((complaint: Complaint) => {
-    // Only allow editing if complaint is pending or in-progress
-    if (complaint.status === 'pending' || complaint.status === 'in-progress') {
+    // Only allow editing if complaint is pending
+    if (complaint.status === 'pending') {
       setEditingComplaint(complaint);
       setSubject(complaint.subject);
       setDescription(complaint.description);
       setImageUri(complaint.imageURL || null);
     } else {
-      Alert.alert('Cannot Edit', 'You can only edit complaints that are pending or in-progress.');
+      Alert.alert('Cannot Edit', 'You can only edit complaints that are pending.');
     }
   }, []);
 
@@ -392,7 +392,7 @@ export default function Complaints() {
                       <Text style={styles.complaintDate}>
                         Submitted: {complaint.createdAt?.toDate ? complaint.createdAt.toDate().toLocaleDateString() : 'N/A'}
                       </Text>
-                      {(complaint.status === 'pending' || complaint.status === 'in-progress') && (
+                      {complaint.status === 'pending' && (
                         <TouchableOpacity
                           style={styles.editButton}
                           onPress={() => handleEdit(complaint)}

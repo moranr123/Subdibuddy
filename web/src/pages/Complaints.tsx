@@ -30,6 +30,7 @@ function Complaints() {
   const [filterDate, setFilterDate] = useState<string>('');
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [userNames, setUserNames] = useState<Record<string, string>>({});
   const navigate = useNavigate();
 
@@ -170,6 +171,11 @@ function Complaints() {
   const applyFilters = useCallback((complaintsList: Complaint[]) => {
     let filtered = complaintsList;
 
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((complaint) => complaint.status === statusFilter);
+    }
+
     // Apply date filter
     if (filterDate) {
       const selectedDate = new Date(filterDate);
@@ -207,11 +213,11 @@ function Complaints() {
     }
 
     setFilteredComplaints(filtered);
-  }, [filterDate, searchQuery, userNames]);
+  }, [statusFilter, filterDate, searchQuery, userNames]);
 
   useEffect(() => {
     applyFilters(complaints);
-  }, [complaints, filterDate, searchQuery, userNames, applyFilters]);
+  }, [complaints, statusFilter, filterDate, searchQuery, userNames, applyFilters]);
 
   const handleDateFilter = useCallback(() => {
     setShowDateFilter(!showDateFilter);
@@ -335,6 +341,8 @@ function Complaints() {
   };
 
   const handleView = useCallback((complaint: Complaint) => {
+    console.log('Viewing complaint:', complaint);
+    console.log('Image URL:', complaint.imageURL);
     setViewingComplaint(complaint);
     setShowViewModal(true);
   }, []);
@@ -404,6 +412,17 @@ function Complaints() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
                   />
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 cursor-pointer transition-colors hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="in-progress">In Progress</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
                   <button
                     className="px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-200"
                     onClick={handleDateFilter}
@@ -442,7 +461,7 @@ function Complaints() {
 
               {loading && complaints.length === 0 ? (
                 <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading complaints...</div>
-              ) : (filterDate || searchQuery ? filteredComplaints : complaints).length === 0 ? (
+              ) : (statusFilter !== 'all' || filterDate || searchQuery ? filteredComplaints : complaints).length === 0 ? (
                 <div className="text-center py-20 px-5 text-gray-600">
                   <p className="text-base font-normal text-gray-600">No complaints found.</p>
                 </div>
@@ -460,7 +479,7 @@ function Complaints() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(filterDate || searchQuery ? filteredComplaints : complaints).map((complaint) => (
+                      {(statusFilter !== 'all' || filterDate || searchQuery ? filteredComplaints : complaints).map((complaint) => (
                         <tr key={complaint.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
                           <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(complaint.createdAt)}</td>
                           <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
@@ -498,12 +517,14 @@ function Complaints() {
                               >
                                 View
                               </button>
-                              <button
-                                className="px-3 py-1.5 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors whitespace-nowrap"
-                                onClick={() => handleArchive(complaint.id)}
-                              >
-                                Archive
-                              </button>
+                              {complaint.status !== 'in-progress' && (
+                                <button
+                                  className="px-3 py-1.5 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors whitespace-nowrap"
+                                  onClick={() => handleArchive(complaint.id)}
+                                >
+                                  Archive
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -564,18 +585,29 @@ function Complaints() {
                 </div>
               )}
               
-              {viewingComplaint.imageURL && (
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Image</label>
+              <div>
+                <label className="text-sm font-medium text-gray-700">Image</label>
+                {viewingComplaint.imageURL && viewingComplaint.imageURL.trim() !== '' ? (
                   <div className="mt-2">
                     <img 
                       src={viewingComplaint.imageURL} 
                       alt="Complaint image" 
                       className="max-w-full h-auto rounded border border-gray-200"
+                      style={{ maxHeight: '400px', objectFit: 'contain' }}
+                      onError={(e) => {
+                        console.error('Error loading complaint image:', viewingComplaint.imageURL);
+                        const errorDiv = document.createElement('div');
+                        errorDiv.className = 'text-red-500 text-sm mt-2';
+                        errorDiv.textContent = 'Failed to load image. URL: ' + viewingComplaint.imageURL;
+                        e.currentTarget.parentElement?.appendChild(errorDiv);
+                        e.currentTarget.style.display = 'none';
+                      }}
                     />
                   </div>
-                </div>
-              )}
+                ) : (
+                  <p className="mt-1 text-gray-500 text-sm italic">No image provided</p>
+                )}
+              </div>
               
               <div>
                 <label className="text-sm font-medium text-gray-700">Submitted Date</label>
