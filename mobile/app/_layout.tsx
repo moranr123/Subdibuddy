@@ -79,7 +79,13 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen 
-          name="registered-vehicles" 
+          name="registered-vehicles"
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen 
+          name="announcements"
           options={{
             animation: 'slide_from_right',
           }}

@@ -1,13 +1,11 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, onSnapshot, orderBy, Timestamp } from 'firebase/firestore';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { getAuthService, db } from '../firebase/config';
-import Header from '../components/Header';
-import Sidebar from '../components/Sidebar';
-import { useNotifications } from '../hooks/useNotifications';
 
 type FilterType = 'all' | 'complaints' | 'billings-payments' | 'maintenance' | 'vehicle-registration';
 
@@ -35,24 +33,11 @@ interface HistoryItem {
 
 export default function History() {
   const router = useRouter();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const sidebarAnimation = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
+  const insets = useSafeAreaInsets();
   const [user, setUser] = useState<any>(null);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [loading, setLoading] = useState(true);
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
-  const { unreadCount } = useNotifications();
-
-  const toggleSidebar = () => {
-    const toValue = sidebarOpen ? -Dimensions.get('window').width : 0;
-    Animated.spring(sidebarAnimation, {
-      toValue,
-      useNativeDriver: true,
-      tension: 65,
-      friction: 11,
-    }).start();
-    setSidebarOpen(!sidebarOpen);
-  };
 
   useEffect(() => {
     const authInstance = getAuthService();
@@ -319,19 +304,21 @@ export default function History() {
 
   return (
     <View style={styles.container}>
-      <Header 
-        onMenuPress={toggleSidebar}
-        onNotificationPress={() => router.push('/notifications')}
-        notificationCount={unreadCount}
-      />
-      <Sidebar 
-        isOpen={sidebarOpen}
-        onClose={toggleSidebar}
-        animation={sidebarAnimation}
-      />
+      {/* Back Button */}
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <TouchableOpacity 
+          onPress={() => router.back()}
+          style={styles.backButton}
+          activeOpacity={0.7}
+        >
+          <FontAwesome5 name="arrow-left" size={20} color="#ffffff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>History</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <View style={styles.section}>
-          <Text style={styles.title}>History</Text>
 
           {/* Filter Buttons */}
           <View style={styles.filterContainer}>
@@ -435,6 +422,29 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f0f2f5',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#111827',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ffffff',
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 36,
   },
   content: {
     flex: 1,

@@ -1,12 +1,11 @@
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Image, TouchableOpacity, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Image, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import { FontAwesome5 } from '@expo/vector-icons';
 import { getAuthService, db } from '../firebase/config';
-import Header from '../components/Header';
-import Sidebar from '../components/Sidebar';
-import { useNotifications } from '../hooks/useNotifications';
 
 interface UserData {
   id: string;
@@ -36,23 +35,10 @@ interface UserData {
 
 export default function Profile() {
   const router = useRouter();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const sidebarAnimation = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
+  const insets = useSafeAreaInsets();
   const [user, setUser] = useState<any>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
-  const { unreadCount } = useNotifications();
-
-  const toggleSidebar = () => {
-    const toValue = sidebarOpen ? -Dimensions.get('window').width : 0;
-    Animated.spring(sidebarAnimation, {
-      toValue,
-      useNativeDriver: true,
-      tension: 65,
-      friction: 11,
-    }).start();
-    setSidebarOpen(!sidebarOpen);
-  };
 
   useEffect(() => {
     const authInstance = getAuthService();
@@ -117,11 +103,17 @@ export default function Profile() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <Header 
-          onMenuPress={toggleSidebar}
-          onNotificationPress={() => router.push('/notifications')}
-          notificationCount={unreadCount}
-        />
+        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+          <TouchableOpacity 
+            onPress={() => router.back()}
+            style={styles.backButton}
+            activeOpacity={0.7}
+          >
+            <FontAwesome5 name="arrow-left" size={20} color="#ffffff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Profile</Text>
+          <View style={styles.headerSpacer} />
+        </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#1877F2" />
         </View>
@@ -131,19 +123,21 @@ export default function Profile() {
 
   return (
     <View style={styles.container}>
-      <Header 
-        onMenuPress={toggleSidebar}
-        onNotificationPress={() => router.push('/notifications')}
-        notificationCount={unreadCount}
-      />
-      <Sidebar 
-        isOpen={sidebarOpen}
-        onClose={toggleSidebar}
-        animation={sidebarAnimation}
-      />
+      {/* Back Button */}
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <TouchableOpacity 
+          onPress={() => router.back()}
+          style={styles.backButton}
+          activeOpacity={0.7}
+        >
+          <FontAwesome5 name="arrow-left" size={20} color="#ffffff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Profile</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <View style={styles.section}>
-          <Text style={styles.title}>Profile</Text>
           
           {userData ? (
             <View style={styles.profileCard}>
@@ -349,6 +343,29 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f9fafb',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#111827',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ffffff',
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 36,
   },
   content: {
     flex: 1,

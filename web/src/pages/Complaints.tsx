@@ -396,7 +396,7 @@ function Complaints() {
 
   return (
     <Layout>
-      <div className="min-h-screen bg-white w-full">
+      <div className="min-h-screen bg-gray-50 w-full">
         <Header title="Complaints" />
 
         <main className="w-full max-w-full m-0 p-10 box-border">

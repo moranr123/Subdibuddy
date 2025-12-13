@@ -1,15 +1,13 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Animated, Dimensions, Alert, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert, Modal, TextInput, KeyboardAvoidingView, Platform, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, updateDoc, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { getAuthService, db, storage } from '../firebase/config';
-import Header from '../components/Header';
-import Sidebar from '../components/Sidebar';
-import { useNotifications } from '../hooks/useNotifications';
 
 interface VehicleRegistration {
   id: string;
@@ -30,13 +28,11 @@ interface VehicleRegistration {
 
 export default function RegisteredVehicles() {
   const router = useRouter();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const sidebarAnimation = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
+  const insets = useSafeAreaInsets();
   const [user, setUser] = useState<any>(null);
   const [registeredVehicles, setRegisteredVehicles] = useState<VehicleRegistration[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingVehicleId, setDeletingVehicleId] = useState<string | null>(null);
-  const { unreadCount } = useNotifications();
   
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
@@ -98,16 +94,6 @@ export default function RegisteredVehicles() {
     return () => unsubscribe();
   }, [user, db]);
 
-  const toggleSidebar = () => {
-    const toValue = sidebarOpen ? -Dimensions.get('window').width : 0;
-    Animated.spring(sidebarAnimation, {
-      toValue,
-      useNativeDriver: true,
-      tension: 65,
-      friction: 11,
-    }).start();
-    setSidebarOpen(!sidebarOpen);
-  };
 
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'N/A';
@@ -329,15 +315,21 @@ export default function RegisteredVehicles() {
 
   return (
     <View style={styles.container}>
-      <Header 
-        onMenuPress={toggleSidebar}
-        onNotificationPress={() => router.push('/notifications')}
-        notificationCount={unreadCount}
-      />
-      <Sidebar isOpen={sidebarOpen} onClose={toggleSidebar} animation={sidebarAnimation} />
+      {/* Back Button */}
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <TouchableOpacity 
+          onPress={() => router.back()}
+          style={styles.backButton}
+          activeOpacity={0.7}
+        >
+          <FontAwesome5 name="arrow-left" size={20} color="#ffffff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Registered Vehicles</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <View style={styles.section}>
-          <Text style={styles.title}>Registered Vehicles</Text>
           <Text style={styles.description}>
             Your approved and registered vehicles
           </Text>
@@ -610,6 +602,29 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f0f2f5',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#111827',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ffffff',
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 36,
   },
   content: {
     flex: 1,

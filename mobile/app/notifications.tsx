@@ -1,12 +1,11 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated, Dimensions, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, onSnapshot, orderBy, updateDoc, doc, Timestamp, where, deleteDoc } from 'firebase/firestore';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { getAuthService, db } from '../firebase/config';
-import Header from '../components/Header';
-import Sidebar from '../components/Sidebar';
 
 interface Notification {
   id: string;
@@ -22,11 +21,10 @@ interface Notification {
 
 export default function Notifications() {
   const router = useRouter();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const sidebarAnimation = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
+  const insets = useSafeAreaInsets();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filteredNotifications, setFilteredNotifications] = useState<Notification[]>([]);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'complaint' | 'vehicle_registration' | 'maintenance'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'complaint' | 'vehicle_registration' | 'maintenance' | 'announcement'>('all');
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
 
@@ -70,16 +68,6 @@ export default function Notifications() {
     return () => unsubscribe();
   }, [user]);
 
-  const toggleSidebar = () => {
-    const toValue = sidebarOpen ? -Dimensions.get('window').width : 0;
-    Animated.spring(sidebarAnimation, {
-      toValue,
-      useNativeDriver: true,
-      tension: 65,
-      friction: 11,
-    }).start();
-    setSidebarOpen(!sidebarOpen);
-  };
 
   const markAsRead = useCallback(async (notificationId: string) => {
     if (!db) return;
@@ -171,6 +159,8 @@ export default function Notifications() {
       return { name: 'exclamation-triangle', color: '#f59e0b' };
     } else if (type === 'maintenance' || type === 'maintenance_status') {
       return { name: 'tools', color: '#8b5cf6' };
+    } else if (type === 'announcement') {
+      return { name: 'bullhorn', color: '#10b981' };
     } else {
       return { name: 'bell', color: '#6b7280' };
     }
@@ -198,6 +188,10 @@ export default function Notifications() {
           n.type === 'maintenance' || n.type === 'maintenance_status'
         )
       );
+    } else if (activeFilter === 'announcement') {
+      setFilteredNotifications(
+        notifications.filter(n => n.type === 'announcement')
+      );
     }
   }, [notifications, activeFilter]);
 
@@ -205,20 +199,22 @@ export default function Notifications() {
 
   return (
     <View style={styles.container}>
-      <Header 
-        onMenuPress={toggleSidebar}
-        onNotificationPress={() => router.push('/notifications')}
-        notificationCount={unreadCount}
-      />
-      <Sidebar 
-        isOpen={sidebarOpen}
-        onClose={toggleSidebar}
-        animation={sidebarAnimation}
-      />
+      {/* Back Button */}
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <TouchableOpacity 
+          onPress={() => router.back()}
+          style={styles.backButton}
+          activeOpacity={0.7}
+        >
+          <FontAwesome5 name="arrow-left" size={20} color="#ffffff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Notifications</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <View style={styles.section}>
           <View style={styles.titleRow}>
-            <Text style={styles.title}>Notifications</Text>
             {notifications.length > 0 && (
               <TouchableOpacity
                 style={styles.deleteAllButton}
@@ -231,7 +227,12 @@ export default function Notifications() {
           </View>
 
           {/* Filter Buttons */}
-          <View style={styles.filterContainer}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterContainer}
+            style={styles.filterScrollView}
+          >
             <TouchableOpacity
               style={[
                 styles.filterButton,
@@ -292,7 +293,22 @@ export default function Notifications() {
                 Maintenance
               </Text>
             </TouchableOpacity>
-          </View>
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                activeFilter === 'announcement' && styles.filterButtonActive
+              ]}
+              onPress={() => setActiveFilter('announcement')}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                activeFilter === 'announcement' && styles.filterButtonTextActive
+              ]}>
+                Announcements
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
           
           {loading ? (
             <View style={styles.loadingContainer}>
@@ -304,7 +320,7 @@ export default function Notifications() {
               <Text style={styles.emptySubtext}>
                 {notifications.length === 0 
                   ? "You're all caught up!" 
-                  : `No ${activeFilter === 'all' ? '' : activeFilter === 'complaint' ? 'complaint ' : activeFilter === 'vehicle_registration' ? 'vehicle registration ' : 'maintenance '}notifications`}
+                  : `No ${activeFilter === 'all' ? '' : activeFilter === 'complaint' ? 'complaint ' : activeFilter === 'vehicle_registration' ? 'vehicle registration ' : activeFilter === 'maintenance' ? 'maintenance ' : 'announcement '}notifications`}
               </Text>
             </View>
           ) : (
@@ -346,6 +362,8 @@ export default function Notifications() {
                                 ? 'Vehicle Registration Update' 
                                 : notification.type === 'maintenance' || notification.type === 'maintenance_status'
                                 ? 'Maintenance Update'
+                                : notification.type === 'announcement'
+                                ? 'Announcement'
                                 : 'Complaint Update')}
                           </Text>
                           {!notification.isRead && (
@@ -397,6 +415,29 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f0f2f5',
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#111827',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ffffff',
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 36,
+  },
   content: {
     flex: 1,
   },
@@ -408,14 +449,18 @@ const styles = StyleSheet.create({
   },
   titleRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     marginBottom: 16,
+  },
+  filterScrollView: {
+    marginBottom: 20,
+    marginHorizontal: -20,
   },
   filterContainer: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 20,
+    paddingHorizontal: 20,
   },
   filterButton: {
     paddingHorizontal: 16,
