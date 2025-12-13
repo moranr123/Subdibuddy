@@ -79,6 +79,21 @@ interface ArchivedVehicleRegistration {
   archivedBy: string;
 }
 
+interface ArchivedMaintenance {
+  id: string;
+  maintenanceType: 'Water' | 'Electricity' | 'Garbage disposal';
+  description: string;
+  status: string;
+  rejectionReason?: string;
+  imageURL?: string;
+  userId: string;
+  userEmail: string;
+  createdAt: any;
+  updatedAt?: any;
+  archivedAt: any;
+  archivedBy: string;
+}
+
 function Archived() {
   const [user, setUser] = useState<any>(null);
   const [searchParams] = useSearchParams();
@@ -86,14 +101,18 @@ function Archived() {
   const [archivedResidents, setArchivedResidents] = useState<Resident[]>([]);
   const [archivedComplaints, setArchivedComplaints] = useState<ArchivedComplaint[]>([]);
   const [archivedVehicleRegistrations, setArchivedVehicleRegistrations] = useState<ArchivedVehicleRegistration[]>([]);
+  const [archivedMaintenance, setArchivedMaintenance] = useState<ArchivedMaintenance[]>([]);
   const [filteredArchivedComplaints, setFilteredArchivedComplaints] = useState<ArchivedComplaint[]>([]);
   const [filteredArchivedResidents, setFilteredArchivedResidents] = useState<Resident[]>([]);
   const [filteredArchivedVehicleRegistrations, setFilteredArchivedVehicleRegistrations] = useState<ArchivedVehicleRegistration[]>([]);
+  const [filteredArchivedMaintenance, setFilteredArchivedMaintenance] = useState<ArchivedMaintenance[]>([]);
   const [vehicleRegistrationUserNames, setVehicleRegistrationUserNames] = useState<Record<string, string>>({});
   const [complaintUserNames, setComplaintUserNames] = useState<Record<string, string>>({});
+  const [maintenanceUserNames, setMaintenanceUserNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [loadingComplaints, setLoadingComplaints] = useState(false);
   const [loadingVehicleRegistrations, setLoadingVehicleRegistrations] = useState(false);
+  const [loadingMaintenance, setLoadingMaintenance] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -101,6 +120,8 @@ function Archived() {
   const [showComplaintModal, setShowComplaintModal] = useState(false);
   const [viewingVehicleRegistration, setViewingVehicleRegistration] = useState<ArchivedVehicleRegistration | null>(null);
   const [showVehicleRegistrationModal, setShowVehicleRegistrationModal] = useState(false);
+  const [viewingMaintenance, setViewingMaintenance] = useState<ArchivedMaintenance | null>(null);
+  const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
   const [filterDate, setFilterDate] = useState<string>('');
   const [showDateFilter, setShowDateFilter] = useState(false);
   const navigate = useNavigate();
@@ -369,23 +390,108 @@ function Archived() {
     fetchUserNames();
   }, [db, archivedComplaints]);
 
+  const fetchArchivedMaintenance = useCallback(async () => {
+    if (!db) {
+      console.error('Firestore db is not initialized');
+      return;
+    }
+    
+    try {
+      setLoadingMaintenance(true);
+      console.log('Fetching archived maintenance from Firestore...');
+      
+      let querySnapshot;
+      try {
+        const q = query(collection(db, 'archivedMaintenance'), orderBy('archivedAt', 'desc'));
+        querySnapshot = await getDocs(q);
+      } catch (orderByError: any) {
+        console.warn('orderBy archivedAt failed, trying without orderBy:', orderByError);
+        querySnapshot = await getDocs(collection(db, 'archivedMaintenance'));
+      }
+      
+      const maintenanceData: ArchivedMaintenance[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        maintenanceData.push({
+          id: doc.id,
+          ...data,
+        } as ArchivedMaintenance);
+      });
+      
+      maintenanceData.sort((a, b) => {
+        const aDate = a.archivedAt?.toDate ? a.archivedAt.toDate().getTime() : 0;
+        const bDate = b.archivedAt?.toDate ? b.archivedAt.toDate().getTime() : 0;
+        return bDate - aDate;
+      });
+      
+      console.log(`Fetched ${maintenanceData.length} archived maintenance requests`);
+      setArchivedMaintenance(maintenanceData);
+    } catch (error: any) {
+      console.error('Error fetching archived maintenance:', error);
+      alert(`Failed to load archived maintenance: ${error.message || 'Unknown error'}`);
+    } finally {
+      setLoadingMaintenance(false);
+    }
+  }, [db]);
+
+  // Fetch user names for archived maintenance
+  useEffect(() => {
+    if (!db || archivedMaintenance.length === 0) return;
+
+    const fetchUserNames = async () => {
+      const userIds = [...new Set(archivedMaintenance.map(m => m.userId))];
+      const namesMap: Record<string, string> = {};
+
+      for (const userId of userIds) {
+        if (maintenanceUserNames[userId]) {
+          namesMap[userId] = maintenanceUserNames[userId];
+          continue;
+        }
+
+        try {
+          const userDoc = await getDoc(doc(db, 'users', userId));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            const fullName = userData.fullName || 
+              `${userData.firstName || ''} ${userData.lastName || ''}`.trim() ||
+              userData.email ||
+              'Unknown User';
+            namesMap[userId] = fullName;
+          } else {
+            namesMap[userId] = archivedMaintenance.find(m => m.userId === userId)?.userEmail || 'Unknown User';
+          }
+        } catch (error) {
+          console.error(`Error fetching user ${userId}:`, error);
+          namesMap[userId] = archivedMaintenance.find(m => m.userId === userId)?.userEmail || 'Unknown User';
+        }
+      }
+
+      setMaintenanceUserNames(prev => ({ ...prev, ...namesMap }));
+    };
+
+    fetchUserNames();
+  }, [db, archivedMaintenance]);
+
   useEffect(() => {
     if (user && db) {
       if (activeFilter === 'registered-residents') {
-        console.log('Fetching archived residents for registered-residents filter');
-        fetchArchivedResidents();
+      console.log('Fetching archived residents for registered-residents filter');
+      fetchArchivedResidents();
       } else if (activeFilter === 'complaints') {
         fetchArchivedComplaints();
       } else if (activeFilter === 'vehicle-registration') {
         fetchArchivedVehicleRegistrations();
+      } else if (activeFilter === 'maintenance') {
+        fetchArchivedMaintenance();
       } else {
         // Clear data when switching to a different filter
-        setArchivedResidents([]);
+      setArchivedResidents([]);
         setArchivedComplaints([]);
         setArchivedVehicleRegistrations([]);
-      }
+        setArchivedMaintenance([]);
     }
-  }, [user, activeFilter, db, fetchArchivedResidents, fetchArchivedComplaints, fetchArchivedVehicleRegistrations]);
+    }
+  }, [user, activeFilter, db, fetchArchivedResidents, fetchArchivedComplaints, fetchArchivedVehicleRegistrations, fetchArchivedMaintenance]);
 
   const handleRestore = useCallback(async (residentId: string) => {
     if (!db) return;
@@ -537,6 +643,59 @@ function Archived() {
     setViewingVehicleRegistration(null);
   }, []);
 
+  const handleViewMaintenance = useCallback((maintenance: ArchivedMaintenance) => {
+    setViewingMaintenance(maintenance);
+    setShowMaintenanceModal(true);
+  }, []);
+
+  const handleCloseMaintenanceModal = useCallback(() => {
+    setShowMaintenanceModal(false);
+    setViewingMaintenance(null);
+  }, []);
+
+  const handleRestoreMaintenance = useCallback(async (maintenanceId: string) => {
+    if (!db) return;
+    
+    if (!window.confirm('Are you sure you want to restore this maintenance request? It will be moved back to the maintenance screen.')) {
+      return;
+    }
+    
+    setProcessingStatus(maintenanceId);
+    try {
+      // Get the maintenance data from archivedMaintenance collection
+      const archivedRef = doc(db, 'archivedMaintenance', maintenanceId);
+      const archivedDoc = await getDoc(archivedRef);
+      
+      if (!archivedDoc.exists()) {
+        throw new Error('Archived maintenance request not found');
+      }
+      
+      const maintenanceData = archivedDoc.data();
+      
+      // Remove archivedAt and archivedBy fields
+      const { archivedAt, archivedBy, originalId, ...restoredData } = maintenanceData;
+      
+      // Move back to maintenance collection
+      await addDoc(collection(db, 'maintenance'), {
+        ...restoredData,
+        updatedAt: Timestamp.now(),
+      });
+      
+      // Delete from archivedMaintenance collection
+      await deleteDoc(archivedRef);
+      
+      // Update local state - remove from archived list
+      setArchivedMaintenance(prev => prev.filter(m => m.id !== maintenanceId));
+      
+      alert('Maintenance request restored successfully');
+    } catch (error: any) {
+      console.error('Error restoring maintenance request:', error);
+      alert(`Failed to restore maintenance request: ${error.message}`);
+    } finally {
+      setProcessingStatus(null);
+    }
+  }, [db]);
+
   const applyDateFilterComplaints = useCallback((complaintsList: ArchivedComplaint[]) => {
     if (!filterDate) {
       setFilteredArchivedComplaints(complaintsList);
@@ -620,6 +779,32 @@ function Archived() {
     setFilteredArchivedVehicleRegistrations(filtered);
   }, [filterDate]);
 
+  const applyDateFilterMaintenance = useCallback((maintenanceList: ArchivedMaintenance[]) => {
+    if (!filterDate) {
+      setFilteredArchivedMaintenance(maintenanceList);
+      return;
+    }
+
+    const selectedDate = new Date(filterDate);
+    const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+
+    const filtered = maintenanceList.filter((maintenance) => {
+      const maintenanceDate = maintenance.archivedAt?.toDate 
+        ? maintenance.archivedAt.toDate() 
+        : maintenance.archivedAt 
+        ? new Date(maintenance.archivedAt) 
+        : null;
+      
+      if (!maintenanceDate) return false;
+
+      const maintenanceDateOnly = new Date(maintenanceDate.getFullYear(), maintenanceDate.getMonth(), maintenanceDate.getDate());
+      
+      return maintenanceDateOnly.getTime() === selectedDateOnly.getTime();
+    });
+
+    setFilteredArchivedMaintenance(filtered);
+  }, [filterDate]);
+
   useEffect(() => {
     if (activeFilter === 'complaints') {
       applyDateFilterComplaints(archivedComplaints);
@@ -627,8 +812,10 @@ function Archived() {
       applyDateFilterResidents(archivedResidents);
     } else if (activeFilter === 'vehicle-registration') {
       applyDateFilterVehicleRegistrations(archivedVehicleRegistrations);
+    } else if (activeFilter === 'maintenance') {
+      applyDateFilterMaintenance(archivedMaintenance);
     }
-  }, [archivedComplaints, archivedResidents, archivedVehicleRegistrations, filterDate, activeFilter, applyDateFilterComplaints, applyDateFilterResidents, applyDateFilterVehicleRegistrations]);
+  }, [archivedComplaints, archivedResidents, archivedVehicleRegistrations, archivedMaintenance, filterDate, activeFilter, applyDateFilterComplaints, applyDateFilterResidents, applyDateFilterVehicleRegistrations, applyDateFilterMaintenance]);
 
   const handleDateFilter = useCallback(() => {
     setShowDateFilter(!showDateFilter);
@@ -720,6 +907,9 @@ function Archived() {
                       )}
                       {activeFilter === 'vehicle-registration' && (
                         <>Showing {filteredArchivedVehicleRegistrations.length} of {archivedVehicleRegistrations.length} archived vehicle registrations</>
+                      )}
+                      {activeFilter === 'maintenance' && (
+                        <>Showing {filteredArchivedMaintenance.length} of {archivedMaintenance.length} archived maintenance requests</>
                       )}
                     </div>
                   )}
@@ -967,7 +1157,83 @@ function Archived() {
                     )}
                   </>
                 )}
-                {activeFilter !== 'all' && activeFilter !== 'registered-residents' && activeFilter !== 'complaints' && activeFilter !== 'vehicle-registration' && (
+                {activeFilter === 'maintenance' && (
+                  <>
+                    {loadingMaintenance && archivedMaintenance.length === 0 ? (
+                      <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading archived maintenance requests...</div>
+                    ) : (filterDate ? filteredArchivedMaintenance : archivedMaintenance).length === 0 ? (
+                      <div className="text-center py-20 px-5 text-gray-600">
+                        <p className="text-base font-normal text-gray-600">
+                          No archived maintenance requests found.
+                        </p>
+                        <p className="text-xs text-gray-400 mt-2.5">
+                          Archived maintenance requests will appear here.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto w-full">
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="bg-gray-50 border-b-2 border-gray-200">
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Date</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">User</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Type</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Description</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Archived At</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(filterDate ? filteredArchivedMaintenance : archivedMaintenance).map((maintenance) => (
+                              <tr key={maintenance.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(maintenance.createdAt)}</td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                                  {maintenanceUserNames[maintenance.userId] || maintenance.userEmail || 'Unknown User'}
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{maintenance.maintenanceType}</td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top max-w-[300px] break-words whitespace-pre-wrap">
+                                  {maintenance.description}
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 align-top">
+                                  <span
+                                    className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block"
+                                    style={{ 
+                                      backgroundColor: maintenance.status === 'resolved' ? '#4CAF50' : 
+                                                      maintenance.status === 'rejected' ? '#ef4444' : 
+                                                      maintenance.status === 'in-progress' ? '#2196F3' : '#FFA500' 
+                                    }}
+                                  >
+                                    {maintenance.status.toUpperCase()}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(maintenance.archivedAt)}</td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                                  <div className="flex gap-2 items-center">
+                                    <button
+                                      className="bg-gray-900 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-800"
+                                      onClick={() => handleViewMaintenance(maintenance)}
+                                    >
+                                      View
+                                    </button>
+                                    <button
+                                      className="bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      onClick={() => handleRestoreMaintenance(maintenance.id)}
+                                      disabled={processingStatus === maintenance.id}
+                                    >
+                                      {processingStatus === maintenance.id ? 'Processing...' : 'Restore'}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                )}
+                {activeFilter !== 'all' && activeFilter !== 'registered-residents' && activeFilter !== 'complaints' && activeFilter !== 'vehicle-registration' && activeFilter !== 'maintenance' && (
                   <div className="text-center py-20 px-5 text-gray-600">
                     <p className="text-base font-normal text-gray-600">
                       Archived {filters.find(f => f.id === activeFilter)?.label} items will appear here
@@ -1305,6 +1571,96 @@ function Archived() {
                 <button
                   className="bg-gray-900 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-gray-800"
                   onClick={handleCloseVehicleRegistrationModal}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {showMaintenanceModal && viewingMaintenance && (
+          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-5" onClick={handleCloseMaintenanceModal}>
+            <div className="bg-white rounded-2xl w-full max-w-[600px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center px-6 py-5 border-b border-gray-200">
+                <h3 className="m-0 text-gray-900 text-xl font-normal">Archived Maintenance Request Details</h3>
+                <button 
+                  className="bg-none border-none text-2xl text-gray-600 cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded transition-all hover:bg-gray-100 hover:text-gray-900"
+                  onClick={handleCloseMaintenanceModal}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="overflow-y-auto px-6 py-5">
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Maintenance Type</label>
+                    <p className="text-gray-900 font-medium">{viewingMaintenance.maintenanceType}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Status</label>
+                    <span
+                      className="px-2.5 py-1 rounded text-xs font-semibold uppercase tracking-wide text-white inline-block"
+                      style={{ 
+                        backgroundColor: viewingMaintenance.status === 'resolved' ? '#4CAF50' : 
+                                        viewingMaintenance.status === 'rejected' ? '#ef4444' : 
+                                        viewingMaintenance.status === 'in-progress' ? '#2196F3' : '#FFA500' 
+                      }}
+                    >
+                      {viewingMaintenance.status.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Description</label>
+                    <p className="text-gray-900 font-medium whitespace-pre-wrap">{viewingMaintenance.description}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">User Email</label>
+                    <p className="text-gray-900 font-medium">{viewingMaintenance.userEmail}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Submitted Date</label>
+                    <p className="text-gray-900 font-medium">{formatDate(viewingMaintenance.createdAt)}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Archived At</label>
+                    <p className="text-gray-900 font-medium">{formatDate(viewingMaintenance.archivedAt)}</p>
+                  </div>
+                  {viewingMaintenance.rejectionReason && (
+                    <div className="col-span-2">
+                      <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Rejection Reason</label>
+                      <p className="text-gray-900 font-medium bg-red-50 border border-red-200 rounded p-3">{viewingMaintenance.rejectionReason}</p>
+                    </div>
+                  )}
+                </div>
+                {viewingMaintenance.imageURL && (
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-2 block">Image</label>
+                    <img 
+                      src={viewingMaintenance.imageURL} 
+                      alt="Maintenance Image" 
+                      className="w-full rounded-lg border border-gray-200"
+                      onError={(e) => {
+                        console.error('Error loading maintenance image:', viewingMaintenance.imageURL);
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="px-6 py-5 border-t border-gray-200 flex justify-end gap-3">
+                <button
+                  className="bg-green-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => {
+                    handleRestoreMaintenance(viewingMaintenance.id);
+                    setShowMaintenanceModal(false);
+                  }}
+                  disabled={processingStatus === viewingMaintenance.id}
+                >
+                  {processingStatus === viewingMaintenance.id ? 'Processing...' : 'Restore'}
+                </button>
+                <button
+                  className="bg-gray-900 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-gray-800"
+                  onClick={handleCloseMaintenanceModal}
                 >
                   Close
                 </button>

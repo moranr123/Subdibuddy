@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, onSnapshot, orderBy, Timestamp } from 'firebase/firestore';
+import { FontAwesome5 } from '@expo/vector-icons';
 import { getAuthService, db } from '../firebase/config';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
@@ -181,7 +182,7 @@ export default function History() {
           items.push({
             id: doc.id,
             type: 'maintenance',
-            title: data.title || data.requestType || 'Maintenance Request',
+            title: data.maintenanceType || 'Maintenance Request',
             description: data.description,
             status: data.status,
             date: data.createdAt,
@@ -285,6 +286,21 @@ export default function History() {
     }
   };
 
+  const getTypeIcon = (type: FilterType) => {
+    switch (type) {
+      case 'complaints':
+        return { name: 'exclamation-triangle', color: '#f59e0b' };
+      case 'billings-payments':
+        return { name: 'dollar-sign', color: '#10b981' };
+      case 'maintenance':
+        return { name: 'tools', color: '#8b5cf6' };
+      case 'vehicle-registration':
+        return { name: 'car', color: '#1877F2' };
+      default:
+        return { name: 'bell', color: '#6b7280' };
+    }
+  };
+
   const filteredItems = activeFilter === 'all' 
     ? historyItems.sort((a, b) => {
         const aDate = a.date?.toDate ? a.date.toDate().getTime() : 0;
@@ -356,21 +372,33 @@ export default function History() {
             </View>
           ) : (
             <View style={styles.historyList}>
-              {filteredItems.map((item) => (
-                <View key={item.id} style={styles.historyCard}>
-                  <View style={styles.historyCardHeader}>
-                    <View style={styles.historyCardTitleRow}>
-                      <Text style={styles.historyCardType}>{getTypeLabel(item.type)}</Text>
-                      {item.status && (
-                        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-                          <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+              {filteredItems.map((item) => {
+                const icon = getTypeIcon(item.type);
+                return (
+                  <View key={item.id} style={styles.historyCard}>
+                    <View style={styles.historyCardContent}>
+                      <View style={[styles.iconContainer, { backgroundColor: icon.color + '1A' }]}>
+                        <FontAwesome5
+                          name={icon.name as any}
+                          size={24}
+                          color={icon.color}
+                          solid
+                        />
+                      </View>
+                      <View style={styles.historyCardTextContainer}>
+                        <View style={styles.historyCardHeader}>
+                          <View style={styles.historyCardTitleRow}>
+                            <Text style={styles.historyCardType}>{getTypeLabel(item.type)}</Text>
+                            {item.status && (
+                              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+                                <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={styles.historyCardDate}>{formatDate(item.date)}</Text>
                         </View>
-                      )}
-                    </View>
-                    <Text style={styles.historyCardDate}>{formatDate(item.date)}</Text>
-                  </View>
-                  
-                  <Text style={styles.historyCardTitle}>{item.title}</Text>
+                        
+                        <Text style={styles.historyCardTitle}>{item.title}</Text>
                   
                   {item.description && (
                     <Text style={styles.historyCardDescription} numberOfLines={2}>
@@ -384,14 +412,17 @@ export default function History() {
                     </Text>
                   )}
 
-                  {item.rejectionReason && (
-                    <View style={styles.rejectionContainer}>
-                      <Text style={styles.rejectionLabel}>Rejection Reason:</Text>
-                      <Text style={styles.rejectionText}>{item.rejectionReason}</Text>
+                        {item.rejectionReason && (
+                          <View style={styles.rejectionContainer}>
+                            <Text style={styles.rejectionLabel}>Rejection Reason:</Text>
+                            <Text style={styles.rejectionText}>{item.rejectionReason}</Text>
+                          </View>
+                        )}
+                      </View>
                     </View>
-                  )}
-                </View>
-              ))}
+                  </View>
+                );
+              })}
             </View>
           )}
         </View>
@@ -481,6 +512,22 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
+  },
+  historyCardContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    flexShrink: 0,
+  },
+  historyCardTextContainer: {
+    flex: 1,
   },
   historyCardHeader: {
     marginBottom: 8,

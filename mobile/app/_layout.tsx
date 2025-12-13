@@ -8,20 +8,82 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
+          animation: 'default',
+          animationDuration: 200,
         }}
       >
-        <Stack.Screen name="index" />
-        <Stack.Screen name="login" />
-        <Stack.Screen name="signup" />
-        <Stack.Screen name="home" />
-        <Stack.Screen name="complaints" />
-        <Stack.Screen name="billing" />
-        <Stack.Screen name="maintenance" />
-        <Stack.Screen name="vehicle-registration" />
-        <Stack.Screen name="notifications" />
-        <Stack.Screen name="profile" />
-        <Stack.Screen name="history" />
-        <Stack.Screen name="registered-vehicles" />
+        <Stack.Screen 
+          name="index" 
+          options={{
+            animation: 'fade',
+          }}
+        />
+        <Stack.Screen 
+          name="login" 
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen 
+          name="signup" 
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen 
+          name="home" 
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen 
+          name="complaints" 
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen 
+          name="billing" 
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen 
+          name="maintenance" 
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen 
+          name="vehicle-registration" 
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen 
+          name="notifications" 
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen 
+          name="profile" 
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen 
+          name="history" 
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen 
+          name="registered-vehicles" 
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
       </Stack>
     </>
   );

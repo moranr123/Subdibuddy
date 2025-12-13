@@ -33,7 +33,7 @@ interface Notification {
 
 interface UnifiedNotification {
   id: string;
-  type: 'application' | 'complaint' | 'vehicle_registration';
+  type: 'application' | 'complaint' | 'vehicle_registration' | 'maintenance';
   createdAt: Timestamp;
   data: PendingApplication | Notification;
 }
@@ -43,6 +43,7 @@ function Header({ title }: HeaderProps) {
   const [pendingApplications, setPendingApplications] = useState<PendingApplication[]>([]);
   const [complaintNotifications, setComplaintNotifications] = useState<Notification[]>([]);
   const [vehicleRegistrationNotifications, setVehicleRegistrationNotifications] = useState<Notification[]>([]);
+  const [maintenanceNotifications, setMaintenanceNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -85,6 +86,7 @@ function Header({ title }: HeaderProps) {
     const unsubscribe2 = onSnapshot(q2, (snapshot) => {
       const complaintNotifs: Notification[] = [];
       const vehicleNotifs: Notification[] = [];
+      const maintenanceNotifs: Notification[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
         // Only show admin notifications that are unread
@@ -93,9 +95,11 @@ function Header({ title }: HeaderProps) {
             id: doc.id,
             ...data,
           } as Notification;
-          if (data.type === 'vehicle_registration') {
+          if (data.type === 'vehicle_registration' || data.type === 'vehicle_registration_status') {
             vehicleNotifs.push(notification);
-          } else {
+          } else if (data.type === 'maintenance' || data.type === 'maintenance_status') {
+            maintenanceNotifs.push(notification);
+          } else if (data.type === 'complaint' || data.type === 'complaint_status') {
             complaintNotifs.push(notification);
           }
         }
@@ -111,8 +115,14 @@ function Header({ title }: HeaderProps) {
         const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
         return bTime - aTime;
       });
+      maintenanceNotifs.sort((a, b) => {
+        const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+        const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+        return bTime - aTime;
+      });
       setComplaintNotifications(complaintNotifs);
       setVehicleRegistrationNotifications(vehicleNotifs);
+      setMaintenanceNotifications(maintenanceNotifs);
     }, (error) => {
       console.error('Error listening to notifications:', error);
     });
@@ -157,6 +167,16 @@ function Header({ title }: HeaderProps) {
       });
     });
     
+    // Add maintenance notifications
+    maintenanceNotifications.forEach(notif => {
+      unified.push({
+        id: notif.id,
+        type: 'maintenance',
+        createdAt: notif.createdAt,
+        data: notif,
+      });
+    });
+    
     // Sort by createdAt descending (newest first)
     unified.sort((a, b) => {
       const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
@@ -169,8 +189,8 @@ function Header({ title }: HeaderProps) {
 
   // Calculate total notification count
   useEffect(() => {
-    setNotificationCount(pendingApplications.length + complaintNotifications.length + vehicleRegistrationNotifications.length);
-  }, [pendingApplications, complaintNotifications, vehicleRegistrationNotifications]);
+    setNotificationCount(pendingApplications.length + complaintNotifications.length + vehicleRegistrationNotifications.length + maintenanceNotifications.length);
+  }, [pendingApplications, complaintNotifications, vehicleRegistrationNotifications, maintenanceNotifications]);
 
   // Close notification dropdown when clicking outside
   useEffect(() => {
@@ -202,6 +222,11 @@ function Header({ title }: HeaderProps) {
   const handleViewVehicleRegistrations = () => {
     setShowNotifications(false);
     navigate('/vehicle-registration');
+  };
+
+  const handleViewMaintenance = () => {
+    setShowNotifications(false);
+    navigate('/maintenance');
   };
 
   const formatTimeAgo = (timestamp: Timestamp | undefined) => {
@@ -348,7 +373,7 @@ function Header({ title }: HeaderProps) {
                               </div>
                             </div>
                           );
-                        } else {
+                        } else if (unified.type === 'vehicle_registration') {
                           const notification = unified.data as Notification;
                           return (
                             <div
@@ -358,7 +383,7 @@ function Header({ title }: HeaderProps) {
                             >
                               <div className="flex items-start gap-3">
                                 {/* Avatar */}
-                                <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                                <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
                                   <span className="text-white text-sm font-medium">🚗</span>
                                 </div>
                                 
@@ -368,6 +393,39 @@ function Header({ title }: HeaderProps) {
                                     <div className="flex-1">
                                       <p className="text-sm font-medium text-gray-900 line-clamp-1">
                                         Vehicle Registration
+                                      </p>
+                                    </div>
+                                    <span className="text-xs text-gray-400 whitespace-nowrap">
+                                      {formatTimeAgo(notification.createdAt)}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-600 mt-1.5">
+                                    {notification.message}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        } else {
+                          const notification = unified.data as Notification;
+                          return (
+                            <div
+                              key={unified.id}
+                              className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors"
+                              onClick={handleViewMaintenance}
+                            >
+                              <div className="flex items-start gap-3">
+                                {/* Avatar */}
+                                <div className="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-white text-sm font-medium">🔧</span>
+                                </div>
+                                
+                                {/* Content */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium text-gray-900 line-clamp-1">
+                                        {notification.subject || 'Maintenance Request'}
                                       </p>
                                     </div>
                                     <span className="text-xs text-gray-400 whitespace-nowrap">

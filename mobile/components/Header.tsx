@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions } from 'rea
 import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FontAwesome5 } from '@expo/vector-icons';
+import { memo, useCallback, useMemo } from 'react';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -11,26 +12,28 @@ interface HeaderProps {
   notificationCount?: number;
 }
 
-export default function Header({ onMenuPress, onNotificationPress, notificationCount = 0 }: HeaderProps) {
+function Header({ onMenuPress, onNotificationPress, notificationCount = 0 }: HeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
 
-  const navigationItems = [
+  const navigationItems = useMemo(() => [
     { key: 'home', route: '/home', icon: 'home', label: 'Home' },
     { key: 'complaints', route: '/complaints', icon: 'exclamation-triangle', label: 'Complaints' },
     { key: 'billing', route: '/billing', icon: 'dollar-sign', label: 'Billing' },
     { key: 'maintenance', route: '/maintenance', icon: 'tools', label: 'Maintenance' },
     { key: 'vehicle-registration', route: '/vehicle-registration', icon: 'car', label: 'Vehicle' },
-  ];
+  ], []);
 
-  const handleNavigation = (route: string) => {
-    router.push(route as any);
-  };
+  const handleNavigation = useCallback((route: string) => {
+    if (pathname !== route) {
+      router.push(route as any);
+    }
+  }, [router, pathname]);
 
-  const isActive = (route: string) => {
+  const isActive = useCallback((route: string) => {
     return pathname === route;
-  };
+  }, [pathname]);
 
   return (
     <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
@@ -70,7 +73,7 @@ export default function Header({ onMenuPress, onNotificationPress, notificationC
       <View 
         style={styles.headerNav}
       >
-        {navigationItems.map((item) => (
+        {navigationItems.map((item: { key: string; route: string; icon: string; label: string }) => (
           <TouchableOpacity 
             key={item.key}
             style={[
@@ -102,6 +105,8 @@ export default function Header({ onMenuPress, onNotificationPress, notificationC
     </View>
   );
 }
+
+export default memo(Header);
 
 // Calculate responsive sizes based on screen width
 const getResponsiveSize = (baseSize: number, scale: number = 1) => {

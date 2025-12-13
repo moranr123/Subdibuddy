@@ -26,7 +26,7 @@ export default function Notifications() {
   const sidebarAnimation = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filteredNotifications, setFilteredNotifications] = useState<Notification[]>([]);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'complaint' | 'vehicle_registration'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'complaint' | 'vehicle_registration' | 'maintenance'>('all');
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
 
@@ -169,6 +169,8 @@ export default function Notifications() {
       return { name: 'car', color: '#1877F2' };
     } else if (type === 'complaint' || type === 'complaint_status') {
       return { name: 'exclamation-triangle', color: '#f59e0b' };
+    } else if (type === 'maintenance' || type === 'maintenance_status') {
+      return { name: 'tools', color: '#8b5cf6' };
     } else {
       return { name: 'bell', color: '#6b7280' };
     }
@@ -188,6 +190,12 @@ export default function Notifications() {
       setFilteredNotifications(
         notifications.filter(n => 
           n.type === 'vehicle_registration' || n.type === 'vehicle_registration_status'
+        )
+      );
+    } else if (activeFilter === 'maintenance') {
+      setFilteredNotifications(
+        notifications.filter(n => 
+          n.type === 'maintenance' || n.type === 'maintenance_status'
         )
       );
     }
@@ -269,6 +277,21 @@ export default function Notifications() {
                 Vehicle
               </Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                activeFilter === 'maintenance' && styles.filterButtonActive
+              ]}
+              onPress={() => setActiveFilter('maintenance')}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                activeFilter === 'maintenance' && styles.filterButtonTextActive
+              ]}>
+                Maintenance
+              </Text>
+            </TouchableOpacity>
           </View>
           
           {loading ? (
@@ -281,7 +304,7 @@ export default function Notifications() {
               <Text style={styles.emptySubtext}>
                 {notifications.length === 0 
                   ? "You're all caught up!" 
-                  : `No ${activeFilter === 'all' ? '' : activeFilter === 'complaint' ? 'complaint ' : 'vehicle registration '}notifications`}
+                  : `No ${activeFilter === 'all' ? '' : activeFilter === 'complaint' ? 'complaint ' : activeFilter === 'vehicle_registration' ? 'vehicle registration ' : 'maintenance '}notifications`}
               </Text>
             </View>
           ) : (
@@ -321,6 +344,8 @@ export default function Notifications() {
                             {notification.subject || 
                               (notification.type === 'vehicle_registration' || notification.type === 'vehicle_registration_status' 
                                 ? 'Vehicle Registration Update' 
+                                : notification.type === 'maintenance' || notification.type === 'maintenance_status'
+                                ? 'Maintenance Update'
                                 : 'Complaint Update')}
                           </Text>
                           {!notification.isRead && (

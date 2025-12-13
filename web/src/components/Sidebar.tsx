@@ -1,7 +1,8 @@
-import { useState, useCallback, memo } from 'react';
+import { useState, useCallback, memo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
-import { auth } from '../firebase/config';
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { auth, db } from '../firebase/config';
 
 interface MenuItem {
   path: string;
@@ -24,6 +25,10 @@ const menuItems: MenuItem[] = [
 function Sidebar() {
   const [residentManagementOpen, setResidentManagementOpen] = useState(false);
   const [vehicleRegistrationOpen, setVehicleRegistrationOpen] = useState(false);
+  const [pendingComplaintsCount, setPendingComplaintsCount] = useState(0);
+  const [pendingVehicleRegistrationsCount, setPendingVehicleRegistrationsCount] = useState(0);
+  const [pendingMaintenanceCount, setPendingMaintenanceCount] = useState(0);
+  const [pendingApplicationsCount, setPendingApplicationsCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -42,6 +47,129 @@ function Sidebar() {
       }
     }
   }, [navigate]);
+
+  // Listen to pending complaints
+  useEffect(() => {
+    if (!db) return;
+
+    let unsubscribe: (() => void) | null = null;
+
+    const q = query(
+      collection(db, 'complaints'),
+      where('status', '==', 'pending')
+    );
+
+    unsubscribe = onSnapshot(q, (snapshot) => {
+      setPendingComplaintsCount(snapshot.size);
+    }, (error: any) => {
+      console.error('Error listening to pending complaints:', error);
+      // Fallback: fetch all and filter client-side
+      if (error.code === 'failed-precondition' || error.message?.includes('index')) {
+        const q2 = query(collection(db, 'complaints'));
+        unsubscribe = onSnapshot(q2, (snapshot2) => {
+          let count = 0;
+          snapshot2.forEach((doc) => {
+            const data = doc.data();
+            if (data.status === 'pending') {
+              count++;
+            }
+          });
+          setPendingComplaintsCount(count);
+        });
+      }
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [db]);
+
+  // Listen to pending vehicle registrations
+  useEffect(() => {
+    if (!db) return;
+
+    let unsubscribe: (() => void) | null = null;
+
+    const q = query(
+      collection(db, 'vehicleRegistrations'),
+      where('status', '==', 'pending')
+    );
+
+    unsubscribe = onSnapshot(q, (snapshot) => {
+      setPendingVehicleRegistrationsCount(snapshot.size);
+    }, (error: any) => {
+      console.error('Error listening to pending vehicle registrations:', error);
+      // Fallback: fetch all and filter client-side
+      if (error.code === 'failed-precondition' || error.message?.includes('index')) {
+        const q2 = query(collection(db, 'vehicleRegistrations'));
+        unsubscribe = onSnapshot(q2, (snapshot2) => {
+          let count = 0;
+          snapshot2.forEach((doc) => {
+            const data = doc.data();
+            if (data.status === 'pending') {
+              count++;
+            }
+          });
+          setPendingVehicleRegistrationsCount(count);
+        });
+      }
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [db]);
+
+  // Listen to pending maintenance requests
+  useEffect(() => {
+    if (!db) return;
+
+    let unsubscribe: (() => void) | null = null;
+
+    const q = query(
+      collection(db, 'maintenance'),
+      where('status', '==', 'pending')
+    );
+
+    unsubscribe = onSnapshot(q, (snapshot) => {
+      setPendingMaintenanceCount(snapshot.size);
+    }, (error: any) => {
+      console.error('Error listening to pending maintenance:', error);
+      // Fallback: fetch all and filter client-side
+      if (error.code === 'failed-precondition' || error.message?.includes('index')) {
+        const q2 = query(collection(db, 'maintenance'));
+        unsubscribe = onSnapshot(q2, (snapshot2) => {
+          let count = 0;
+          snapshot2.forEach((doc) => {
+            const data = doc.data();
+            if (data.status === 'pending') {
+              count++;
+            }
+          });
+          setPendingMaintenanceCount(count);
+        });
+      }
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [db]);
+
+  // Listen to pending resident applications
+  useEffect(() => {
+    if (!db) return;
+
+    const q = query(collection(db, 'pendingUsers'), orderBy('createdAt', 'desc'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setPendingApplicationsCount(snapshot.size);
+    }, (error) => {
+      console.error('Error listening to pending applications:', error);
+    });
+
+    return () => unsubscribe();
+  }, [db]);
 
   return (
     <aside
@@ -84,6 +212,11 @@ function Sidebar() {
                     <span className="font-normal text-sm flex-1">
                       {item.label}
                     </span>
+                    {pendingApplicationsCount > 0 && (
+                      <span className="bg-red-500 text-white text-xs font-semibold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+                        {pendingApplicationsCount > 9 ? '9+' : pendingApplicationsCount}
+                      </span>
+                    )}
                     <span className={`text-xs transition-transform ${residentManagementOpen ? 'rotate-90' : ''}`}>›</span>
                   </button>
                   {residentManagementOpen && (
@@ -142,6 +275,11 @@ function Sidebar() {
                     <span className="font-normal text-sm flex-1">
                       {item.label}
                     </span>
+                    {pendingVehicleRegistrationsCount > 0 && (
+                      <span className="bg-red-500 text-white text-xs font-semibold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+                        {pendingVehicleRegistrationsCount > 9 ? '9+' : pendingVehicleRegistrationsCount}
+                      </span>
+                    )}
                     <span className={`text-xs transition-transform ${vehicleRegistrationOpen ? 'rotate-90' : ''}`}>›</span>
                   </button>
                   {vehicleRegistrationOpen && (
@@ -177,6 +315,14 @@ function Sidebar() {
                 </div>
               );
             }
+            // Get badge count for this item
+            let badgeCount = 0;
+            if (item.path === '/complaints') {
+              badgeCount = pendingComplaintsCount;
+            } else if (item.path === '/maintenance') {
+              badgeCount = pendingMaintenanceCount;
+            }
+
             return (
               <button
                 key={item.path}
@@ -187,9 +333,14 @@ function Sidebar() {
                 }`}
                 onClick={() => handleNavigation(item.path)}
               >
-                <span className="font-normal text-sm">
+                <span className="font-normal text-sm flex-1">
                   {item.label}
                 </span>
+                {badgeCount > 0 && (
+                  <span className="bg-red-500 text-white text-xs font-semibold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+                    {badgeCount > 9 ? '9+' : badgeCount}
+                  </span>
+                )}
               </button>
             );
           })}
