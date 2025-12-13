@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../firebase/config';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
 import Header from '../components/Header';
@@ -31,6 +32,7 @@ function Map() {
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
+  const [residentMarkers, setResidentMarkers] = useState<any[]>([]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -184,6 +186,162 @@ function Map() {
       });
     }
   };
+
+  // Fetch verified residents and display markers
+  const fetchAndDisplayResidents = useCallback(async () => {
+    if (!map || !db || !window.google) {
+      console.log('Map, db, or google not ready:', { map: !!map, db: !!db, google: !!window.google });
+      return;
+    }
+
+    try {
+      console.log('Fetching residents from users collection...');
+      // Fetch all users and filter in JavaScript to handle cases where status field might not exist
+      const allUsersQuery = collection(db, 'users');
+      const allUsersSnapshot = await getDocs(allUsersQuery);
+      const markers: any[] = [];
+      let totalUsers = 0;
+      let usersWithLocation = 0;
+
+      allUsersSnapshot.forEach((doc) => {
+        totalUsers++;
+        const data = doc.data();
+        
+        // Skip superadmin accounts
+        if (data.role === 'superadmin') {
+          return;
+        }
+
+        // Filter: only include approved residents or residents without status (assume approved)
+        // Exclude archived, rejected, pending, and deactivated
+        const status = data.status;
+        if (status === 'archived' || status === 'rejected' || status === 'pending' || status === 'deactivated') {
+          return;
+        }
+
+        // Only add marker if resident has location
+        // Check for both possible location formats: {latitude, longitude} or {lat, lng}
+        const location = data.location;
+        let lat: number | null = null;
+        let lng: number | null = null;
+
+        if (location) {
+          if (location.latitude !== undefined && location.longitude !== undefined) {
+            lat = typeof location.latitude === 'number' ? location.latitude : parseFloat(location.latitude);
+            lng = typeof location.longitude === 'number' ? location.longitude : parseFloat(location.longitude);
+          } else if (location.lat !== undefined && location.lng !== undefined) {
+            lat = typeof location.lat === 'number' ? location.lat : parseFloat(location.lat);
+            lng = typeof location.lng === 'number' ? location.lng : parseFloat(location.lng);
+          }
+        }
+
+        if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
+          usersWithLocation++;
+          const isHomeowner = data.residentType === 'homeowner' || (!data.isTenant && data.residentType !== 'tenant');
+          
+          // Determine marker color: green for homeowner, grey for tenant
+          const markerColor = isHomeowner ? 'green' : 'gray';
+          const markerIcon = `http://maps.google.com/mapfiles/ms/icons/${markerColor}-dot.png`;
+          
+          const fullName = data.fullName || 
+            `${data.firstName || ''} ${data.middleName || ''} ${data.lastName || ''}`.trim() ||
+            'Resident';
+          
+          console.log(`Adding marker for ${fullName} at ${lat}, ${lng} (${markerColor})`);
+          
+          try {
+            const marker = new window.google.maps.Marker({
+              position: {
+                lat: lat,
+                lng: lng,
+              },
+              map: map,
+              title: fullName,
+              icon: {
+                url: markerIcon,
+                scaledSize: new window.google.maps.Size(32, 32),
+              },
+              visible: true,
+              zIndex: 1000,
+              animation: window.google.maps.Animation.DROP,
+            });
+
+            // Verify marker is on the map
+            const markerPosition = marker.getPosition();
+            const markerMap = marker.getMap();
+            console.log(`Marker created successfully for ${fullName}`, {
+              position: markerPosition ? { lat: markerPosition.lat(), lng: markerPosition.lng() } : null,
+              map: markerMap ? 'attached' : 'not attached',
+              visible: marker.getVisible(),
+              iconUrl: markerIcon,
+            });
+            
+            // Force marker to be visible
+            if (!markerMap) {
+              console.warn(`Marker for ${fullName} is not attached to map, attempting to fix...`);
+              marker.setMap(map);
+            }
+
+            // Add info window with resident details
+            const infoWindow = new window.google.maps.InfoWindow({
+              content: `
+                <div style="padding: 8px; min-width: 200px;">
+                  <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">${fullName}</h3>
+                  <p style="margin: 4px 0; font-size: 12px; color: #666;">
+                    <strong>Type:</strong> ${isHomeowner ? 'Homeowner' : 'Tenant'}
+                  </p>
+                  ${data.address ? `
+                    <p style="margin: 4px 0; font-size: 12px; color: #666;">
+                      <strong>Address:</strong> ${data.address.block || ''}, ${data.address.lot || ''}, ${data.address.street || ''}
+                    </p>
+                  ` : ''}
+                </div>
+              `,
+            });
+
+            marker.addListener('click', () => {
+              infoWindow.open(map, marker);
+            });
+
+            markers.push(marker);
+          } catch (markerError) {
+            console.error(`Error creating marker for ${fullName}:`, markerError);
+          }
+        } else {
+          console.log(`User ${doc.id} has no valid location data:`, data.location, { lat, lng });
+        }
+      });
+
+      console.log(`Total users: ${totalUsers}, Users with location: ${usersWithLocation}, Markers created: ${markers.length}`);
+
+      setResidentMarkers(prevMarkers => {
+        // Clear previous markers
+        prevMarkers.forEach(marker => {
+          marker.setMap(null);
+        });
+        return markers;
+      });
+    } catch (error) {
+      console.error('Error fetching residents:', error);
+    }
+  }, [map, db]);
+
+  // Fetch and display residents when map is ready
+  useEffect(() => {
+    if (map && !isLoading && db) {
+      console.log('Map is ready, fetching residents...');
+      fetchAndDisplayResidents();
+    }
+  }, [map, isLoading, db, fetchAndDisplayResidents]);
+
+  // Clean up markers when component unmounts
+  useEffect(() => {
+    return () => {
+      residentMarkers.forEach(marker => {
+        marker.setMap(null);
+      });
+    };
+  }, [residentMarkers]);
 
   // Search using Geocoding API (fallback)
   const handleSearchWithGeocoding = useCallback((query: string) => {
