@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated, Dimensions, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, onSnapshot, orderBy, updateDoc, doc, Timestamp, where } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, updateDoc, doc, Timestamp, where, deleteDoc } from 'firebase/firestore';
 import { getAuthService, db } from '../firebase/config';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
@@ -88,7 +88,64 @@ export default function Notifications() {
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
-  }, []);
+  }, [db]);
+
+  const deleteNotification = useCallback(async (notificationId: string) => {
+    if (!db) return;
+    
+    Alert.alert(
+      'Delete Notification',
+      'Are you sure you want to delete this notification?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, 'notifications', notificationId));
+            } catch (error) {
+              console.error('Error deleting notification:', error);
+              Alert.alert('Error', 'Failed to delete notification. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  }, [db]);
+
+  const deleteAllNotifications = useCallback(async () => {
+    if (!db || !user || notifications.length === 0) return;
+    
+    Alert.alert(
+      'Delete All Notifications',
+      `Are you sure you want to delete all ${notifications.length} notification${notifications.length > 1 ? 's' : ''}? This action cannot be undone.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete All',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const notificationsToDelete = notifications.map(n => n.id);
+              await Promise.all(
+                notificationsToDelete.map(id => deleteDoc(doc(db, 'notifications', id)))
+              );
+            } catch (error) {
+              console.error('Error deleting all notifications:', error);
+              Alert.alert('Error', 'Failed to delete all notifications. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  }, [db, user, notifications]);
 
   const formatTimeAgo = (timestamp: Timestamp | undefined) => {
     if (!timestamp) return 'Just now';
@@ -120,7 +177,18 @@ export default function Notifications() {
       />
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <View style={styles.section}>
-          <Text style={styles.title}>Notifications</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>Notifications</Text>
+            {notifications.length > 0 && (
+              <TouchableOpacity
+                style={styles.deleteAllButton}
+                onPress={deleteAllNotifications}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.deleteAllButtonText}>Delete All</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           
           {loading ? (
             <View style={styles.loadingContainer}>
@@ -134,23 +202,25 @@ export default function Notifications() {
           ) : (
             <View style={styles.notificationsList}>
               {notifications.map((notification) => (
-                <TouchableOpacity
+                <View
                   key={notification.id}
                   style={[
                     styles.notificationItem,
                     !notification.isRead && styles.notificationItemUnread
                   ]}
-                  onPress={() => {
-                    if (!notification.isRead) {
-                      markAsRead(notification.id);
-                    }
-                    if (notification.complaintId) {
-                      router.push('/complaints');
-                    }
-                  }}
-                  activeOpacity={0.7}
                 >
-                  <View style={styles.notificationContent}>
+                  <TouchableOpacity
+                    style={styles.notificationContent}
+                    onPress={() => {
+                      if (!notification.isRead) {
+                        markAsRead(notification.id);
+                      }
+                      if (notification.complaintId) {
+                        router.push('/complaints');
+                      }
+                    }}
+                    activeOpacity={0.7}
+                  >
                     <View style={styles.notificationHeader}>
                       <Text style={styles.notificationSubject}>
                         {notification.subject || 'Complaint Update'}
@@ -179,8 +249,15 @@ export default function Notifications() {
                     <Text style={styles.notificationTime}>
                       {formatTimeAgo(notification.createdAt)}
                     </Text>
-                  </View>
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={() => deleteNotification(notification.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.deleteButtonText}>×</Text>
+                  </TouchableOpacity>
+                </View>
               ))}
             </View>
           )}
@@ -193,7 +270,7 @@ export default function Notifications() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#f0f2f5',
   },
   content: {
     flex: 1,
@@ -204,11 +281,27 @@ const styles = StyleSheet.create({
   section: {
     padding: 20,
   },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
   title: {
     fontSize: 24,
     fontWeight: '600',
     color: '#111827',
-    marginBottom: 20,
+  },
+  deleteAllButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#ef4444',
+    borderRadius: 6,
+  },
+  deleteAllButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#ffffff',
   },
   loadingContainer: {
     padding: 40,
@@ -229,45 +322,68 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
   },
   notificationsList: {
-    gap: 12,
+    gap: 8,
   },
   notificationItem: {
     backgroundColor: '#ffffff',
     borderRadius: 8,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    padding: 12,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
   },
   notificationItemUnread: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#1877F2',
-    backgroundColor: '#f0f7ff',
+    backgroundColor: '#ffffff',
   },
   notificationContent: {
     flex: 1,
+  },
+  deleteButton: {
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+    borderRadius: 14,
+    backgroundColor: '#f0f2f5',
+  },
+  deleteButtonText: {
+    fontSize: 20,
+    fontWeight: '300',
+    color: '#65676b',
+    lineHeight: 20,
   },
   notificationHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   notificationSubject: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#111827',
+    color: '#050505',
     flex: 1,
   },
   unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: '#1877F2',
+    marginLeft: 8,
   },
   notificationMessage: {
-    fontSize: 14,
-    color: '#374151',
-    marginBottom: 8,
+    fontSize: 15,
+    color: '#050505',
+    marginBottom: 6,
     lineHeight: 20,
   },
   statusContainer: {

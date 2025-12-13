@@ -81,44 +81,22 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
               style={styles.sidebarItem}
               onPress={() => {
                 onClose();
-                router.push('/home');
+                router.push('/profile');
               }}
               activeOpacity={0.7}
             >
-              <Text style={styles.sidebarItemText}>Home</Text>
+              <Text style={styles.sidebarItemText}>Profile</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.sidebarItem}
               onPress={() => {
                 onClose();
-                router.push('/complaints');
+                router.push('/history');
               }}
               activeOpacity={0.7}
             >
-              <Text style={styles.sidebarItemText}>Complaints</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.sidebarItem}
-              onPress={() => {
-                onClose();
-                router.push('/billing');
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.sidebarItemText}>Billings & Payment</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.sidebarItem}
-              onPress={() => {
-                onClose();
-                router.push('/maintenance');
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.sidebarItemText}>Maintenance</Text>
+              <Text style={styles.sidebarItemText}>History</Text>
             </TouchableOpacity>
 
             <View style={styles.sidebarDivider} />
