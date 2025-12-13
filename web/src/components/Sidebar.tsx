@@ -12,6 +12,7 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { path: '/dashboard', label: 'Dashboard', icon: '▦' },
+  { path: '/map', label: 'Map', icon: '📍' },
   { path: '/announcement', label: 'Announcement', icon: '◈' },
   { path: '/complaints', label: 'Complaints', icon: '⚠' },
   { path: '/visitor-pre-registration', label: 'Visitor Pre-Registration', icon: '○' },
@@ -22,7 +23,12 @@ const menuItems: MenuItem[] = [
   { path: '/archived', label: 'Archived', icon: '' },
 ];
 
-function Sidebar() {
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [residentManagementOpen, setResidentManagementOpen] = useState(false);
   const [vehicleRegistrationOpen, setVehicleRegistrationOpen] = useState(false);
   const [pendingComplaintsCount, setPendingComplaintsCount] = useState(0);
@@ -172,8 +178,19 @@ function Sidebar() {
   }, [db]);
 
   return (
+    <>
+      {/* Overlay for mobile */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-[999] lg:hidden"
+          onClick={onClose}
+        />
+      )}
+      
     <aside
-      className="fixed left-0 top-0 h-screen bg-white border-r border-gray-200 z-[1000] overflow-hidden w-[260px] md:w-[220px]"
+        className={`fixed left-0 top-0 h-screen bg-white border-r border-gray-200 z-[1000] overflow-hidden transition-transform duration-300 ease-in-out ${
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        } lg:translate-x-0 w-[260px] md:w-[220px]`}
     >
       <div className="flex flex-col h-full">
         <div className="px-4 py-4 flex items-center gap-3 min-h-[64px] border-b border-gray-100">
@@ -203,10 +220,10 @@ function Sidebar() {
                   }}
                 >
                   <button
-                    className={`flex items-center gap-3 px-4 py-2.5 mx-2 bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
+                    className={`flex items-center gap-3 px-4 py-2.5 mx-2 border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
                       isActive
                         ? 'bg-[#1877F2] text-white font-semibold'
-                        : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
+                        : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                     }`}
                   >
                     <span className="font-normal text-sm flex-1">
@@ -222,27 +239,33 @@ function Sidebar() {
                   {residentManagementOpen && (
                     <div className="ml-4 mt-1 space-y-1">
                       <button
-                        className={`flex items-center gap-3 px-4 py-2 w-full bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left ${
+                        className={`flex items-center gap-3 px-4 py-2 w-full border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left ${
                           location.pathname === '/resident-management/applications'
                             ? 'bg-[#1877F2] text-white font-semibold'
-                            : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
+                            : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                         }`}
                         onClick={() => {
                           handleNavigation('/resident-management/applications');
                           setResidentManagementOpen(false);
+                          if (window.innerWidth < 1024) {
+                            onClose();
+                          }
                         }}
                       >
                         <span className="text-xs">Applications</span>
                       </button>
                       <button
-                        className={`flex items-center gap-3 px-4 py-2 w-full bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left ${
+                        className={`flex items-center gap-3 px-4 py-2 w-full border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left ${
                           location.pathname === '/resident-management/registered'
                             ? 'bg-[#1877F2] text-white font-semibold'
-                            : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
+                            : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                         }`}
                         onClick={() => {
                           handleNavigation('/resident-management/registered');
                           setResidentManagementOpen(false);
+                          if (window.innerWidth < 1024) {
+                            onClose();
+                          }
                         }}
                       >
                         <span className="text-xs">Registered</span>
@@ -266,10 +289,10 @@ function Sidebar() {
                   }}
                 >
                   <button
-                    className={`flex items-center gap-3 px-4 py-2.5 mx-2 bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
+                    className={`flex items-center gap-3 px-4 py-2.5 mx-2 border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
                       isActive
                         ? 'bg-[#1877F2] text-white font-semibold'
-                        : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
+                        : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                     }`}
                   >
                     <span className="font-normal text-sm flex-1">
@@ -285,27 +308,33 @@ function Sidebar() {
                   {vehicleRegistrationOpen && (
                     <div className="ml-4 mt-1 space-y-1">
                       <button
-                        className={`flex items-center gap-3 px-4 py-2 w-full bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left ${
+                        className={`flex items-center gap-3 px-4 py-2 w-full border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left ${
                           location.pathname === '/vehicle-registration/applications'
                             ? 'bg-[#1877F2] text-white font-semibold'
-                            : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
+                            : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                         }`}
                         onClick={() => {
                           handleNavigation('/vehicle-registration/applications');
                           setVehicleRegistrationOpen(false);
+                          if (window.innerWidth < 1024) {
+                            onClose();
+                          }
                         }}
                       >
                         <span className="text-xs">Applications</span>
                       </button>
                       <button
-                        className={`flex items-center gap-3 px-4 py-2 w-full bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left ${
+                        className={`flex items-center gap-3 px-4 py-2 w-full border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left ${
                           location.pathname === '/vehicle-registration/registered'
                             ? 'bg-[#1877F2] text-white font-semibold'
-                            : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
+                            : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                         }`}
                         onClick={() => {
                           handleNavigation('/vehicle-registration/registered');
                           setVehicleRegistrationOpen(false);
+                          if (window.innerWidth < 1024) {
+                            onClose();
+                          }
                         }}
                       >
                         <span className="text-xs">Registered</span>
@@ -326,12 +355,18 @@ function Sidebar() {
             return (
               <button
                 key={item.path}
-                className={`flex items-center gap-3 px-4 py-2.5 mx-2 bg-transparent border-none rounded-md text-gray-700 cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
+                className={`flex items-center gap-3 px-4 py-2.5 mx-2 border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
                   location.pathname === item.path
                     ? 'bg-[#1877F2] text-white font-semibold'
-                    : 'hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
+                    : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                 }`}
-                onClick={() => handleNavigation(item.path)}
+                onClick={() => {
+                  handleNavigation(item.path);
+                  // Close sidebar on mobile after navigation
+                  if (window.innerWidth < 1024) {
+                    onClose();
+                  }
+                }}
               >
                 <span className="font-normal text-sm flex-1">
                   {item.label}
@@ -356,6 +391,7 @@ function Sidebar() {
         </div>
       </div>
     </aside>
+    </>
   );
 }
 

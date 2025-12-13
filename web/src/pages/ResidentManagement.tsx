@@ -577,23 +577,23 @@ function ResidentManagement() {
       <div className="min-h-screen bg-gray-50 w-full">
         <Header title={activeView === 'applications' ? 'Applications' : 'Registered Residents'} />
 
-        <main className="w-full max-w-full m-0 p-10 box-border">
-          <div className="flex flex-col gap-6 w-full max-w-full">
-            <div className="w-full bg-white rounded-xl p-8 border border-gray-100 shadow-sm">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="m-0 text-gray-900 text-lg font-normal">
+        <main className="w-full max-w-full m-0 p-4 md:p-6 lg:p-10 box-border">
+          <div className="flex flex-col gap-4 md:gap-6 w-full max-w-full">
+            <div className="w-full bg-white rounded-xl p-4 md:p-6 lg:p-8 border border-gray-100 shadow-sm">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 md:mb-6">
+                <h2 className="m-0 text-gray-900 text-base md:text-lg font-normal">
                   {activeView === 'applications' ? 'Pending Applications' : 'Registered Residents'}
                 </h2>
               </div>
 
               {activeView === 'registered' && (
-                <div className="mb-6">
+                <div className="mb-4 md:mb-6">
                   <input
                     type="text"
                     placeholder="Search by name, email, or phone..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                    className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                   />
                 </div>
               )}
@@ -636,7 +636,91 @@ function ResidentManagement() {
                         </p>
                       </div>
                     ) : (
-                <div className="overflow-x-auto w-full">
+                <>
+                  {/* Mobile Card View */}
+                  <div className="md:hidden space-y-4">
+                    {filteredResidents.map((resident) => (
+                      <div key={resident.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-900 text-sm mb-1">{resident.fullName || 'N/A'}</h3>
+                            <p className="text-xs text-gray-500 mb-2">{formatDate(resident.createdAt)}</p>
+                          </div>
+                          <div className="flex-shrink-0">
+                            {getStatusBadge(resident.status)}
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2 mb-3">
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Email/Phone: </span>
+                            <span className="text-xs text-gray-900">{resident.email || resident.phone || 'N/A'}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2 pt-3 border-t border-gray-200">
+                          <button
+                            className="w-full bg-gray-900 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-800"
+                            onClick={() => handleViewDetails(resident)}
+                          >
+                            View Details
+                          </button>
+                          {activeView === 'applications' && (
+                            <div className="flex gap-2">
+                              <button
+                                className="flex-1 bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={() => handleApprove(resident.id)}
+                                disabled={processingStatus === resident.id}
+                              >
+                                {processingStatus === resident.id ? 'Processing...' : 'Approve'}
+                              </button>
+                              <button
+                                className="flex-1 bg-red-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={() => handleReject(resident.id)}
+                                disabled={processingStatus === resident.id}
+                              >
+                                {processingStatus === resident.id ? 'Processing...' : 'Reject'}
+                              </button>
+                            </div>
+                          )}
+                          {activeView === 'registered' && (
+                            <div className="flex gap-2 flex-wrap">
+                              {resident.status !== 'deactivated' && resident.status !== 'archived' && (
+                                <button
+                                  className="flex-1 bg-orange-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => handleDeactivate(resident.id)}
+                                  disabled={processingStatus === resident.id}
+                                >
+                                  {processingStatus === resident.id ? 'Processing...' : 'Deactivate'}
+                                </button>
+                              )}
+                              {resident.status === 'deactivated' && (
+                                <button
+                                  className="flex-1 bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => handleActivate(resident.id)}
+                                  disabled={processingStatus === resident.id}
+                                >
+                                  {processingStatus === resident.id ? 'Processing...' : 'Activate'}
+                                </button>
+                              )}
+                              {resident.status !== 'archived' && (
+                                <button
+                                  className="flex-1 bg-purple-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => handleArchive(resident.id)}
+                                  disabled={processingStatus === resident.id}
+                                >
+                                  {processingStatus === resident.id ? 'Processing...' : 'Archive'}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop Table View */}
+                  <div className="hidden md:block overflow-x-auto w-full">
                   <table className="w-full border-collapse text-sm">
                     <thead>
                       <tr className="bg-gray-50 border-b-2 border-gray-200">
@@ -718,6 +802,7 @@ function ResidentManagement() {
                           </tbody>
                         </table>
                       </div>
+                </>
                     )}
                   </>
                 );

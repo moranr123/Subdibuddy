@@ -175,9 +175,9 @@ function VisitorPreRegistration() {
       <div className="min-h-screen bg-gray-50 w-full">
         <Header title="Visitor Pre-Registration" />
 
-        <main className="w-full max-w-full m-0 p-10 box-border">
-          <div className="flex flex-col gap-6 w-full max-w-full">
-            <div className="w-full bg-white rounded-xl p-8 border border-gray-100 shadow-sm">
+        <main className="w-full max-w-full m-0 p-4 md:p-6 lg:p-10 box-border">
+          <div className="flex flex-col gap-4 md:gap-6 w-full max-w-full">
+            <div className="w-full bg-white rounded-xl p-4 md:p-6 lg:p-8 border border-gray-100 shadow-sm">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="m-0 text-gray-900 text-lg font-normal">Gate Pass Management</h2>
                 <button 

@@ -16,22 +16,14 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.subdibuddy.app",
-      "config": {
-        "googleMapsApiKey": "AIzaSyByXb-FgYHiNhVIsK00kM1jdXYr_OerV7Q"
-      }
+      "bundleIdentifier": "com.subdibuddy.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.subdibuddy.app",
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyByXb-FgYHiNhVIsK00kM1jdXYr_OerV7Q"
-        }
-      }
+      "package": "com.subdibuddy.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -42,12 +34,6 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Allow Subdibuddy to use your location to help you find nearby services."
-        }
-      ],
-      [
-        "react-native-maps",
-        {
-          "googleMapsApiKey": "AIzaSyByXb-FgYHiNhVIsK00kM1jdXYr_OerV7Q"
         }
       ]
     ],

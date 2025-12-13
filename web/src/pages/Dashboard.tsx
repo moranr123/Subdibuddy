@@ -17,12 +17,12 @@ interface StatCardProps {
 
 const StatCard = memo(({ title, value, label, icon, bgColor = '#ffffff' }: StatCardProps) => (
   <div 
-    className="rounded-lg p-6 border border-gray-200 transition-all hover:border-gray-300"
+    className="rounded-lg p-4 md:p-6 border border-gray-200 transition-all hover:border-gray-300 overflow-hidden"
     style={{ backgroundColor: bgColor }}
   >
-    <h2 className="text-gray-500 text-xs mb-2 font-bold uppercase tracking-wide">{title}</h2>
-    <p className="text-3xl font-semibold text-gray-900 my-1">{value}</p>
-    <p className="text-gray-400 text-xs m-0">{label}</p>
+    <h2 className="text-gray-500 text-xs mb-2 font-bold uppercase tracking-wide truncate">{title}</h2>
+    <p className="text-2xl md:text-3xl font-semibold text-gray-900 my-1 truncate">{value}</p>
+    <p className="text-gray-400 text-xs m-0 truncate">{label}</p>
   </div>
 ));
 StatCard.displayName = 'StatCard';
@@ -50,6 +50,7 @@ function Dashboard() {
   const [residentGrowthData, setResidentGrowthData] = useState<ResidentGrowthData[]>([])
   const [selectedYear, setSelectedYear] = useState<string>('')
   const [availableYears, setAvailableYears] = useState<number[]>([])
+  const [showReportModal, setShowReportModal] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -116,7 +117,7 @@ function Dashboard() {
       if (!selectedYear && years.length > 0) {
         setSelectedYear(String(years[0]));
       }
-
+      
       // Calculate billings stats
       let totalBillings = 0;
       let pendingBillings = 0;
@@ -260,21 +261,43 @@ function Dashboard() {
       <div className="min-h-screen bg-gray-50">
         <Header title="Dashboard" />
 
-        <main className="max-w-[1400px] mx-auto p-8 flex flex-col items-center">
+        <main className="max-w-[1400px] mx-auto p-4 md:p-8 flex flex-col items-center">
           {/* Quick Actions */}
-          <div className="w-full mb-6 flex justify-end">
+          <div className="w-full mb-4 md:mb-6 flex justify-end gap-3">
+            <button
+              onClick={() => navigate('/map')}
+              className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 md:px-6 py-2 md:py-2.5 rounded-lg transition-colors flex items-center gap-2 shadow-sm text-sm md:text-base"
+            >
+              <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span className="hidden sm:inline">Open Map</span>
+              <span className="sm:hidden">Map</span>
+            </button>
+            <button
+              onClick={() => setShowReportModal(true)}
+              className="bg-purple-600 hover:bg-purple-700 text-white font-medium px-4 md:px-6 py-2 md:py-2.5 rounded-lg transition-colors flex items-center gap-2 shadow-sm text-sm md:text-base"
+            >
+              <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span className="hidden sm:inline">Generate Report</span>
+              <span className="sm:hidden">Report</span>
+            </button>
             <button
               onClick={() => navigate('/announcement')}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2.5 rounded-lg transition-colors flex items-center gap-2 shadow-sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 md:px-6 py-2 md:py-2.5 rounded-lg transition-colors flex items-center gap-2 shadow-sm text-sm md:text-base"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
               </svg>
-              <span>Create Announcement</span>
+              <span className="hidden sm:inline">Create Announcement</span>
+              <span className="sm:hidden">New</span>
             </button>
           </div>
 
-          <div className="grid grid-cols-3 gap-5 mb-8 w-full">
+          <div className="grid grid-cols-3 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5 mb-6 md:mb-8 w-full">
             {loading ? (
               <div className="col-span-full text-center py-[60px] px-5 text-gray-600 text-base">
                 Loading analytics...
@@ -294,11 +317,11 @@ function Dashboard() {
           </div>
 
           {/* Registered Residents Growth Chart */}
-          <div className="bg-white rounded-lg p-6 border border-gray-200 w-full mb-8">
+          <div className="bg-white rounded-lg p-4 md:p-6 border border-gray-200 w-full mb-6 md:mb-8 overflow-x-auto">
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <h2 className="text-gray-900 mb-2 text-lg font-semibold">Registered Residents by Month</h2>
-                <p className="text-gray-500 text-sm">
+              <p className="text-gray-500 text-sm">
                   Cumulative count of registered residents over time
                 </p>
               </div>
@@ -432,6 +455,157 @@ function Dashboard() {
               </div>
             )}
           </div>
+
+          {/* Generate Report Modal */}
+          {showReportModal && (
+            <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-5" onClick={() => setShowReportModal(false)}>
+              <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                <div className="flex justify-between items-center px-6 py-5 border-b border-gray-200">
+                  <h3 className="m-0 text-gray-900 text-xl font-semibold">Dashboard Report</h3>
+                  <button 
+                    className="bg-none border-none text-2xl text-gray-600 cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded transition-all hover:bg-gray-100 hover:text-gray-900"
+                    onClick={() => setShowReportModal(false)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="overflow-y-auto px-6 py-5">
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-600 mb-2">
+                      Generated on: {new Date().toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 border-b-2 border-gray-200">
+                          <th className="px-4 py-3 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Category</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Total</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Pending</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="hover:bg-gray-50 border-b border-gray-100">
+                          <td className="px-4 py-3 text-gray-700 font-medium">Total Residents</td>
+                          <td className="px-4 py-3 text-gray-900">{stats.totalUsers}</td>
+                          <td className="px-4 py-3 text-gray-600">-</td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">Active</span>
+                          </td>
+                        </tr>
+                        <tr className="hover:bg-gray-50 border-b border-gray-100">
+                          <td className="px-4 py-3 text-gray-700 font-medium">Total Billings</td>
+                          <td className="px-4 py-3 text-gray-900">{stats.totalBillings}</td>
+                          <td className="px-4 py-3 text-gray-900">{stats.pendingBillings}</td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                              {stats.pendingBillings > 0 ? 'Pending' : 'All Paid'}
+                            </span>
+                          </td>
+                        </tr>
+                        <tr className="hover:bg-gray-50 border-b border-gray-100">
+                          <td className="px-4 py-3 text-gray-700 font-medium">Complaints</td>
+                          <td className="px-4 py-3 text-gray-900">{stats.totalComplaints}</td>
+                          <td className="px-4 py-3 text-gray-900">{stats.pendingComplaints}</td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
+                              {stats.pendingComplaints > 0 ? 'Pending' : 'Resolved'}
+                            </span>
+                          </td>
+                        </tr>
+                        <tr className="hover:bg-gray-50 border-b border-gray-100">
+                          <td className="px-4 py-3 text-gray-700 font-medium">Visitors</td>
+                          <td className="px-4 py-3 text-gray-900">{stats.totalVisitors}</td>
+                          <td className="px-4 py-3 text-gray-900">{stats.pendingVisitors}</td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                              {stats.pendingVisitors > 0 ? 'Pending' : 'All Processed'}
+                            </span>
+                          </td>
+                        </tr>
+                        <tr className="hover:bg-gray-50 border-b border-gray-100">
+                          <td className="px-4 py-3 text-gray-700 font-medium">Registered Vehicles</td>
+                          <td className="px-4 py-3 text-gray-900">{stats.totalVehicles}</td>
+                          <td className="px-4 py-3 text-gray-600">-</td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">Approved</span>
+                          </td>
+                        </tr>
+                        <tr className="hover:bg-gray-50 border-b border-gray-100">
+                          <td className="px-4 py-3 text-gray-700 font-medium">Maintenance Requests</td>
+                          <td className="px-4 py-3 text-gray-900">{stats.totalMaintenance}</td>
+                          <td className="px-4 py-3 text-gray-900">{stats.pendingMaintenance}</td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-1 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
+                              {stats.pendingMaintenance > 0 ? 'Pending' : 'All Processed'}
+                            </span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  {selectedYear && residentGrowthData.length > 0 && (
+                    <div className="mt-6">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Resident Growth - {selectedYear}</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="bg-gray-50 border-b-2 border-gray-200">
+                              <th className="px-4 py-3 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Month</th>
+                              <th className="px-4 py-3 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Cumulative Count</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {residentGrowthData.map((data, index) => (
+                              <tr key={index} className="hover:bg-gray-50 border-b border-gray-100">
+                                <td className="px-4 py-3 text-gray-700">{data.date}</td>
+                                <td className="px-4 py-3 text-gray-900 font-medium">{data.count}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="px-6 py-5 border-t border-gray-200 flex justify-end gap-3">
+                  <button
+                    className="bg-gray-900 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-gray-800"
+                    onClick={() => {
+                      // Export to CSV
+                      const csvData = [
+                        ['Category', 'Total', 'Pending', 'Status'],
+                        ['Total Residents', stats.totalUsers, '-', 'Active'],
+                        ['Total Billings', stats.totalBillings, stats.pendingBillings, stats.pendingBillings > 0 ? 'Pending' : 'All Paid'],
+                        ['Complaints', stats.totalComplaints, stats.pendingComplaints, stats.pendingComplaints > 0 ? 'Pending' : 'Resolved'],
+                        ['Visitors', stats.totalVisitors, stats.pendingVisitors, stats.pendingVisitors > 0 ? 'Pending' : 'All Processed'],
+                        ['Registered Vehicles', stats.totalVehicles, '-', 'Approved'],
+                        ['Maintenance Requests', stats.totalMaintenance, stats.pendingMaintenance, stats.pendingMaintenance > 0 ? 'Pending' : 'All Processed'],
+                      ];
+                      
+                      const csvContent = csvData.map(row => row.join(',')).join('\n');
+                      const blob = new Blob([csvContent], { type: 'text/csv' });
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `dashboard-report-${new Date().toISOString().split('T')[0]}.csv`;
+                      a.click();
+                      window.URL.revokeObjectURL(url);
+                    }}
+                  >
+                    Export CSV
+                  </button>
+                  <button
+                    className="bg-gray-900 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-gray-800"
+                    onClick={() => setShowReportModal(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </Layout>

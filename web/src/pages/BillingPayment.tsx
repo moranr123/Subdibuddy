@@ -335,9 +335,9 @@ function BillingPayment() {
       <div className="min-h-screen bg-gray-50 w-full">
         <Header title="Billing & Payment" />
 
-        <main className="w-full max-w-full m-0 p-10 box-border">
-          <div className="flex flex-col gap-6 w-full max-w-full">
-            <div className="w-full bg-white rounded-xl p-8 border border-gray-100 shadow-sm">
+        <main className="w-full max-w-full m-0 p-4 md:p-6 lg:p-10 box-border">
+          <div className="flex flex-col gap-4 md:gap-6 w-full max-w-full">
+            <div className="w-full bg-white rounded-xl p-4 md:p-6 lg:p-8 border border-gray-100 shadow-sm">
               <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
                 <h2 className="m-0 text-gray-900 text-lg font-normal">Billing Management</h2>
                 <div className="flex gap-2">
@@ -358,7 +358,7 @@ function BillingPayment() {
               </div>
 
               {showForm && (
-                <div className="bg-gray-900 rounded-2xl p-8 border border-gray-800 shadow-lg mb-8">
+                <div className="bg-gray-900 rounded-2xl p-4 md:p-6 lg:p-8 border border-gray-800 shadow-lg mb-6 md:mb-8">
                   <h3 className="mt-0 mb-6 text-white text-xl font-normal tracking-tight">Post New Due</h3>
                   <form onSubmit={handleSubmitBilling}>
                     <div className="mb-6">
@@ -532,7 +532,7 @@ function BillingPayment() {
 
         {showPaymentForm && selectedBilling && (
           <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-5" onClick={() => setShowPaymentForm(false)}>
-            <div className="bg-gray-900 rounded-2xl w-full max-w-[600px] p-8 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-gray-900 rounded-2xl w-full max-w-[600px] p-4 md:p-6 lg:p-8 shadow-2xl mx-4" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-6">
                 <h3 className="m-0 text-white text-xl font-normal">Record Payment</h3>
                 <button 

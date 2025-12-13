@@ -309,12 +309,12 @@ function Announcement() {
     <Layout>
       <div className="min-h-screen bg-gray-50 w-full">
         <Header title="Announcements" />
-        <main className="w-full max-w-[1600px] mx-auto p-8">
-          <div className="flex flex-col gap-6">
+        <main className="w-full max-w-[1600px] mx-auto p-4 md:p-6 lg:p-8">
+          <div className="flex flex-col gap-4 md:gap-6">
             {/* Header with New Button */}
             <div className="flex justify-end">
               <button
-                className="bg-black text-white border-none px-5 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-all hover:bg-gray-800"
+                className="bg-black text-white border-none px-4 md:px-5 py-2 md:py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-all hover:bg-gray-800"
                 onClick={() => {
                   setFormData({ title: '', content: '', isActive: true, imageURL: '' });
                   setImageFile(null);

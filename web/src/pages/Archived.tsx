@@ -42,7 +42,6 @@ type FilterType =
   | 'billings-payments' 
   | 'maintenance'
   | 'vehicle-registration'
-  | 'all';
 
 interface ArchivedComplaint {
   id: string;
@@ -97,7 +96,7 @@ interface ArchivedMaintenance {
 function Archived() {
   const [user, setUser] = useState<any>(null);
   const [searchParams] = useSearchParams();
-  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const [activeFilter, setActiveFilter] = useState<FilterType>('complaints');
   const [archivedResidents, setArchivedResidents] = useState<Resident[]>([]);
   const [archivedComplaints, setArchivedComplaints] = useState<ArchivedComplaint[]>([]);
   const [archivedVehicleRegistrations, setArchivedVehicleRegistrations] = useState<ArchivedVehicleRegistration[]>([]);
@@ -124,6 +123,7 @@ function Archived() {
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
   const [filterDate, setFilterDate] = useState<string>('');
   const [showDateFilter, setShowDateFilter] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -697,113 +697,189 @@ function Archived() {
   }, [db]);
 
   const applyDateFilterComplaints = useCallback((complaintsList: ArchivedComplaint[]) => {
-    if (!filterDate) {
-      setFilteredArchivedComplaints(complaintsList);
-      return;
+    let filtered = complaintsList;
+
+    // Apply date filter
+    if (filterDate) {
+      const selectedDate = new Date(filterDate);
+      const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+
+      filtered = filtered.filter((complaint) => {
+        const complaintDate = complaint.archivedAt?.toDate 
+          ? complaint.archivedAt.toDate() 
+          : complaint.archivedAt 
+          ? new Date(complaint.archivedAt) 
+          : null;
+        
+        if (!complaintDate) return false;
+
+        const complaintDateOnly = new Date(complaintDate.getFullYear(), complaintDate.getMonth(), complaintDate.getDate());
+        
+        return complaintDateOnly.getTime() === selectedDateOnly.getTime();
+      });
     }
 
-    const selectedDate = new Date(filterDate);
-    const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-
-    const filtered = complaintsList.filter((complaint) => {
-      const complaintDate = complaint.archivedAt?.toDate 
-        ? complaint.archivedAt.toDate() 
-        : complaint.archivedAt 
-        ? new Date(complaint.archivedAt) 
-        : null;
-      
-      if (!complaintDate) return false;
-
-      const complaintDateOnly = new Date(complaintDate.getFullYear(), complaintDate.getMonth(), complaintDate.getDate());
-      
-      return complaintDateOnly.getTime() === selectedDateOnly.getTime();
-    });
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((complaint) => {
+        const userName = complaintUserNames[complaint.userId] || complaint.userEmail || '';
+        const subject = complaint.subject || '';
+        const description = complaint.description || '';
+        
+        return (
+          userName.toLowerCase().includes(query) ||
+          subject.toLowerCase().includes(query) ||
+          description.toLowerCase().includes(query)
+        );
+      });
+    }
 
     setFilteredArchivedComplaints(filtered);
-  }, [filterDate]);
+  }, [filterDate, searchQuery, complaintUserNames]);
 
   const applyDateFilterResidents = useCallback((residentsList: Resident[]) => {
-    if (!filterDate) {
-      setFilteredArchivedResidents(residentsList);
-      return;
+    let filtered = residentsList;
+
+    // Apply date filter
+    if (filterDate) {
+      const selectedDate = new Date(filterDate);
+      const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+
+      filtered = filtered.filter((resident) => {
+        // Try archivedAt first, then createdAt
+        const residentDate = (resident as any).archivedAt?.toDate 
+          ? (resident as any).archivedAt.toDate() 
+          : (resident as any).archivedAt 
+          ? new Date((resident as any).archivedAt) 
+          : resident.createdAt?.toDate 
+          ? resident.createdAt.toDate() 
+          : resident.createdAt 
+          ? new Date(resident.createdAt) 
+          : null;
+        
+        if (!residentDate) return false;
+
+        const residentDateOnly = new Date(residentDate.getFullYear(), residentDate.getMonth(), residentDate.getDate());
+        
+        return residentDateOnly.getTime() === selectedDateOnly.getTime();
+      });
     }
 
-    const selectedDate = new Date(filterDate);
-    const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-
-    const filtered = residentsList.filter((resident) => {
-      // Try archivedAt first, then createdAt
-      const residentDate = (resident as any).archivedAt?.toDate 
-        ? (resident as any).archivedAt.toDate() 
-        : (resident as any).archivedAt 
-        ? new Date((resident as any).archivedAt) 
-        : resident.createdAt?.toDate 
-        ? resident.createdAt.toDate() 
-        : resident.createdAt 
-        ? new Date(resident.createdAt) 
-        : null;
-      
-      if (!residentDate) return false;
-
-      const residentDateOnly = new Date(residentDate.getFullYear(), residentDate.getMonth(), residentDate.getDate());
-      
-      return residentDateOnly.getTime() === selectedDateOnly.getTime();
-    });
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((resident) => {
+        const fullName = (resident.fullName || '').toLowerCase();
+        const firstName = (resident.firstName || '').toLowerCase();
+        const middleName = (resident.middleName || '').toLowerCase();
+        const lastName = (resident.lastName || '').toLowerCase();
+        const email = (resident.email || '').toLowerCase();
+        const phone = (resident.phone || '').toLowerCase();
+        
+        return (
+          fullName.includes(query) ||
+          firstName.includes(query) ||
+          middleName.includes(query) ||
+          lastName.includes(query) ||
+          email.includes(query) ||
+          phone.includes(query)
+        );
+      });
+    }
 
     setFilteredArchivedResidents(filtered);
-  }, [filterDate]);
+  }, [filterDate, searchQuery]);
 
   const applyDateFilterVehicleRegistrations = useCallback((registrationsList: ArchivedVehicleRegistration[]) => {
-    if (!filterDate) {
-      setFilteredArchivedVehicleRegistrations(registrationsList);
-      return;
+    let filtered = registrationsList;
+
+    // Apply date filter
+    if (filterDate) {
+      const selectedDate = new Date(filterDate);
+      const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+
+      filtered = filtered.filter((registration) => {
+        const registrationDate = registration.archivedAt?.toDate 
+          ? registration.archivedAt.toDate() 
+          : registration.archivedAt 
+          ? new Date(registration.archivedAt) 
+          : null;
+        
+        if (!registrationDate) return false;
+
+        const registrationDateOnly = new Date(registrationDate.getFullYear(), registrationDate.getMonth(), registrationDate.getDate());
+        
+        return registrationDateOnly.getTime() === selectedDateOnly.getTime();
+      });
     }
 
-    const selectedDate = new Date(filterDate);
-    const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-
-    const filtered = registrationsList.filter((registration) => {
-      const registrationDate = registration.archivedAt?.toDate 
-        ? registration.archivedAt.toDate() 
-        : registration.archivedAt 
-        ? new Date(registration.archivedAt) 
-        : null;
-      
-      if (!registrationDate) return false;
-
-      const registrationDateOnly = new Date(registrationDate.getFullYear(), registrationDate.getMonth(), registrationDate.getDate());
-      
-      return registrationDateOnly.getTime() === selectedDateOnly.getTime();
-    });
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((registration) => {
+        const userName = vehicleRegistrationUserNames[registration.userId] || registration.userEmail || '';
+        const plateNumber = registration.plateNumber || '';
+        const make = registration.make || '';
+        const model = registration.model || '';
+        const color = registration.color || '';
+        const vehicleType = registration.vehicleType || '';
+        
+        return (
+          userName.toLowerCase().includes(query) ||
+          plateNumber.toLowerCase().includes(query) ||
+          make.toLowerCase().includes(query) ||
+          model.toLowerCase().includes(query) ||
+          color.toLowerCase().includes(query) ||
+          vehicleType.toLowerCase().includes(query)
+        );
+      });
+    }
 
     setFilteredArchivedVehicleRegistrations(filtered);
-  }, [filterDate]);
+  }, [filterDate, searchQuery, vehicleRegistrationUserNames]);
 
   const applyDateFilterMaintenance = useCallback((maintenanceList: ArchivedMaintenance[]) => {
-    if (!filterDate) {
-      setFilteredArchivedMaintenance(maintenanceList);
-      return;
+    let filtered = maintenanceList;
+
+    // Apply date filter
+    if (filterDate) {
+      const selectedDate = new Date(filterDate);
+      const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+
+      filtered = filtered.filter((maintenance) => {
+        const maintenanceDate = maintenance.archivedAt?.toDate 
+          ? maintenance.archivedAt.toDate() 
+          : maintenance.archivedAt 
+          ? new Date(maintenance.archivedAt) 
+          : null;
+        
+        if (!maintenanceDate) return false;
+
+        const maintenanceDateOnly = new Date(maintenanceDate.getFullYear(), maintenanceDate.getMonth(), maintenanceDate.getDate());
+        
+        return maintenanceDateOnly.getTime() === selectedDateOnly.getTime();
+      });
     }
 
-    const selectedDate = new Date(filterDate);
-    const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-
-    const filtered = maintenanceList.filter((maintenance) => {
-      const maintenanceDate = maintenance.archivedAt?.toDate 
-        ? maintenance.archivedAt.toDate() 
-        : maintenance.archivedAt 
-        ? new Date(maintenance.archivedAt) 
-        : null;
-      
-      if (!maintenanceDate) return false;
-
-      const maintenanceDateOnly = new Date(maintenanceDate.getFullYear(), maintenanceDate.getMonth(), maintenanceDate.getDate());
-      
-      return maintenanceDateOnly.getTime() === selectedDateOnly.getTime();
-    });
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((maintenance) => {
+        const userName = maintenanceUserNames[maintenance.userId] || maintenance.userEmail || '';
+        const maintenanceType = maintenance.maintenanceType || '';
+        const description = maintenance.description || '';
+        
+        return (
+          userName.toLowerCase().includes(query) ||
+          maintenanceType.toLowerCase().includes(query) ||
+          description.toLowerCase().includes(query)
+        );
+      });
+    }
 
     setFilteredArchivedMaintenance(filtered);
-  }, [filterDate]);
+  }, [filterDate, searchQuery, maintenanceUserNames]);
 
   useEffect(() => {
     if (activeFilter === 'complaints') {
@@ -815,7 +891,7 @@ function Archived() {
     } else if (activeFilter === 'maintenance') {
       applyDateFilterMaintenance(archivedMaintenance);
     }
-  }, [archivedComplaints, archivedResidents, archivedVehicleRegistrations, archivedMaintenance, filterDate, activeFilter, applyDateFilterComplaints, applyDateFilterResidents, applyDateFilterVehicleRegistrations, applyDateFilterMaintenance]);
+  }, [archivedComplaints, archivedResidents, archivedVehicleRegistrations, archivedMaintenance, filterDate, searchQuery, activeFilter, applyDateFilterComplaints, applyDateFilterResidents, applyDateFilterVehicleRegistrations, applyDateFilterMaintenance]);
 
   const handleDateFilter = useCallback(() => {
     setShowDateFilter(!showDateFilter);
@@ -847,7 +923,6 @@ function Archived() {
   };
 
   const filters = [
-    { id: 'all' as FilterType, label: 'All' },
     { id: 'announcement' as FilterType, label: 'Announcement' },
     { id: 'complaints' as FilterType, label: 'Complaints' },
     { id: 'visitor-pre-registration' as FilterType, label: 'Visitor Pre-registration' },
@@ -863,22 +938,29 @@ function Archived() {
       <div className="min-h-screen bg-gray-50 w-full">
         <Header title="Archived" />
 
-        <main className="w-full max-w-full m-0 p-10 box-border">
-          <div className="flex flex-col gap-6 w-full max-w-full">
-            <div className="w-full bg-white rounded-xl p-8 border border-gray-100 shadow-sm">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="m-0 text-gray-900 text-lg font-normal">Filter by Category</h2>
-                {activeFilter !== 'all' && (
+        <main className="w-full max-w-full m-0 p-4 md:p-6 lg:p-10 box-border">
+          <div className="flex flex-col gap-4 md:gap-6 w-full max-w-full">
+            <div className="w-full bg-white rounded-xl p-4 md:p-6 lg:p-8 border border-gray-100 shadow-sm">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 md:mb-6">
+                <h2 className="m-0 text-gray-900 text-base md:text-lg font-normal">Archived</h2>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="px-3 md:px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-48 md:w-64"
+                  />
                   <button
-                    className="px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-200"
+                    className="px-3 md:px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-200 whitespace-nowrap"
                     onClick={handleDateFilter}
                   >
                     Filter by Date
                   </button>
-                )}
+                </div>
               </div>
 
-              {showDateFilter && activeFilter !== 'all' && (
+              {showDateFilter && (
                 <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <div className="flex items-end gap-4">
                     <div className="w-48">
@@ -890,14 +972,14 @@ function Archived() {
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                       />
                     </div>
-                    <button
+                  <button
                       className="px-4 py-2 bg-gray-500 text-white rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-600"
                       onClick={handleClearDateFilter}
-                    >
+                  >
                       Clear
-                    </button>
+                  </button>
                   </div>
-                  {filterDate && (
+                  {(filterDate || searchQuery) && (
                     <div className="mt-2 text-xs text-gray-600">
                       {activeFilter === 'complaints' && (
                         <>Showing {filteredArchivedComplaints.length} of {archivedComplaints.length} archived complaints</>
@@ -916,96 +998,156 @@ function Archived() {
                 </div>
               )}
               
-              <div className="flex gap-3 mb-6 overflow-x-auto">
-                {filters.map((filter) => (
-                  <button
-                    key={filter.id}
-                    className={`px-4 py-2 rounded-md text-sm font-normal cursor-pointer transition-all ${
-                      activeFilter === filter.id
-                        ? 'bg-gray-900 text-white hover:bg-gray-800'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                    onClick={() => setActiveFilter(filter.id)}
-                  >
-                    {filter.label}
-                  </button>
-                ))}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Category</label>
+                {/* Mobile: Dropdown */}
+                <select
+                  value={activeFilter}
+                  onChange={(e) => setActiveFilter(e.target.value as FilterType)}
+                  className="md:hidden w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 cursor-pointer transition-colors hover:border-gray-400 focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+                >
+                  {filters.map((filter) => (
+                    <option key={filter.id} value={filter.id}>
+                      {filter.label}
+                    </option>
+                  ))}
+                </select>
+                {/* Desktop: Button Row */}
+                <div className="hidden md:flex gap-2 overflow-x-auto">
+                  {filters.map((filter) => (
+                    <button
+                      key={filter.id}
+                      onClick={() => setActiveFilter(filter.id)}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-all cursor-pointer whitespace-nowrap flex-shrink-0 ${
+                        activeFilter === filter.id
+                          ? 'bg-[#1877F2] text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="mt-8">
-                {activeFilter === 'all' && (
-                  <div className="text-center py-20 px-5 text-gray-600">
-                    <p className="text-base font-normal text-gray-600">
-                      Select a category to view archived items
-                    </p>
-                  </div>
-                )}
                 {activeFilter === 'complaints' && (
                   <>
                     {loadingComplaints && archivedComplaints.length === 0 ? (
                       <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading archived complaints...</div>
-                    ) : (filterDate ? filteredArchivedComplaints : archivedComplaints).length === 0 ? (
-                      <div className="text-center py-20 px-5 text-gray-600">
-                        <p className="text-base font-normal text-gray-600">
+                    ) : (filterDate || searchQuery ? filteredArchivedComplaints : archivedComplaints).length === 0 ? (
+                  <div className="text-center py-20 px-5 text-gray-600">
+                    <p className="text-base font-normal text-gray-600">
                           No archived complaints found.
                         </p>
                         <p className="text-xs text-gray-400 mt-2.5">
                           Archived complaints will appear here.
-                        </p>
-                      </div>
+                    </p>
+                  </div>
                     ) : (
-                      <div className="overflow-x-auto w-full">
-                        <table className="w-full border-collapse text-sm">
-                          <thead>
-                            <tr className="bg-gray-50 border-b-2 border-gray-200">
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Date</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">User</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Subject</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Description</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Archived At</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(filterDate ? filteredArchivedComplaints : archivedComplaints).map((complaint) => (
-                              <tr key={complaint.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(complaint.createdAt)}</td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
-                                  {complaintUserNames[complaint.userId] || complaint.userEmail || 'Unknown User'}
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{complaint.subject}</td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top max-w-[300px] break-words whitespace-pre-wrap">
-                                  {complaint.description}
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 align-top">
-                                  <span className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block bg-purple-600">
-                                    {complaint.status.toUpperCase()}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(complaint.archivedAt)}</td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
-                                  <div className="flex gap-2 items-center">
-                                    <button
-                                      className="bg-gray-900 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-800"
-                                      onClick={() => handleViewComplaint(complaint)}
-                                    >
-                                      View
-                                    </button>
-                                    <button
-                                      className="bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                      onClick={() => handleRestoreComplaint(complaint.id)}
-                                      disabled={processingStatus === complaint.id}
-                                    >
-                                      {processingStatus === complaint.id ? 'Processing...' : 'Restore'}
-                                    </button>
-                                  </div>
-                                </td>
+                      <>
+                        {/* Mobile Card View */}
+                        <div className="md:hidden space-y-4">
+                          {(filterDate || searchQuery ? filteredArchivedComplaints : archivedComplaints).map((complaint) => (
+                            <div key={complaint.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                              <div className="flex justify-between items-start mb-3">
+                                <div className="flex-1">
+                                  <h3 className="font-semibold text-gray-900 text-sm mb-1">{complaint.subject}</h3>
+                                  <p className="text-xs text-gray-500 mb-2">{formatDate(complaint.createdAt)}</p>
+                                </div>
+                                <span className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block flex-shrink-0 bg-purple-600">
+                                  {complaint.status.toUpperCase()}
+                                </span>
+                              </div>
+                              
+                              <div className="space-y-2 mb-3">
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">User: </span>
+                                  <span className="text-xs text-gray-900">{complaintUserNames[complaint.userId] || complaint.userEmail || 'Unknown User'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">Description: </span>
+                                  <p className="text-xs text-gray-900 mt-1 break-words whitespace-pre-wrap">{complaint.description}</p>
+                                </div>
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">Archived At: </span>
+                                  <span className="text-xs text-gray-900">{formatDate(complaint.archivedAt)}</span>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-2 pt-3 border-t border-gray-200">
+                                <button
+                                  className="flex-1 bg-gray-900 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-800"
+                                  onClick={() => handleViewComplaint(complaint)}
+                                >
+                                  View
+                                </button>
+                                <button
+                                  className="flex-1 bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => handleRestoreComplaint(complaint.id)}
+                                  disabled={processingStatus === complaint.id}
+                                >
+                                  {processingStatus === complaint.id ? 'Processing...' : 'Restore'}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <div className="hidden md:block overflow-x-auto w-full">
+                          <table className="w-full border-collapse text-sm">
+                            <thead>
+                              <tr className="bg-gray-50 border-b-2 border-gray-200">
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Date</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">User</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Subject</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Description</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Archived At</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                            </thead>
+                            <tbody>
+                              {(filterDate || searchQuery ? filteredArchivedComplaints : archivedComplaints).map((complaint) => (
+                                <tr key={complaint.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(complaint.createdAt)}</td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                                    {complaintUserNames[complaint.userId] || complaint.userEmail || 'Unknown User'}
+                                  </td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{complaint.subject}</td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top max-w-[300px] break-words whitespace-pre-wrap">
+                                    {complaint.description}
+                                  </td>
+                                  <td className="px-4 py-4 border-b border-gray-100 align-top">
+                                    <span className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block bg-purple-600">
+                                      {complaint.status.toUpperCase()}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(complaint.archivedAt)}</td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                                    <div className="flex gap-2 items-center">
+                                      <button
+                                        className="bg-gray-900 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-800"
+                                        onClick={() => handleViewComplaint(complaint)}
+                                      >
+                                        View
+                                      </button>
+                                      <button
+                                        className="bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        onClick={() => handleRestoreComplaint(complaint.id)}
+                                        disabled={processingStatus === complaint.id}
+                                      >
+                                        {processingStatus === complaint.id ? 'Processing...' : 'Restore'}
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
                     )}
                   </>
                 )}
@@ -1013,7 +1155,7 @@ function Archived() {
                   <>
                     {loading && archivedResidents.length === 0 ? (
                       <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading archived residents...</div>
-                    ) : (filterDate ? filteredArchivedResidents : archivedResidents).length === 0 ? (
+                    ) : (filterDate || searchQuery ? filteredArchivedResidents : archivedResidents).length === 0 ? (
                       <div className="text-center py-20 px-5 text-gray-600">
                         <p className="text-base font-normal text-gray-600">
                           No archived residents found.
@@ -1023,7 +1165,54 @@ function Archived() {
                         </p>
                       </div>
                     ) : (
-                      <div className="overflow-x-auto w-full">
+                      <>
+                        {/* Mobile Card View */}
+                        <div className="md:hidden space-y-4">
+                          {(filterDate || searchQuery ? filteredArchivedResidents : archivedResidents).map((resident) => {
+                            const fullName = resident.fullName || 
+                              [resident.firstName, resident.middleName, resident.lastName]
+                                .filter(Boolean)
+                                .join(' ') || 'N/A';
+                            
+                            return (
+                              <div key={resident.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                                <div className="flex justify-between items-start mb-3">
+                                  <div className="flex-1">
+                                    <h3 className="font-semibold text-gray-900 text-sm mb-1">{fullName}</h3>
+                                    <p className="text-xs text-gray-500 mb-2">{formatDate(resident.createdAt)}</p>
+                                  </div>
+                                  <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800 flex-shrink-0">Archived</span>
+                                </div>
+                                
+                                <div className="space-y-2 mb-3">
+                                  <div>
+                                    <span className="text-xs font-medium text-gray-600">Email/Phone: </span>
+                                    <span className="text-xs text-gray-900">{resident.email || resident.phone || 'N/A'}</span>
+                                  </div>
+                                </div>
+
+                                <div className="flex gap-2 pt-3 border-t border-gray-200">
+                                  <button
+                                    className="flex-1 bg-gray-900 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-800"
+                                    onClick={() => handleViewDetails(resident)}
+                                  >
+                                    View Details
+                                  </button>
+                                  <button
+                                    className="flex-1 bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    onClick={() => handleRestore(resident.id)}
+                                    disabled={processingStatus === resident.id}
+                                  >
+                                    {processingStatus === resident.id ? 'Processing...' : 'Restore'}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <div className="hidden md:block overflow-x-auto w-full">
                         <table className="w-full border-collapse text-sm">
                           <thead>
                             <tr className="bg-gray-50 border-b-2 border-gray-200">
@@ -1035,8 +1224,7 @@ function Archived() {
                             </tr>
                           </thead>
                           <tbody>
-                            {(filterDate ? filteredArchivedResidents : archivedResidents).map((resident) => {
-                              // Construct full name from firstName, middleName, lastName if fullName doesn't exist
+                              {(filterDate || searchQuery ? filteredArchivedResidents : archivedResidents).map((resident) => {
                               const fullName = resident.fullName || 
                                 [resident.firstName, resident.middleName, resident.lastName]
                                   .filter(Boolean)
@@ -1075,6 +1263,7 @@ function Archived() {
                           </tbody>
                         </table>
                       </div>
+                      </>
                     )}
                   </>
                 )}
@@ -1082,7 +1271,7 @@ function Archived() {
                   <>
                     {loadingVehicleRegistrations && archivedVehicleRegistrations.length === 0 ? (
                       <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading archived vehicle registrations...</div>
-                    ) : (filterDate ? filteredArchivedVehicleRegistrations : archivedVehicleRegistrations).length === 0 ? (
+                    ) : (filterDate || searchQuery ? filteredArchivedVehicleRegistrations : archivedVehicleRegistrations).length === 0 ? (
                       <div className="text-center py-20 px-5 text-gray-600">
                         <p className="text-base font-normal text-gray-600">
                           No archived vehicle registrations found.
@@ -1092,68 +1281,133 @@ function Archived() {
                         </p>
                       </div>
                     ) : (
-                      <div className="overflow-x-auto w-full">
-                        <table className="w-full border-collapse text-sm">
-                          <thead>
-                            <tr className="bg-gray-50 border-b-2 border-gray-200">
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Date</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">User</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Plate Number</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Vehicle</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Type</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Archived At</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(filterDate ? filteredArchivedVehicleRegistrations : archivedVehicleRegistrations).map((registration) => (
-                              <tr key={registration.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(registration.createdAt)}</td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
-                                  {vehicleRegistrationUserNames[registration.userId] || registration.userEmail || 'Unknown User'}
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top font-semibold">{registration.plateNumber}</td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
-                                  {registration.make} {registration.model} ({registration.year})
-                                  <br />
-                                  <span className="text-xs text-gray-500">Color: {registration.color}</span>
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{registration.vehicleType}</td>
-                                <td className="px-4 py-4 border-b border-gray-100 align-top">
-                                  <span
-                                    className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block"
-                                    style={{ 
-                                      backgroundColor: registration.status === 'approved' ? '#4CAF50' : 
-                                                      registration.status === 'rejected' ? '#ef4444' : '#FFA500' 
-                                    }}
-                                  >
-                                    {registration.status.toUpperCase()}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(registration.archivedAt)}</td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
-                                  <div className="flex gap-2 items-center">
-                                    <button
-                                      className="bg-gray-900 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-800"
-                                      onClick={() => handleViewVehicleRegistration(registration)}
-                                    >
-                                      View
-                                    </button>
-                                    <button
-                                      className="bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                      onClick={() => handleRestoreVehicleRegistration(registration.id)}
-                                      disabled={processingStatus === registration.id}
-                                    >
-                                      {processingStatus === registration.id ? 'Processing...' : 'Restore'}
-                                    </button>
-                                  </div>
-                                </td>
+                      <>
+                        {/* Mobile Card View */}
+                        <div className="md:hidden space-y-4">
+                          {(filterDate || searchQuery ? filteredArchivedVehicleRegistrations : archivedVehicleRegistrations).map((registration) => (
+                            <div key={registration.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                              <div className="flex justify-between items-start mb-3">
+                                <div className="flex-1">
+                                  <h3 className="font-semibold text-gray-900 text-sm mb-1">{registration.plateNumber}</h3>
+                                  <p className="text-xs text-gray-500 mb-2">{formatDate(registration.createdAt)}</p>
+                                </div>
+                                <span
+                                  className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block flex-shrink-0"
+                                  style={{ 
+                                    backgroundColor: registration.status === 'approved' ? '#4CAF50' : 
+                                                    registration.status === 'rejected' ? '#ef4444' : '#FFA500' 
+                                  }}
+                                >
+                                  {registration.status.toUpperCase()}
+                                </span>
+                              </div>
+                              
+                              <div className="space-y-2 mb-3">
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">User: </span>
+                                  <span className="text-xs text-gray-900">{vehicleRegistrationUserNames[registration.userId] || registration.userEmail || 'Unknown User'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">Vehicle: </span>
+                                  <span className="text-xs text-gray-900">{registration.make} {registration.model} ({registration.year})</span>
+                                </div>
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">Color: </span>
+                                  <span className="text-xs text-gray-900">{registration.color}</span>
+                                </div>
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">Type: </span>
+                                  <span className="text-xs text-gray-900">{registration.vehicleType}</span>
+                                </div>
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">Archived At: </span>
+                                  <span className="text-xs text-gray-900">{formatDate(registration.archivedAt)}</span>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-2 pt-3 border-t border-gray-200">
+                                <button
+                                  className="flex-1 bg-gray-900 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-800"
+                                  onClick={() => handleViewVehicleRegistration(registration)}
+                                >
+                                  View
+                                </button>
+                                <button
+                                  className="flex-1 bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => handleRestoreVehicleRegistration(registration.id)}
+                                  disabled={processingStatus === registration.id}
+                                >
+                                  {processingStatus === registration.id ? 'Processing...' : 'Restore'}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <div className="hidden md:block overflow-x-auto w-full">
+                          <table className="w-full border-collapse text-sm">
+                            <thead>
+                              <tr className="bg-gray-50 border-b-2 border-gray-200">
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Date</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">User</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Plate Number</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Vehicle</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Type</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Archived At</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                            </thead>
+                            <tbody>
+                              {(filterDate || searchQuery ? filteredArchivedVehicleRegistrations : archivedVehicleRegistrations).map((registration) => (
+                                <tr key={registration.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(registration.createdAt)}</td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                                    {vehicleRegistrationUserNames[registration.userId] || registration.userEmail || 'Unknown User'}
+                                  </td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top font-semibold">{registration.plateNumber}</td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                                    {registration.make} {registration.model} ({registration.year})
+                                    <br />
+                                    <span className="text-xs text-gray-500">Color: {registration.color}</span>
+                                  </td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{registration.vehicleType}</td>
+                                  <td className="px-4 py-4 border-b border-gray-100 align-top">
+                                    <span
+                                      className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block"
+                                      style={{ 
+                                        backgroundColor: registration.status === 'approved' ? '#4CAF50' : 
+                                                        registration.status === 'rejected' ? '#ef4444' : '#FFA500' 
+                                      }}
+                                    >
+                                      {registration.status.toUpperCase()}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(registration.archivedAt)}</td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                                    <div className="flex gap-2 items-center">
+                                      <button
+                                        className="bg-gray-900 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-800"
+                                        onClick={() => handleViewVehicleRegistration(registration)}
+                                      >
+                                        View
+                                      </button>
+                                      <button
+                                        className="bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        onClick={() => handleRestoreVehicleRegistration(registration.id)}
+                                        disabled={processingStatus === registration.id}
+                                      >
+                                        {processingStatus === registration.id ? 'Processing...' : 'Restore'}
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
                     )}
                   </>
                 )}
@@ -1161,7 +1415,7 @@ function Archived() {
                   <>
                     {loadingMaintenance && archivedMaintenance.length === 0 ? (
                       <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading archived maintenance requests...</div>
-                    ) : (filterDate ? filteredArchivedMaintenance : archivedMaintenance).length === 0 ? (
+                    ) : (filterDate || searchQuery ? filteredArchivedMaintenance : archivedMaintenance).length === 0 ? (
                       <div className="text-center py-20 px-5 text-gray-600">
                         <p className="text-base font-normal text-gray-600">
                           No archived maintenance requests found.
@@ -1171,69 +1425,127 @@ function Archived() {
                         </p>
                       </div>
                     ) : (
-                      <div className="overflow-x-auto w-full">
-                        <table className="w-full border-collapse text-sm">
-                          <thead>
-                            <tr className="bg-gray-50 border-b-2 border-gray-200">
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Date</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">User</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Type</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Description</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Archived At</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(filterDate ? filteredArchivedMaintenance : archivedMaintenance).map((maintenance) => (
-                              <tr key={maintenance.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(maintenance.createdAt)}</td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
-                                  {maintenanceUserNames[maintenance.userId] || maintenance.userEmail || 'Unknown User'}
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{maintenance.maintenanceType}</td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top max-w-[300px] break-words whitespace-pre-wrap">
-                                  {maintenance.description}
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 align-top">
-                                  <span
-                                    className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block"
-                                    style={{ 
-                                      backgroundColor: maintenance.status === 'resolved' ? '#4CAF50' : 
-                                                      maintenance.status === 'rejected' ? '#ef4444' : 
-                                                      maintenance.status === 'in-progress' ? '#2196F3' : '#FFA500' 
-                                    }}
-                                  >
-                                    {maintenance.status.toUpperCase()}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(maintenance.archivedAt)}</td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
-                                  <div className="flex gap-2 items-center">
-                                    <button
-                                      className="bg-gray-900 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-800"
-                                      onClick={() => handleViewMaintenance(maintenance)}
-                                    >
-                                      View
-                                    </button>
-                                    <button
-                                      className="bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                      onClick={() => handleRestoreMaintenance(maintenance.id)}
-                                      disabled={processingStatus === maintenance.id}
-                                    >
-                                      {processingStatus === maintenance.id ? 'Processing...' : 'Restore'}
-                                    </button>
-                                  </div>
-                                </td>
+                      <>
+                        {/* Mobile Card View */}
+                        <div className="md:hidden space-y-4">
+                          {(filterDate || searchQuery ? filteredArchivedMaintenance : archivedMaintenance).map((maintenance) => (
+                            <div key={maintenance.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                              <div className="flex justify-between items-start mb-3">
+                                <div className="flex-1">
+                                  <h3 className="font-semibold text-gray-900 text-sm mb-1">{maintenance.maintenanceType}</h3>
+                                  <p className="text-xs text-gray-500 mb-2">{formatDate(maintenance.createdAt)}</p>
+                                </div>
+                                <span
+                                  className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block flex-shrink-0"
+                                  style={{ 
+                                    backgroundColor: maintenance.status === 'resolved' ? '#4CAF50' : 
+                                                    maintenance.status === 'rejected' ? '#ef4444' : 
+                                                    maintenance.status === 'in-progress' ? '#2196F3' : '#FFA500' 
+                                  }}
+                                >
+                                  {maintenance.status.toUpperCase()}
+                                </span>
+                              </div>
+                              
+                              <div className="space-y-2 mb-3">
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">User: </span>
+                                  <span className="text-xs text-gray-900">{maintenanceUserNames[maintenance.userId] || maintenance.userEmail || 'Unknown User'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">Description: </span>
+                                  <p className="text-xs text-gray-900 mt-1 break-words whitespace-pre-wrap">{maintenance.description}</p>
+                                </div>
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">Archived At: </span>
+                                  <span className="text-xs text-gray-900">{formatDate(maintenance.archivedAt)}</span>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-2 pt-3 border-t border-gray-200">
+                                <button
+                                  className="flex-1 bg-gray-900 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-800"
+                                  onClick={() => handleViewMaintenance(maintenance)}
+                                >
+                                  View
+                                </button>
+                                <button
+                                  className="flex-1 bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => handleRestoreMaintenance(maintenance.id)}
+                                  disabled={processingStatus === maintenance.id}
+                                >
+                                  {processingStatus === maintenance.id ? 'Processing...' : 'Restore'}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <div className="hidden md:block overflow-x-auto w-full">
+                          <table className="w-full border-collapse text-sm">
+                            <thead>
+                              <tr className="bg-gray-50 border-b-2 border-gray-200">
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Date</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">User</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Type</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Description</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Archived At</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                            </thead>
+                            <tbody>
+                              {(filterDate || searchQuery ? filteredArchivedMaintenance : archivedMaintenance).map((maintenance) => (
+                                <tr key={maintenance.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(maintenance.createdAt)}</td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                                    {maintenanceUserNames[maintenance.userId] || maintenance.userEmail || 'Unknown User'}
+                                  </td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{maintenance.maintenanceType}</td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top max-w-[300px] break-words whitespace-pre-wrap">
+                                    {maintenance.description}
+                                  </td>
+                                  <td className="px-4 py-4 border-b border-gray-100 align-top">
+                                    <span
+                                      className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block"
+                                      style={{ 
+                                        backgroundColor: maintenance.status === 'resolved' ? '#4CAF50' : 
+                                                        maintenance.status === 'rejected' ? '#ef4444' : 
+                                                        maintenance.status === 'in-progress' ? '#2196F3' : '#FFA500' 
+                                      }}
+                                    >
+                                      {maintenance.status.toUpperCase()}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(maintenance.archivedAt)}</td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                                    <div className="flex gap-2 items-center">
+                                      <button
+                                        className="bg-gray-900 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-800"
+                                        onClick={() => handleViewMaintenance(maintenance)}
+                                      >
+                                        View
+                                      </button>
+                                      <button
+                                        className="bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        onClick={() => handleRestoreMaintenance(maintenance.id)}
+                                        disabled={processingStatus === maintenance.id}
+                                      >
+                                        {processingStatus === maintenance.id ? 'Processing...' : 'Restore'}
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
                     )}
                   </>
                 )}
-                {activeFilter !== 'all' && activeFilter !== 'registered-residents' && activeFilter !== 'complaints' && activeFilter !== 'vehicle-registration' && activeFilter !== 'maintenance' && (
+                {activeFilter !== 'registered-residents' && activeFilter !== 'complaints' && activeFilter !== 'vehicle-registration' && activeFilter !== 'maintenance' && (
                   <div className="text-center py-20 px-5 text-gray-600">
                     <p className="text-base font-normal text-gray-600">
                       Archived {filters.find(f => f.id === activeFilter)?.label} items will appear here

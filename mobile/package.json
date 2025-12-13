@@ -28,7 +28,6 @@
     "firebase": "^10.13.2",
     "react": "19.0.0",
     "react-native": "0.79.6",
-    "react-native-maps": "^1.26.19",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
     "react-native-webview": "^13.16.0"

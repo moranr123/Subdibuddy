@@ -7,7 +7,7 @@ import { collection, query, where, onSnapshot, orderBy, Timestamp } from 'fireba
 import { FontAwesome5 } from '@expo/vector-icons';
 import { getAuthService, db } from '../firebase/config';
 
-type FilterType = 'all' | 'complaints' | 'billings-payments' | 'maintenance' | 'vehicle-registration';
+type FilterType = 'complaints' | 'billings-payments' | 'maintenance' | 'vehicle-registration';
 
 interface Complaint {
   id: string;
@@ -35,7 +35,7 @@ export default function History() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [user, setUser] = useState<any>(null);
-  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const [activeFilter, setActiveFilter] = useState<FilterType>('complaints');
   const [loading, setLoading] = useState(true);
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
 
@@ -59,7 +59,7 @@ export default function History() {
       return;
     }
 
-    if (activeFilter === 'all' || activeFilter === 'complaints') {
+    if (activeFilter === 'complaints') {
       setLoading(true);
       const q = query(
         collection(db, 'complaints'),
@@ -106,7 +106,7 @@ export default function History() {
       return;
     }
 
-    if (activeFilter === 'all' || activeFilter === 'billings-payments') {
+    if (activeFilter === 'billings-payments') {
       // Query for billings/payments - adjust collection name as needed
       const q = query(
         collection(db, 'billings'),
@@ -152,7 +152,7 @@ export default function History() {
       return;
     }
 
-    if (activeFilter === 'all' || activeFilter === 'maintenance') {
+    if (activeFilter === 'maintenance') {
       // Query for maintenance requests - adjust collection name as needed
       const q = query(
         collection(db, 'maintenance'),
@@ -197,7 +197,7 @@ export default function History() {
       return;
     }
 
-    if (activeFilter === 'all' || activeFilter === 'vehicle-registration') {
+    if (activeFilter === 'vehicle-registration') {
       // Query for vehicle registrations - adjust collection name as needed
       const q = query(
         collection(db, 'vehicleRegistrations'),
@@ -286,16 +286,9 @@ export default function History() {
     }
   };
 
-  const filteredItems = activeFilter === 'all' 
-    ? historyItems.sort((a, b) => {
-        const aDate = a.date?.toDate ? a.date.toDate().getTime() : 0;
-        const bDate = b.date?.toDate ? b.date.toDate().getTime() : 0;
-        return bDate - aDate;
-      })
-    : historyItems.filter(item => item.type === activeFilter);
+  const filteredItems = historyItems.filter(item => item.type === activeFilter);
 
   const filters: { id: FilterType; label: string }[] = [
-    { id: 'all', label: 'All' },
     { id: 'complaints', label: 'Complaints' },
     { id: 'billings-payments', label: 'Billings & Payments' },
     { id: 'maintenance', label: 'Maintenance' },
@@ -352,9 +345,7 @@ export default function History() {
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>No history found</Text>
               <Text style={styles.emptySubtext}>
-                {activeFilter === 'all' 
-                  ? 'Your history will appear here'
-                  : `No ${filters.find(f => f.id === activeFilter)?.label.toLowerCase()} history found`}
+                {`No ${filters.find(f => f.id === activeFilter)?.label.toLowerCase()} history found`}
               </Text>
             </View>
           ) : (

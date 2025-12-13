@@ -359,23 +359,23 @@ function VehicleRegistration() {
       <div className="min-h-screen bg-gray-50 w-full">
         <Header title="Vehicle Registration" />
 
-        <main className="w-full max-w-full m-0 p-10 box-border">
-          <div className="flex flex-col gap-6 w-full max-w-full">
-            <div className="w-full bg-white rounded-xl p-8 border border-gray-100 shadow-sm">
-              <div className="flex justify-between items-center mb-6">
+        <main className="w-full max-w-full m-0 p-4 md:p-6 lg:p-10 box-border">
+          <div className="flex flex-col gap-4 md:gap-6 w-full max-w-full">
+            <div className="w-full bg-white rounded-xl p-4 md:p-6 lg:p-8 border border-gray-100 shadow-sm">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 md:mb-6">
                 <h2 className="m-0 text-gray-900 text-lg font-normal">
                   {activeView === 'applications' ? 'Vehicle Registration Applications' : 'Registered Vehicles'}
                 </h2>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
                   <input
                     type="text"
                     placeholder="Search..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
+                    className="px-3 md:px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-48 md:w-64"
                   />
                   <button
-                    className="px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-200"
+                    className="px-3 md:px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-200 whitespace-nowrap"
                     onClick={handleDateFilter}
                   >
                     Filter by Date
@@ -384,9 +384,9 @@ function VehicleRegistration() {
               </div>
 
               {showDateFilter && (
-                <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-end gap-4">
-                    <div className="w-48">
+                <div className="mb-4 md:mb-6 p-3 md:p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 sm:gap-4">
+                    <div className="w-full sm:w-48">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Date</label>
                       <input
                         type="date"
@@ -417,73 +417,145 @@ function VehicleRegistration() {
                   <p className="text-base font-normal text-gray-600">No vehicle registrations found.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto w-full">
-                  <table className="w-full border-collapse text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 border-b-2 border-gray-200">
-                        <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Date</th>
-                        <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">User</th>
-                        <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Plate Number</th>
-                        <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Vehicle</th>
-                        <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Type</th>
-                        <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
-                        <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(filterDate || searchQuery ? filteredRegistrations : registrations).map((registration) => (
-                        <tr key={registration.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
-                          <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(registration.createdAt)}</td>
-                          <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
-                            {userNames[registration.userId] || registration.userEmail || 'Unknown User'}
-                          </td>
-                          <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top font-semibold">{registration.plateNumber}</td>
-                          <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
-                            {registration.make} {registration.model} ({registration.year})
-                            <br />
-                            <span className="text-xs text-gray-500">Color: {registration.color}</span>
-                          </td>
-                          <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{registration.vehicleType}</td>
-                          <td className="px-4 py-4 border-b border-gray-100 align-top">
-                            <span
-                              className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block"
-                              style={{ backgroundColor: getStatusColor(registration.status) }}
+                <>
+                  {/* Mobile Card View */}
+                  <div className="md:hidden space-y-4">
+                    {(filterDate || searchQuery ? filteredRegistrations : registrations).map((registration) => (
+                      <div key={registration.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-900 text-sm mb-1">{registration.plateNumber}</h3>
+                            <p className="text-xs text-gray-500 mb-2">{formatDate(registration.createdAt)}</p>
+                          </div>
+                          <span
+                            className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block flex-shrink-0"
+                            style={{ backgroundColor: getStatusColor(registration.status) }}
+                          >
+                            {registration.status.toUpperCase()}
+                          </span>
+                        </div>
+                        
+                        <div className="space-y-2 mb-3">
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">User: </span>
+                            <span className="text-xs text-gray-900">{userNames[registration.userId] || registration.userEmail || 'Unknown User'}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Vehicle: </span>
+                            <span className="text-xs text-gray-900">{registration.make} {registration.model} ({registration.year})</span>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Color: </span>
+                            <span className="text-xs text-gray-900">{registration.color}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Type: </span>
+                            <span className="text-xs text-gray-900">{registration.vehicleType}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2 pt-3 border-t border-gray-200">
+                          {activeView === 'applications' && registration.status !== 'rejected' && (
+                            <select
+                              className="px-2.5 py-1.5 border border-gray-200 rounded text-xs bg-white text-gray-900 cursor-pointer transition-colors hover:border-primary focus:outline-none focus:border-primary w-full"
+                              value={registration.status}
+                              onChange={(e) => handleStatusChange(registration.id, e.target.value as VehicleRegistration['status'])}
                             >
-                              {registration.status.toUpperCase()}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4 border-b border-gray-100 align-top">
-                            <div className="flex items-center gap-2">
-                              {activeView === 'applications' && registration.status !== 'rejected' && (
-                                <select
-                                  className="px-2.5 py-1.5 border border-gray-200 rounded text-xs bg-white text-gray-900 cursor-pointer transition-colors hover:border-primary focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(30,64,175,0.1)] w-32"
-                                  value={registration.status}
-                                  onChange={(e) => handleStatusChange(registration.id, e.target.value as VehicleRegistration['status'])}
-                                >
-                                  <option value="pending">Pending</option>
-                                  <option value="approved">Approve</option>
-                                  <option value="rejected">Reject</option>
-                                </select>
-                              )}
+                              <option value="pending">Pending</option>
+                              <option value="approved">Approve</option>
+                              <option value="rejected">Reject</option>
+                            </select>
+                          )}
+                          <div className="flex gap-2">
+                            <button
+                              className="flex-1 px-3 py-1.5 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors"
+                              onClick={() => handleView(registration)}
+                            >
+                              View
+                            </button>
+                            {activeView === 'applications' && (
                               <button
-                                className="px-3 py-1.5 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors whitespace-nowrap"
-                                onClick={() => handleView(registration)}
-                              >
-                                View
-                              </button>
-                              <button
-                                className="px-3 py-1.5 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors whitespace-nowrap"
+                                className="flex-1 px-3 py-1.5 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors"
                                 onClick={() => handleArchive(registration.id)}
                               >
                                 Archive
                               </button>
-                            </div>
-                          </td>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop Table View */}
+                  <div className="hidden md:block overflow-x-auto w-full">
+                    <table className="w-full border-collapse text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 border-b-2 border-gray-200">
+                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Date</th>
+                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">User</th>
+                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Plate Number</th>
+                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Vehicle</th>
+                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Type</th>
+                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
+                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {(filterDate || searchQuery ? filteredRegistrations : registrations).map((registration) => (
+                          <tr key={registration.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
+                            <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(registration.createdAt)}</td>
+                            <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                              {userNames[registration.userId] || registration.userEmail || 'Unknown User'}
+                            </td>
+                            <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top font-semibold">{registration.plateNumber}</td>
+                            <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                              {registration.make} {registration.model} ({registration.year})
+                              <br />
+                              <span className="text-xs text-gray-500">Color: {registration.color}</span>
+                            </td>
+                            <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{registration.vehicleType}</td>
+                            <td className="px-4 py-4 border-b border-gray-100 align-top">
+                              <span
+                                className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block"
+                                style={{ backgroundColor: getStatusColor(registration.status) }}
+                              >
+                                {registration.status.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 border-b border-gray-100 align-top">
+                              <div className="flex items-center gap-2">
+                                {activeView === 'applications' && registration.status !== 'rejected' && (
+                                  <select
+                                    className="px-2.5 py-1.5 border border-gray-200 rounded text-xs bg-white text-gray-900 cursor-pointer transition-colors hover:border-primary focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(30,64,175,0.1)] w-32"
+                                    value={registration.status}
+                                    onChange={(e) => handleStatusChange(registration.id, e.target.value as VehicleRegistration['status'])}
+                                  >
+                                    <option value="pending">Pending</option>
+                                    <option value="approved">Approve</option>
+                                    <option value="rejected">Reject</option>
+                                  </select>
+                                )}
+                                <button
+                                  className="px-3 py-1.5 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors whitespace-nowrap"
+                                  onClick={() => handleView(registration)}
+                                >
+                                  View
+                                </button>
+                                <button
+                                  className="px-3 py-1.5 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors whitespace-nowrap"
+                                  onClick={() => handleArchive(registration.id)}
+                                >
+                                  Archive
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
           </div>

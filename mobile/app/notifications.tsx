@@ -24,7 +24,7 @@ export default function Notifications() {
   const insets = useSafeAreaInsets();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filteredNotifications, setFilteredNotifications] = useState<Notification[]>([]);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'complaint' | 'vehicle_registration' | 'maintenance' | 'announcement'>('all');
+  const [activeFilter, setActiveFilter] = useState<'complaint' | 'vehicle_registration' | 'maintenance' | 'announcement'>('complaint');
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
 
@@ -168,9 +168,7 @@ export default function Notifications() {
 
   // Filter notifications based on active filter
   useEffect(() => {
-    if (activeFilter === 'all') {
-      setFilteredNotifications(notifications);
-    } else if (activeFilter === 'complaint') {
+    if (activeFilter === 'complaint') {
       setFilteredNotifications(
         notifications.filter(n => 
           n.type === 'complaint' || n.type === 'complaint_status'
@@ -233,21 +231,6 @@ export default function Notifications() {
             contentContainerStyle={styles.filterContainer}
             style={styles.filterScrollView}
           >
-            <TouchableOpacity
-              style={[
-                styles.filterButton,
-                activeFilter === 'all' && styles.filterButtonActive
-              ]}
-              onPress={() => setActiveFilter('all')}
-              activeOpacity={0.7}
-            >
-              <Text style={[
-                styles.filterButtonText,
-                activeFilter === 'all' && styles.filterButtonTextActive
-              ]}>
-                All
-              </Text>
-            </TouchableOpacity>
             <TouchableOpacity
               style={[
                 styles.filterButton,
@@ -320,7 +303,7 @@ export default function Notifications() {
               <Text style={styles.emptySubtext}>
                 {notifications.length === 0 
                   ? "You're all caught up!" 
-                  : `No ${activeFilter === 'all' ? '' : activeFilter === 'complaint' ? 'complaint ' : activeFilter === 'vehicle_registration' ? 'vehicle registration ' : activeFilter === 'maintenance' ? 'maintenance ' : 'announcement '}notifications`}
+                  : `No ${activeFilter === 'complaint' ? 'complaint ' : activeFilter === 'vehicle_registration' ? 'vehicle registration ' : activeFilter === 'maintenance' ? 'maintenance ' : 'announcement '}notifications`}
               </Text>
             </View>
           ) : (

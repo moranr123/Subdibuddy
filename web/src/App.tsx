@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { memo, useMemo } from 'react'
+import { SidebarProvider } from './contexts/SidebarContext'
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
 import CreateSuperAdmin from './pages/CreateSuperAdmin'
@@ -11,6 +12,7 @@ import BillingPayment from './pages/BillingPayment'
 import Maintenance from './pages/Maintenance'
 import VehicleRegistration from './pages/VehicleRegistration'
 import Archived from './pages/Archived'
+import Map from './pages/Map'
 
 function App() {
   const routes = useMemo(() => (
@@ -29,13 +31,16 @@ function App() {
       <Route path="/vehicle-registration/applications" element={<VehicleRegistration />} />
       <Route path="/vehicle-registration/registered" element={<VehicleRegistration />} />
       <Route path="/archived" element={<Archived />} />
+      <Route path="/map" element={<Map />} />
       <Route path="/create-superadmin" element={<CreateSuperAdmin />} />
     </Routes>
   ), []);
 
   return (
     <Router>
+      <SidebarProvider>
       {routes}
+      </SidebarProvider>
     </Router>
   )
 }

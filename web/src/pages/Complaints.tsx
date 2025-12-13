@@ -60,18 +60,18 @@ function Complaints() {
       setLoading(false);
       return;
     }
-
+    
     console.log('Setting up real-time listener for complaints...', { userEmail: user.email, dbExists: !!db });
     setLoading(true);
-
+      
     let q;
-    try {
+      try {
       q = query(collection(db, 'complaints'), orderBy('createdAt', 'desc'));
     } catch (error) {
       // If orderBy fails, use collection without orderBy
       q = query(collection(db, 'complaints'));
-    }
-
+      }
+      
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const complaintsData: Complaint[] = [];
       snapshot.forEach((doc) => {
@@ -101,19 +101,19 @@ function Complaints() {
           const complaintsData: Complaint[] = [];
           snapshot.forEach((doc) => {
             const data = doc.data();
-            complaintsData.push({
-              id: doc.id,
-              ...data,
-            } as Complaint);
-          });
-          
-          complaintsData.sort((a, b) => {
-            const aDate = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-            const bDate = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
-            return bDate - aDate;
-          });
-          
-          setComplaints(complaintsData);
+        complaintsData.push({
+          id: doc.id,
+          ...data,
+        } as Complaint);
+      });
+      
+      complaintsData.sort((a, b) => {
+        const aDate = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+        const bDate = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+        return bDate - aDate;
+      });
+      
+      setComplaints(complaintsData);
           applyDateFilter(complaintsData);
           setLoading(false);
         }, (error2) => {
@@ -123,8 +123,8 @@ function Complaints() {
         return () => unsubscribe2();
       } else {
         setLoading(false);
-        alert(`Failed to load complaints: ${error.message || 'Unknown error'}`);
-      }
+      alert(`Failed to load complaints: ${error.message || 'Unknown error'}`);
+    }
     });
 
     return () => unsubscribe();
@@ -153,7 +153,7 @@ function Complaints() {
               userData.email ||
               'Unknown User';
             namesMap[userId] = fullName;
-          } else {
+      } else {
             namesMap[userId] = complaints.find(c => c.userId === userId)?.userEmail || 'Unknown User';
           }
         } catch (error) {
@@ -399,23 +399,23 @@ function Complaints() {
       <div className="min-h-screen bg-gray-50 w-full">
         <Header title="Complaints" />
 
-        <main className="w-full max-w-full m-0 p-10 box-border">
-          <div className="flex flex-col gap-6 w-full max-w-full">
-            <div className="w-full bg-white rounded-xl p-8 border border-gray-100 shadow-sm">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="m-0 text-gray-900 text-lg font-normal">Resident Complaints</h2>
-                <div className="flex items-center gap-3">
+        <main className="w-full max-w-full m-0 p-4 md:p-6 lg:p-10 box-border">
+          <div className="flex flex-col gap-4 md:gap-6 w-full max-w-full">
+            <div className="w-full bg-white rounded-xl p-4 md:p-6 lg:p-8 border border-gray-100 shadow-sm">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 md:mb-6">
+                <h2 className="m-0 text-gray-900 text-base md:text-lg font-normal">Resident Complaints</h2>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
                   <input
                     type="text"
                     placeholder="Search..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
+                    className="px-3 md:px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-48 md:w-64"
                   />
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 cursor-pointer transition-colors hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="px-3 md:px-4 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 cursor-pointer transition-colors hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-auto"
                   >
                     <option value="all">All Status</option>
                     <option value="pending">Pending</option>
@@ -423,19 +423,19 @@ function Complaints() {
                     <option value="resolved">Resolved</option>
                     <option value="rejected">Rejected</option>
                   </select>
-                  <button
-                    className="px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-200"
+                <button 
+                    className="px-3 md:px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-200 whitespace-nowrap"
                     onClick={handleDateFilter}
-                  >
+                >
                     Filter by Date
-                  </button>
+                </button>
                 </div>
               </div>
 
               {showDateFilter && (
-                <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-end gap-4">
-                    <div className="w-48">
+                <div className="mb-4 md:mb-6 p-3 md:p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 sm:gap-4">
+                    <div className="w-full sm:w-48">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Date</label>
                       <input
                         type="date"
@@ -445,7 +445,7 @@ function Complaints() {
                       />
                     </div>
                     <button
-                      className="px-4 py-2 bg-gray-500 text-white rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-600"
+                      className="px-4 py-2 bg-gray-500 text-white rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-600 whitespace-nowrap"
                       onClick={handleClearDateFilter}
                     >
                       Clear
@@ -466,7 +466,71 @@ function Complaints() {
                   <p className="text-base font-normal text-gray-600">No complaints found.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto w-full">
+                <>
+                  {/* Mobile Card View */}
+                  <div className="md:hidden space-y-4">
+                    {(statusFilter !== 'all' || filterDate || searchQuery ? filteredComplaints : complaints).map((complaint) => (
+                      <div key={complaint.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-900 text-sm mb-1">{complaint.subject}</h3>
+                            <p className="text-xs text-gray-500 mb-2">{formatDate(complaint.createdAt)}</p>
+                          </div>
+                          <span
+                            className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block flex-shrink-0"
+                            style={{ backgroundColor: getStatusColor(complaint.status) }}
+                          >
+                            {complaint.status.toUpperCase()}
+                          </span>
+                        </div>
+                        
+                        <div className="space-y-2 mb-3">
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">User: </span>
+                            <span className="text-xs text-gray-900">{userNames[complaint.userId] || complaint.userEmail || 'Unknown User'}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Description: </span>
+                            <p className="text-xs text-gray-900 mt-1 break-words whitespace-pre-wrap">{complaint.description}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2 pt-3 border-t border-gray-200">
+                          {(complaint.status !== 'resolved' && complaint.status !== 'rejected') && (
+                            <select
+                              className="px-2.5 py-1.5 border border-gray-200 rounded text-xs bg-white text-gray-900 cursor-pointer transition-colors hover:border-primary focus:outline-none focus:border-primary w-full"
+                              value={complaint.status}
+                              onChange={(e) => handleStatusChange(complaint.id, e.target.value as Complaint['status'])}
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="in-progress">In Progress</option>
+                              <option value="resolved">Resolved</option>
+                              <option value="rejected">Reject</option>
+                            </select>
+                          )}
+                          <div className="flex gap-2">
+                            <button
+                              className="flex-1 px-3 py-1.5 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors"
+                              onClick={() => handleView(complaint)}
+                            >
+                              View
+                            </button>
+                            {complaint.status !== 'in-progress' && (
+                              <button
+                                className="flex-1 px-3 py-1.5 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors"
+                                onClick={() => handleArchive(complaint.id)}
+                              >
+                                Archive
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop Table View */}
+                  <div className="hidden md:block overflow-x-auto w-full">
                   <table className="w-full border-collapse text-sm">
                     <thead>
                       <tr className="bg-gray-50 border-b-2 border-gray-200">
@@ -479,12 +543,12 @@ function Complaints() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(statusFilter !== 'all' || filterDate || searchQuery ? filteredComplaints : complaints).map((complaint) => (
+                        {(statusFilter !== 'all' || filterDate || searchQuery ? filteredComplaints : complaints).map((complaint) => (
                         <tr key={complaint.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
                           <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(complaint.createdAt)}</td>
-                          <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
-                            {userNames[complaint.userId] || complaint.userEmail || 'Unknown User'}
-                          </td>
+                            <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                              {userNames[complaint.userId] || complaint.userEmail || 'Unknown User'}
+                            </td>
                           <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{complaint.subject}</td>
                           <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top max-w-[300px] break-words whitespace-pre-wrap">
                             {complaint.description}
@@ -498,40 +562,41 @@ function Complaints() {
                             </span>
                           </td>
                           <td className="px-4 py-4 border-b border-gray-100 align-top">
-                            <div className="flex items-center gap-2">
-                              {(complaint.status !== 'resolved' && complaint.status !== 'rejected') && (
-                                <select
-                                  className="px-2.5 py-1.5 border border-gray-200 rounded text-xs bg-white text-gray-900 cursor-pointer transition-colors hover:border-primary focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(30,64,175,0.1)] w-32"
-                                  value={complaint.status}
-                                  onChange={(e) => handleStatusChange(complaint.id, e.target.value as Complaint['status'])}
-                                >
-                                  <option value="pending">Pending</option>
-                                  <option value="in-progress">In Progress</option>
-                                  <option value="resolved">Resolved</option>
-                                  <option value="rejected">Reject</option>
-                                </select>
-                              )}
-                              <button
-                                className="px-3 py-1.5 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors whitespace-nowrap"
-                                onClick={() => handleView(complaint)}
-                              >
-                                View
-                              </button>
-                              {complaint.status !== 'in-progress' && (
+                              <div className="flex items-center gap-2">
+                                {(complaint.status !== 'resolved' && complaint.status !== 'rejected') && (
+                            <select
+                                    className="px-2.5 py-1.5 border border-gray-200 rounded text-xs bg-white text-gray-900 cursor-pointer transition-colors hover:border-primary focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(30,64,175,0.1)] w-32"
+                              value={complaint.status}
+                              onChange={(e) => handleStatusChange(complaint.id, e.target.value as Complaint['status'])}
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="in-progress">In Progress</option>
+                              <option value="resolved">Resolved</option>
+                                    <option value="rejected">Reject</option>
+                            </select>
+                                )}
                                 <button
-                                  className="px-3 py-1.5 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors whitespace-nowrap"
-                                  onClick={() => handleArchive(complaint.id)}
+                                  className="px-3 py-1.5 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors whitespace-nowrap"
+                                  onClick={() => handleView(complaint)}
                                 >
-                                  Archive
+                                  View
                                 </button>
-                              )}
-                            </div>
+                                {complaint.status !== 'in-progress' && (
+                                  <button
+                                    className="px-3 py-1.5 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors whitespace-nowrap"
+                                    onClick={() => handleArchive(complaint.id)}
+                                  >
+                                    Archive
+                                  </button>
+                                )}
+                              </div>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
             </div>
           </div>
@@ -540,8 +605,8 @@ function Complaints() {
 
       {/* View Complaint Modal */}
       {showViewModal && viewingComplaint && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={handleCloseView}>
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={handleCloseView}>
+          <div className="bg-white rounded-lg p-4 md:p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold text-gray-900">Complaint Details</h2>
               <button
