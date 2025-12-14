@@ -35,7 +35,9 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Allow Subdibuddy to use your location to help you find nearby services."
         }
-      ]
+      ],
+      "expo-asset",
+      "expo-font"
     ],
     "scheme": "subdibuddy",
     "sdkVersion": "53.0.0",
@@ -44,4 +46,3 @@
     }
   }
 }
-
