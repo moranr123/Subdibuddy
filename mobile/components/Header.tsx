@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { FontAwesome5 } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { memo, useCallback, useMemo } from 'react';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -19,10 +19,10 @@ function Header({ onMenuPress, onNotificationPress, notificationCount = 0 }: Hea
 
   const navigationItems = useMemo(() => [
     { key: 'home', route: '/home', icon: 'home', label: 'Home' },
-    { key: 'complaints', route: '/complaints', icon: 'exclamation-triangle', label: 'Complaints' },
-    { key: 'billing', route: '/billing', icon: 'dollar-sign', label: 'Billing' },
-    { key: 'maintenance', route: '/maintenance', icon: 'tools', label: 'Maintenance' },
-    { key: 'vehicle-registration', route: '/vehicle-registration', icon: 'car', label: 'Vehicle' },
+    { key: 'complaints', route: '/complaints', icon: 'report-problem', label: 'Complaints' },
+    { key: 'billing', route: '/billing', icon: 'payments', label: 'Billing' },
+    { key: 'maintenance', route: '/maintenance', icon: 'build', label: 'Maintenance' },
+    { key: 'vehicle-registration', route: '/vehicle-registration', icon: 'directions-car', label: 'Vehicle' },
   ], []);
 
   const handleNavigation = useCallback((route: string) => {
@@ -43,7 +43,7 @@ function Header({ onMenuPress, onNotificationPress, notificationCount = 0 }: Hea
           onPress={onMenuPress}
           activeOpacity={0.7}
         >
-          <FontAwesome5 name="bars" size={SCREEN_WIDTH < 375 ? 20 : SCREEN_WIDTH < 414 ? 22 : 24} color="#000000" />
+          <MaterialIcons name="menu" size={SCREEN_WIDTH < 375 ? 20 : SCREEN_WIDTH < 414 ? 22 : 24} color="#000000" />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
           <Image 
@@ -59,7 +59,7 @@ function Header({ onMenuPress, onNotificationPress, notificationCount = 0 }: Hea
           activeOpacity={0.7}
         >
           <View style={styles.notificationIconContainer}>
-            <FontAwesome5 name="bell" size={SCREEN_WIDTH < 375 ? 20 : SCREEN_WIDTH < 414 ? 22 : 24} color="#000000" />
+            <MaterialIcons name="notifications" size={SCREEN_WIDTH < 375 ? 20 : SCREEN_WIDTH < 414 ? 22 : 24} color="#000000" />
             {notificationCount > 0 && (
               <View style={styles.notificationBadge}>
                 <Text style={styles.notificationBadgeText}>
@@ -83,11 +83,10 @@ function Header({ onMenuPress, onNotificationPress, notificationCount = 0 }: Hea
             onPress={() => handleNavigation(item.route)}
             activeOpacity={0.7}
           >
-            <FontAwesome5 
+            <MaterialIcons 
               name={item.icon as any} 
               size={SCREEN_WIDTH < 375 ? 20 : SCREEN_WIDTH < 414 ? 22 : 24} 
               color={isActive(item.route) ? '#1877F2' : '#000000'}
-              solid={isActive(item.route)}
             />
             <Text 
               style={[

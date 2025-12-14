@@ -47,7 +47,7 @@ interface Notification {
 
 interface UnifiedNotification {
   id: string;
-  type: 'application' | 'complaint' | 'vehicle_registration' | 'maintenance';
+  type: 'application' | 'complaint' | 'vehicle_registration' | 'maintenance' | 'visitor_registration';
   createdAt: Timestamp;
   data: PendingApplication | Notification;
 }
@@ -71,6 +71,7 @@ function Header({
   const [complaintNotifications, setComplaintNotifications] = useState<Notification[]>([]);
   const [vehicleRegistrationNotifications, setVehicleRegistrationNotifications] = useState<Notification[]>([]);
   const [maintenanceNotifications, setMaintenanceNotifications] = useState<Notification[]>([]);
+  const [visitorRegistrationNotifications, setVisitorRegistrationNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -114,6 +115,7 @@ function Header({
       const complaintNotifs: Notification[] = [];
       const vehicleNotifs: Notification[] = [];
       const maintenanceNotifs: Notification[] = [];
+      const visitorNotifs: Notification[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
         // Only show admin notifications that are unread
@@ -128,6 +130,8 @@ function Header({
             maintenanceNotifs.push(notification);
           } else if (data.type === 'complaint' || data.type === 'complaint_status') {
             complaintNotifs.push(notification);
+          } else if (data.type === 'visitor_registration' || data.type === 'visitor_registration_status') {
+            visitorNotifs.push(notification);
           }
         }
       });
@@ -147,9 +151,15 @@ function Header({
         const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
         return bTime - aTime;
       });
+      visitorNotifs.sort((a, b) => {
+        const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+        const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+        return bTime - aTime;
+      });
       setComplaintNotifications(complaintNotifs);
       setVehicleRegistrationNotifications(vehicleNotifs);
       setMaintenanceNotifications(maintenanceNotifs);
+      setVisitorRegistrationNotifications(visitorNotifs);
     }, (error) => {
       console.error('Error listening to notifications:', error);
     });
@@ -204,6 +214,16 @@ function Header({
       });
     });
     
+    // Add visitor registration notifications
+    visitorRegistrationNotifications.forEach(notif => {
+      unified.push({
+        id: notif.id,
+        type: 'visitor_registration',
+        createdAt: notif.createdAt,
+        data: notif,
+      });
+    });
+    
     // Sort by createdAt descending (newest first)
     unified.sort((a, b) => {
       const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
@@ -216,8 +236,8 @@ function Header({
 
   // Calculate total notification count
   useEffect(() => {
-    setNotificationCount(pendingApplications.length + complaintNotifications.length + vehicleRegistrationNotifications.length + maintenanceNotifications.length);
-  }, [pendingApplications, complaintNotifications, vehicleRegistrationNotifications, maintenanceNotifications]);
+    setNotificationCount(pendingApplications.length + complaintNotifications.length + vehicleRegistrationNotifications.length + maintenanceNotifications.length + visitorRegistrationNotifications.length);
+  }, [pendingApplications, complaintNotifications, vehicleRegistrationNotifications, maintenanceNotifications, visitorRegistrationNotifications]);
 
   // Close notification dropdown when clicking outside
   useEffect(() => {
@@ -254,6 +274,11 @@ function Header({
   const handleViewMaintenance = () => {
     setShowNotifications(false);
     navigate('/maintenance');
+  };
+
+  const handleViewVisitorRegistrations = () => {
+    setShowNotifications(false);
+    navigate('/visitor-pre-registration');
   };
 
   const formatTimeAgo = (timestamp: Timestamp | undefined) => {
@@ -434,6 +459,39 @@ function Header({
                                     <div className="flex-1 min-w-0">
                                       <p className="text-xs sm:text-sm font-medium text-gray-900 line-clamp-1">
                                         Vehicle Registration
+                                      </p>
+                                    </div>
+                                    <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0 ml-2">
+                                      {formatTimeAgo(notification.createdAt)}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-600 mt-1.5 line-clamp-2">
+                                    {notification.message}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        } else if (unified.type === 'visitor_registration') {
+                          const notification = unified.data as Notification;
+                          return (
+                            <div
+                              key={unified.id}
+                              className="px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors"
+                              onClick={handleViewVisitorRegistrations}
+                            >
+                              <div className="flex items-start gap-2 sm:gap-3">
+                                {/* Avatar */}
+                                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-pink-500 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-white text-xs sm:text-sm font-medium">👤</span>
+                                </div>
+                                
+                                {/* Content */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs sm:text-sm font-medium text-gray-900 line-clamp-1">
+                                        {notification.subject || 'Visitor Registration'}
                                       </p>
                                     </div>
                                     <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0 ml-2">

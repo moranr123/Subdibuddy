@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOut } from 'firebase/auth';
 import { getAuthService } from '../firebase/config';
 import { Alert } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -77,7 +78,7 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
               <Text style={styles.sidebarTitle}>Menu</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.sidebarCloseButton}>
-              <Text style={styles.sidebarCloseText}>✕</Text>
+              <MaterialIcons name="close" size={24} color="#6b7280" />
             </TouchableOpacity>
           </View>
 
@@ -93,6 +94,12 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
               }}
               activeOpacity={0.7}
             >
+              <MaterialIcons 
+                name="person" 
+                size={24} 
+                color={isActive('/profile') ? '#1877F2' : '#111827'} 
+                style={styles.sidebarItemIcon}
+              />
               <Text style={[
                 styles.sidebarItemText,
                 isActive('/profile') ? styles.sidebarItemTextActive : null
@@ -110,6 +117,12 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
               }}
               activeOpacity={0.7}
             >
+              <MaterialIcons 
+                name="history" 
+                size={24} 
+                color={isActive('/history') ? '#1877F2' : '#111827'} 
+                style={styles.sidebarItemIcon}
+              />
               <Text style={[
                 styles.sidebarItemText,
                 isActive('/history') ? styles.sidebarItemTextActive : null
@@ -127,10 +140,39 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
               }}
               activeOpacity={0.7}
             >
+              <MaterialIcons 
+                name="directions-car" 
+                size={24} 
+                color={isActive('/registered-vehicles') ? '#1877F2' : '#111827'} 
+                style={styles.sidebarItemIcon}
+              />
               <Text style={[
                 styles.sidebarItemText,
                 isActive('/registered-vehicles') ? styles.sidebarItemTextActive : null
               ]}>Registered Vehicles</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.sidebarItem,
+                isActive('/visitor-pre-registration') ? styles.sidebarItemActive : null
+              ]}
+              onPress={() => {
+                onClose();
+                router.push('/visitor-pre-registration');
+              }}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons 
+                name="person-add" 
+                size={24} 
+                color={isActive('/visitor-pre-registration') ? '#1877F2' : '#111827'} 
+                style={styles.sidebarItemIcon}
+              />
+              <Text style={[
+                styles.sidebarItemText,
+                isActive('/visitor-pre-registration') ? styles.sidebarItemTextActive : null
+              ]}>Visitor Pre-registration</Text>
             </TouchableOpacity>
 
             <View style={styles.sidebarDivider} />
@@ -140,6 +182,12 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
               onPress={handleSignOut}
               activeOpacity={0.8}
             >
+              <MaterialIcons 
+                name="logout" 
+                size={24} 
+                color="#ffffff" 
+                style={styles.sidebarItemIcon}
+              />
               <Text style={styles.sidebarItemSignOutText}>Sign Out</Text>
             </TouchableOpacity>
           </ScrollView>
@@ -215,7 +263,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     minHeight: 44,
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sidebarItemIcon: {
+    marginRight: 12,
   },
   sidebarItemText: {
     fontSize: 16,

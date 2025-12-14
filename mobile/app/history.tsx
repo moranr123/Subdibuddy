@@ -7,7 +7,7 @@ import { collection, query, where, onSnapshot, orderBy, Timestamp } from 'fireba
 import { FontAwesome5 } from '@expo/vector-icons';
 import { getAuthService, db } from '../firebase/config';
 
-type FilterType = 'complaints' | 'billings-payments' | 'maintenance' | 'vehicle-registration';
+type FilterType = 'all' | 'complaints' | 'billings-payments' | 'maintenance' | 'vehicle-registration' | 'visitor-registration';
 
 interface Complaint {
   id: string;
@@ -35,7 +35,7 @@ export default function History() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [user, setUser] = useState<any>(null);
-  const [activeFilter, setActiveFilter] = useState<FilterType>('complaints');
+  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [loading, setLoading] = useState(true);
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
 
@@ -59,8 +59,10 @@ export default function History() {
       return;
     }
 
-    if (activeFilter === 'complaints') {
-      setLoading(true);
+    if (activeFilter === 'complaints' || activeFilter === 'all') {
+      if (activeFilter === 'complaints') {
+        setLoading(true);
+      }
       const q = query(
         collection(db, 'complaints'),
         where('userId', '==', user.uid),
@@ -86,10 +88,14 @@ export default function History() {
           const filtered = prev.filter(item => item.type !== 'complaints');
           return [...filtered, ...items];
         });
-        setLoading(false);
+        if (activeFilter === 'complaints') {
+          setLoading(false);
+        }
       }, (error: any) => {
         console.error('Error fetching complaints:', error);
-        setLoading(false);
+        if (activeFilter === 'complaints') {
+          setLoading(false);
+        }
       });
 
       return () => unsubscribe();
@@ -106,7 +112,7 @@ export default function History() {
       return;
     }
 
-    if (activeFilter === 'billings-payments') {
+    if (activeFilter === 'billings-payments' || activeFilter === 'all') {
       // Query for billings/payments - adjust collection name as needed
       const q = query(
         collection(db, 'billings'),
@@ -152,7 +158,7 @@ export default function History() {
       return;
     }
 
-    if (activeFilter === 'maintenance') {
+    if (activeFilter === 'maintenance' || activeFilter === 'all') {
       // Query for maintenance requests - adjust collection name as needed
       const q = query(
         collection(db, 'maintenance'),
@@ -197,7 +203,7 @@ export default function History() {
       return;
     }
 
-    if (activeFilter === 'vehicle-registration') {
+    if (activeFilter === 'vehicle-registration' || activeFilter === 'all') {
       // Query for vehicle registrations - adjust collection name as needed
       const q = query(
         collection(db, 'vehicleRegistrations'),
@@ -226,6 +232,101 @@ export default function History() {
       }, (error: any) => {
         console.error('Error fetching vehicle registrations:', error);
         // If collection doesn't exist, just continue
+      });
+
+      return () => unsubscribe();
+    }
+  }, [user, activeFilter, db]);
+
+  // Fetch visitor registration history
+  useEffect(() => {
+    if (!db || !user || !user?.uid) {
+      return;
+    }
+    
+    if (activeFilter !== 'all' && activeFilter !== 'visitor-registration') {
+      return;
+    }
+
+    if (activeFilter === 'visitor-registration' || activeFilter === 'all') {
+      if (activeFilter === 'visitor-registration') {
+        setLoading(true);
+      }
+      // Query for visitor registrations
+      const q = query(
+        collection(db, 'visitors'),
+        where('residentId', '==', user.uid),
+        orderBy('createdAt', 'desc')
+      );
+
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const items: HistoryItem[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          items.push({
+            id: doc.id,
+            type: 'visitor-registration',
+            title: data.visitorName || 'Visitor Registration',
+            description: `Visit on ${data.visitorDate || 'N/A'} at ${data.visitorTime || 'N/A'}. Purpose: ${data.visitorPurpose || 'N/A'}`,
+            status: data.status,
+            date: data.createdAt,
+            ...data,
+          } as HistoryItem);
+        });
+        setHistoryItems(prev => {
+          const filtered = prev.filter(item => item.type !== 'visitor-registration');
+          return [...filtered, ...items];
+        });
+        if (activeFilter === 'visitor-registration') {
+          setLoading(false);
+        }
+      }, (error: any) => {
+        console.error('Error fetching visitor registrations:', error);
+        // If error is about missing index, try without orderBy
+        if (error.code === 'failed-precondition' || error.message?.includes('index')) {
+          const q2 = query(
+            collection(db, 'visitors'),
+            where('residentId', '==', user.uid)
+          );
+          const unsubscribe2 = onSnapshot(q2, (snapshot) => {
+            const items: HistoryItem[] = [];
+            snapshot.forEach((doc) => {
+              const data = doc.data();
+              items.push({
+                id: doc.id,
+                type: 'visitor-registration',
+                title: data.visitorName || 'Visitor Registration',
+                description: `Visit on ${data.visitorDate || 'N/A'} at ${data.visitorTime || 'N/A'}. Purpose: ${data.visitorPurpose || 'N/A'}`,
+                status: data.status,
+                date: data.createdAt,
+                ...data,
+              } as HistoryItem);
+            });
+            // Sort by createdAt descending
+            items.sort((a, b) => {
+              const aDate = a.date?.toDate ? a.date.toDate().getTime() : 0;
+              const bDate = b.date?.toDate ? b.date.toDate().getTime() : 0;
+              return bDate - aDate;
+            });
+            setHistoryItems(prev => {
+              const filtered = prev.filter(item => item.type !== 'visitor-registration');
+              return [...filtered, ...items];
+            });
+            if (activeFilter === 'visitor-registration') {
+              setLoading(false);
+            }
+          }, (error2: any) => {
+            console.error('Error fetching visitor registrations:', error2);
+            if (activeFilter === 'visitor-registration') {
+              setLoading(false);
+            }
+          });
+          return () => unsubscribe2();
+        } else {
+          if (activeFilter === 'visitor-registration') {
+            setLoading(false);
+          }
+        }
       });
 
       return () => unsubscribe();
@@ -267,6 +368,7 @@ export default function History() {
       case 'billings-payments': return 'Billing & Payment';
       case 'maintenance': return 'Maintenance';
       case 'vehicle-registration': return 'Vehicle Registration';
+      case 'visitor-registration': return 'Visitor Registration';
       default: return 'Unknown';
     }
   };
@@ -281,18 +383,33 @@ export default function History() {
         return { name: 'tools', color: '#8b5cf6' };
       case 'vehicle-registration':
         return { name: 'car', color: '#1877F2' };
+      case 'visitor-registration':
+        return { name: 'user-plus', color: '#ec4899' };
       default:
         return { name: 'bell', color: '#6b7280' };
     }
   };
 
-  const filteredItems = historyItems.filter(item => item.type === activeFilter);
+  // Sort items by date when showing all
+  const sortedItems = activeFilter === 'all'
+    ? [...historyItems].sort((a, b) => {
+        const aDate = a.date?.toDate ? a.date.toDate().getTime() : 0;
+        const bDate = b.date?.toDate ? b.date.toDate().getTime() : 0;
+        return bDate - aDate; // Descending order (newest first)
+      })
+    : historyItems;
+
+  const filteredItems = activeFilter === 'all' 
+    ? sortedItems 
+    : sortedItems.filter(item => item.type === activeFilter);
 
   const filters: { id: FilterType; label: string }[] = [
+    { id: 'all', label: 'All' },
     { id: 'complaints', label: 'Complaints' },
     { id: 'billings-payments', label: 'Billings & Payments' },
     { id: 'maintenance', label: 'Maintenance' },
     { id: 'vehicle-registration', label: 'Vehicle Registration' },
+    { id: 'visitor-registration', label: 'Visitor Registration' },
   ];
 
   return (
@@ -345,7 +462,9 @@ export default function History() {
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>No history found</Text>
               <Text style={styles.emptySubtext}>
-                {`No ${filters.find(f => f.id === activeFilter)?.label.toLowerCase()} history found`}
+                {activeFilter === 'all' 
+                  ? 'No history found' 
+                  : `No ${filters.find(f => f.id === activeFilter)?.label.toLowerCase()} history found`}
               </Text>
             </View>
           ) : (

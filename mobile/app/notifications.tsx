@@ -24,7 +24,7 @@ export default function Notifications() {
   const insets = useSafeAreaInsets();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filteredNotifications, setFilteredNotifications] = useState<Notification[]>([]);
-  const [activeFilter, setActiveFilter] = useState<'complaint' | 'vehicle_registration' | 'maintenance' | 'announcement'>('complaint');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'complaint' | 'vehicle_registration' | 'maintenance' | 'announcement' | 'visitor_registration'>('all');
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
 
@@ -161,6 +161,8 @@ export default function Notifications() {
       return { name: 'tools', color: '#8b5cf6' };
     } else if (type === 'announcement') {
       return { name: 'bullhorn', color: '#10b981' };
+    } else if (type === 'visitor_registration' || type === 'visitor_registration_status') {
+      return { name: 'user-plus', color: '#ec4899' };
     } else {
       return { name: 'bell', color: '#6b7280' };
     }
@@ -168,7 +170,9 @@ export default function Notifications() {
 
   // Filter notifications based on active filter
   useEffect(() => {
-    if (activeFilter === 'complaint') {
+    if (activeFilter === 'all') {
+      setFilteredNotifications(notifications);
+    } else if (activeFilter === 'complaint') {
       setFilteredNotifications(
         notifications.filter(n => 
           n.type === 'complaint' || n.type === 'complaint_status'
@@ -189,6 +193,12 @@ export default function Notifications() {
     } else if (activeFilter === 'announcement') {
       setFilteredNotifications(
         notifications.filter(n => n.type === 'announcement')
+      );
+    } else if (activeFilter === 'visitor_registration') {
+      setFilteredNotifications(
+        notifications.filter(n => 
+          n.type === 'visitor_registration' || n.type === 'visitor_registration_status'
+        )
       );
     }
   }, [notifications, activeFilter]);
@@ -231,6 +241,21 @@ export default function Notifications() {
             contentContainerStyle={styles.filterContainer}
             style={styles.filterScrollView}
           >
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                activeFilter === 'all' && styles.filterButtonActive
+              ]}
+              onPress={() => setActiveFilter('all')}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                activeFilter === 'all' && styles.filterButtonTextActive
+              ]}>
+                All
+              </Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[
                 styles.filterButton,
@@ -291,6 +316,21 @@ export default function Notifications() {
                 Announcements
               </Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                activeFilter === 'visitor_registration' && styles.filterButtonActive
+              ]}
+              onPress={() => setActiveFilter('visitor_registration')}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                activeFilter === 'visitor_registration' && styles.filterButtonTextActive
+              ]}>
+                Visitor
+              </Text>
+            </TouchableOpacity>
           </ScrollView>
           
           {loading ? (
@@ -303,7 +343,9 @@ export default function Notifications() {
               <Text style={styles.emptySubtext}>
                 {notifications.length === 0 
                   ? "You're all caught up!" 
-                  : `No ${activeFilter === 'complaint' ? 'complaint ' : activeFilter === 'vehicle_registration' ? 'vehicle registration ' : activeFilter === 'maintenance' ? 'maintenance ' : 'announcement '}notifications`}
+                  : activeFilter === 'all'
+                  ? 'No notifications found'
+                  : `No ${activeFilter === 'complaint' ? 'complaint ' : activeFilter === 'vehicle_registration' ? 'vehicle registration ' : activeFilter === 'maintenance' ? 'maintenance ' : activeFilter === 'announcement' ? 'announcement ' : 'visitor registration '}notifications`}
               </Text>
             </View>
           ) : (
@@ -347,6 +389,8 @@ export default function Notifications() {
                                 ? 'Maintenance Update'
                                 : notification.type === 'announcement'
                                 ? 'Announcement'
+                                : notification.type === 'visitor_registration' || notification.type === 'visitor_registration_status'
+                                ? 'Visitor Registration Update'
                                 : 'Complaint Update')}
                           </Text>
                           {!notification.isRead && (

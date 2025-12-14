@@ -35,6 +35,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [pendingVehicleRegistrationsCount, setPendingVehicleRegistrationsCount] = useState(0);
   const [pendingMaintenanceCount, setPendingMaintenanceCount] = useState(0);
   const [pendingApplicationsCount, setPendingApplicationsCount] = useState(0);
+  const [pendingVisitorsCount, setPendingVisitorsCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -175,6 +176,42 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
     });
 
     return () => unsubscribe();
+  }, [db]);
+
+  // Listen to pending visitor registrations
+  useEffect(() => {
+    if (!db) return;
+
+    let unsubscribe: (() => void) | null = null;
+
+    const q = query(
+      collection(db, 'visitors'),
+      where('status', '==', 'pending')
+    );
+
+    unsubscribe = onSnapshot(q, (snapshot) => {
+      setPendingVisitorsCount(snapshot.size);
+    }, (error: any) => {
+      console.error('Error listening to pending visitors:', error);
+      // Fallback: fetch all and filter client-side
+      if (error.code === 'failed-precondition' || error.message?.includes('index')) {
+        const q2 = query(collection(db, 'visitors'));
+        unsubscribe = onSnapshot(q2, (snapshot2) => {
+          let count = 0;
+          snapshot2.forEach((doc) => {
+            const data = doc.data();
+            if (data.status === 'pending') {
+              count++;
+            }
+          });
+          setPendingVisitorsCount(count);
+        });
+      }
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, [db]);
 
   return (
@@ -360,6 +397,8 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
               badgeCount = pendingComplaintsCount;
             } else if (item.path === '/maintenance') {
               badgeCount = pendingMaintenanceCount;
+            } else if (item.path === '/visitor-pre-registration') {
+              badgeCount = pendingVisitorsCount;
             }
 
             return (
