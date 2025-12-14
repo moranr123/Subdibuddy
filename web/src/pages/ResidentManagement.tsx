@@ -813,10 +813,10 @@ function ResidentManagement() {
         </main>
 
         {showMapModal && selectedLocation && (
-          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-5" onClick={() => setShowMapModal(false)}>
-            <div className="bg-white rounded-2xl w-full max-w-[900px] max-h-[90vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
-              <div className="flex justify-between items-center px-6 py-5 border-b border-gray-200">
-                <h3 className="m-0 text-gray-900 text-xl font-normal">Resident Location</h3>
+          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-4 sm:p-5" onClick={() => setShowMapModal(false)}>
+            <div className="bg-white rounded-lg sm:rounded-2xl w-full max-w-[900px] max-h-[95vh] sm:max-h-[90vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200">
+                <h3 className="m-0 text-gray-900 text-lg sm:text-xl font-normal">Resident Location</h3>
                 <button 
                   className="bg-none border-none text-2xl text-gray-600 cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded transition-all hover:bg-gray-100 hover:text-gray-900"
                   onClick={() => setShowMapModal(false)}
@@ -824,7 +824,7 @@ function ResidentManagement() {
                   ✕
                 </button>
               </div>
-              <div className="w-full h-[500px] relative overflow-hidden">
+              <div className="w-full h-[300px] sm:h-[500px] relative overflow-hidden">
                 <iframe
                   src={`https://www.openstreetmap.org/export/embed.html?bbox=${selectedLocation.longitude - 0.01},${selectedLocation.latitude - 0.01},${selectedLocation.longitude + 0.01},${selectedLocation.latitude + 0.01}&layer=mapnik&marker=${selectedLocation.latitude},${selectedLocation.longitude}`}
                   width="100%"
@@ -833,15 +833,15 @@ function ResidentManagement() {
                   title="Resident Location Map"
                 />
               </div>
-              <div className="px-6 py-5 border-t border-gray-200 flex justify-between items-center">
-                <p className="m-0 text-gray-600 text-sm">
+              <div className="px-4 sm:px-6 py-4 sm:py-5 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
+                <p className="m-0 text-gray-600 text-xs sm:text-sm break-all sm:break-normal">
                   Coordinates: {selectedLocation.latitude.toFixed(6)}, {selectedLocation.longitude.toFixed(6)}
                 </p>
                 <a
                   href={`https://www.openstreetmap.org/?mlat=${selectedLocation.latitude}&mlon=${selectedLocation.longitude}&zoom=15`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="bg-primary text-white no-underline px-5 py-2.5 rounded-md text-sm font-medium transition-all inline-block hover:bg-primary-dark hover:-translate-y-0.5"
+                  className="bg-primary text-white no-underline px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all inline-block hover:bg-primary-dark hover:-translate-y-0.5 w-full sm:w-auto text-center"
                 >
                   Open in OpenStreetMap
                 </a>
@@ -851,10 +851,10 @@ function ResidentManagement() {
         )}
 
         {showDetailsModal && selectedResident && (
-          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-5" onClick={() => setShowDetailsModal(false)}>
-            <div className="bg-white rounded-2xl w-full max-w-[800px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-              <div className="flex justify-between items-center px-6 py-5 border-b border-gray-200">
-                <h3 className="m-0 text-gray-900 text-xl font-normal">Resident Details</h3>
+          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-4 sm:p-5" onClick={() => setShowDetailsModal(false)}>
+            <div className="bg-white rounded-lg sm:rounded-2xl w-full max-w-[800px] max-h-[95vh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200">
+                <h3 className="m-0 text-gray-900 text-lg sm:text-xl font-normal">Resident Details</h3>
                 <button 
                   className="bg-none border-none text-2xl text-gray-600 cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded transition-all hover:bg-gray-100 hover:text-gray-900"
                   onClick={() => setShowDetailsModal(false)}
@@ -862,8 +862,8 @@ function ResidentManagement() {
                   ✕
                 </button>
               </div>
-              <div className="overflow-y-auto px-6 py-5">
-                <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="overflow-y-auto px-4 sm:px-6 py-4 sm:py-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                   <div>
                     <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Status</label>
                     <div>{getStatusBadge(selectedResident.status)}</div>
@@ -960,11 +960,11 @@ function ResidentManagement() {
                   </div>
                 )}
               </div>
-              <div className="px-6 py-5 border-t border-gray-200 flex justify-end gap-3">
+              <div className="px-4 sm:px-6 py-4 sm:py-5 border-t border-gray-200 flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
                 {activeView === 'applications' && (
                   <>
                     <button
-                      className="bg-green-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="bg-green-600 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                       onClick={async () => {
                         const success = await handleApprove(selectedResident.id);
                         // Only close modal on success
@@ -977,7 +977,7 @@ function ResidentManagement() {
                       {processingStatus === selectedResident.id ? 'Processing...' : 'Approve'}
                     </button>
                     <button
-                      className="bg-red-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="bg-red-600 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                       onClick={async () => {
                         const success = await handleReject(selectedResident.id);
                         // Only close modal on success
@@ -993,7 +993,7 @@ function ResidentManagement() {
                 )}
                 {activeView === 'registered' && selectedResident.status !== 'deactivated' && selectedResident.status !== 'archived' && (
                   <button
-                    className="bg-orange-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-orange-600 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                     onClick={() => {
                       handleDeactivate(selectedResident.id);
                       setShowDetailsModal(false);
@@ -1005,7 +1005,7 @@ function ResidentManagement() {
                 )}
                 {activeView === 'registered' && selectedResident.status === 'deactivated' && (
                   <button
-                    className="bg-green-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-green-600 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                     onClick={() => {
                       handleActivate(selectedResident.id);
                       setShowDetailsModal(false);
@@ -1017,7 +1017,7 @@ function ResidentManagement() {
                 )}
                 {activeView === 'registered' && selectedResident.status !== 'archived' && (
                   <button
-                    className="bg-purple-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-purple-600 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                     onClick={() => {
                       handleArchive(selectedResident.id);
                       setShowDetailsModal(false);
@@ -1028,7 +1028,7 @@ function ResidentManagement() {
                   </button>
                 )}
                 <button
-                  className="bg-gray-900 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-gray-800"
+                  className="bg-gray-900 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-gray-800 w-full sm:w-auto"
                   onClick={() => setShowDetailsModal(false)}
                 >
                   Close

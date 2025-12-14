@@ -296,7 +296,7 @@ function Header({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
-              <h1 className="text-lg md:text-xl m-0 text-gray-900 font-normal whitespace-nowrap">{title}</h1>
+              <h1 className="text-base sm:text-lg md:text-xl m-0 text-gray-900 font-normal truncate max-w-[200px] sm:max-w-none">{title}</h1>
             </div>
             <div className="relative flex-shrink-0" ref={notificationRef}>
             <button 
@@ -315,7 +315,7 @@ function Header({
             
             {/* Notification dropdown - Facebook style */}
             {showNotifications && (
-              <div className="absolute right-0 sm:right-0 mt-2 w-[calc(100vw-1rem)] sm:w-96 max-w-sm bg-white rounded-lg shadow-2xl border border-gray-200 z-50 overflow-hidden">
+              <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-96 max-w-sm bg-white rounded-lg shadow-2xl border border-gray-200 z-50 overflow-hidden">
                 <div className="p-3 sm:p-4 border-b border-gray-200 bg-gray-50">
                   <div className="flex justify-between items-center">
                     <h3 className="text-sm sm:text-base font-semibold text-gray-900">Notifications</h3>
@@ -509,7 +509,7 @@ function Header({
                       // showSuggestions will be managed by parent
                     }
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   disabled={isSearching}
                 />
                 {/* Suggestions Dropdown */}

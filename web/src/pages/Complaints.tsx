@@ -1,7 +1,7 @@
 import { useEffect, useState, memo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs, query, orderBy, updateDoc, doc, addDoc, Timestamp, getDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, updateDoc, doc, addDoc, Timestamp, getDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
@@ -114,7 +114,6 @@ function Complaints() {
       });
       
       setComplaints(complaintsData);
-          applyDateFilter(complaintsData);
           setLoading(false);
         }, (error2) => {
           console.error('Error listening to complaints (fallback):', error2);
@@ -605,10 +604,10 @@ function Complaints() {
 
       {/* View Complaint Modal */}
       {showViewModal && viewingComplaint && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={handleCloseView}>
-          <div className="bg-white rounded-lg p-4 md:p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 sm:p-6" onClick={handleCloseView}>
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Complaint Details</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Complaint Details</h2>
               <button
                 className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
                 onClick={handleCloseView}
@@ -689,7 +688,7 @@ function Complaints() {
             
             <div className="mt-6 flex justify-end">
               <button
-                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors text-sm sm:text-base w-full sm:w-auto"
                 onClick={handleCloseView}
               >
                 Close

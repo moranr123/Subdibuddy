@@ -1,7 +1,7 @@
 import { useEffect, useState, memo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs, query, orderBy, updateDoc, doc, where } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, updateDoc, doc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';

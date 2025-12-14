@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "subsibuddy-88108"
+  },
+  "targets": {
+    "subsibuddy-88108": {
+      "hosting": {
+        "subdibuddyadmin": [
+          "subdibuddyadmin"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

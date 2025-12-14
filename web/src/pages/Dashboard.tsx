@@ -15,7 +15,7 @@ interface StatCardProps {
   bgColor?: string;
 }
 
-const StatCard = memo(({ title, value, label, icon, bgColor = '#ffffff' }: StatCardProps) => (
+const StatCard = memo(({ title, value, label, bgColor = '#ffffff' }: StatCardProps) => (
   <div 
     className="rounded-lg p-4 md:p-6 border border-gray-200 transition-all hover:border-gray-300 overflow-hidden"
     style={{ backgroundColor: bgColor }}
@@ -261,9 +261,9 @@ function Dashboard() {
       <div className="min-h-screen bg-gray-50">
         <Header title="Dashboard" />
 
-        <main className="max-w-[1400px] mx-auto p-4 md:p-8 flex flex-col items-center">
+        <main className="max-w-[1400px] mx-auto p-4 md:p-8 flex flex-col items-center w-full">
           {/* Quick Actions */}
-          <div className="w-full mb-4 md:mb-6 flex justify-end gap-3">
+          <div className="w-full mb-4 md:mb-6 flex flex-wrap justify-end gap-2 sm:gap-3">
             <button
               onClick={() => navigate('/map')}
               className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 md:px-6 py-2 md:py-2.5 rounded-lg transition-colors flex items-center gap-2 shadow-sm text-sm md:text-base"
@@ -297,7 +297,7 @@ function Dashboard() {
             </button>
           </div>
 
-          <div className="grid grid-cols-3 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5 mb-6 md:mb-8 w-full">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5 mb-6 md:mb-8 w-full">
             {loading ? (
               <div className="col-span-full text-center py-[60px] px-5 text-gray-600 text-base">
                 Loading analytics...
@@ -318,20 +318,20 @@ function Dashboard() {
 
           {/* Registered Residents Growth Chart */}
           <div className="bg-white rounded-lg p-4 md:p-6 border border-gray-200 w-full mb-6 md:mb-8 overflow-x-auto">
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <h2 className="text-gray-900 mb-2 text-lg font-semibold">Registered Residents by Month</h2>
-              <p className="text-gray-500 text-sm">
+            <div className="mb-4 md:mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-gray-900 mb-1 sm:mb-2 text-base sm:text-lg font-semibold">Registered Residents by Month</h2>
+                <p className="text-gray-500 text-xs sm:text-sm">
                   Cumulative count of registered residents over time
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <label htmlFor="yearFilter" className="text-sm text-gray-600">Year:</label>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <label htmlFor="yearFilter" className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">Year:</label>
                 <select
                   id="yearFilter"
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(e.target.value)}
-                  className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="border border-gray-300 rounded-md px-2 sm:px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {availableYears.map((year) => (
                     <option key={year} value={String(year)}>
@@ -347,8 +347,8 @@ function Dashboard() {
               const range = maxCount - minCount || 1;
               
               return (
-                <div className="w-full h-80 relative">
-                  <svg width="100%" height="100%" className="overflow-visible" viewBox="0 0 1000 320" preserveAspectRatio="none">
+                <div className="w-full h-64 sm:h-80 relative overflow-x-auto">
+                  <svg width="100%" height="100%" className="overflow-visible min-w-[600px]" viewBox="0 0 1000 320" preserveAspectRatio="xMidYMid meet">
                     <defs>
                       <linearGradient id="lineGradient" x1="0%" y1="0%" x2="0%" y2="100%">
                         <stop offset="0%" stopColor="#1877F2" stopOpacity="0.3" />
@@ -458,10 +458,10 @@ function Dashboard() {
 
           {/* Generate Report Modal */}
           {showReportModal && (
-            <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-5" onClick={() => setShowReportModal(false)}>
-              <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                <div className="flex justify-between items-center px-6 py-5 border-b border-gray-200">
-                  <h3 className="m-0 text-gray-900 text-xl font-semibold">Dashboard Report</h3>
+            <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-4 sm:p-5" onClick={() => setShowReportModal(false)}>
+              <div className="bg-white rounded-lg sm:rounded-2xl w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                <div className="flex justify-between items-center px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200">
+                  <h3 className="m-0 text-gray-900 text-lg sm:text-xl font-semibold">Dashboard Report</h3>
                   <button 
                     className="bg-none border-none text-2xl text-gray-600 cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded transition-all hover:bg-gray-100 hover:text-gray-900"
                     onClick={() => setShowReportModal(false)}
@@ -469,14 +469,14 @@ function Dashboard() {
                     ✕
                   </button>
                 </div>
-                <div className="overflow-y-auto px-6 py-5">
+                <div className="overflow-y-auto px-4 sm:px-6 py-4 sm:py-5">
                   <div className="mb-4">
-                    <p className="text-sm text-gray-600 mb-2">
+                    <p className="text-xs sm:text-sm text-gray-600 mb-2">
                       Generated on: {new Date().toLocaleString()}
                     </p>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-sm">
+                  <div className="overflow-x-auto -mx-4 sm:mx-0">
+                    <table className="w-full border-collapse text-xs sm:text-sm min-w-[600px]">
                       <thead>
                         <tr className="bg-gray-50 border-b-2 border-gray-200">
                           <th className="px-4 py-3 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Category</th>
@@ -569,9 +569,9 @@ function Dashboard() {
                     </div>
                   )}
                 </div>
-                <div className="px-6 py-5 border-t border-gray-200 flex justify-end gap-3">
+                <div className="px-4 sm:px-6 py-4 sm:py-5 border-t border-gray-200 flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
                   <button
-                    className="bg-gray-900 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-gray-800"
+                    className="bg-gray-900 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-gray-800 w-full sm:w-auto"
                     onClick={() => {
                       // Export to CSV
                       const csvData = [
@@ -597,7 +597,7 @@ function Dashboard() {
                     Export CSV
                   </button>
                   <button
-                    className="bg-gray-900 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-gray-800"
+                    className="bg-gray-900 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-gray-800 w-full sm:w-auto"
                     onClick={() => setShowReportModal(false)}
                   >
                     Close

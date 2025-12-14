@@ -1561,10 +1561,10 @@ function Archived() {
         </main>
 
         {showDetailsModal && selectedResident && (
-          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-5" onClick={() => setShowDetailsModal(false)}>
-            <div className="bg-white rounded-2xl w-full max-w-[800px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-              <div className="flex justify-between items-center px-6 py-5 border-b border-gray-200">
-                <h3 className="m-0 text-gray-900 text-xl font-normal">Archived Resident Details</h3>
+          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-4 sm:p-5" onClick={() => setShowDetailsModal(false)}>
+            <div className="bg-white rounded-lg sm:rounded-2xl w-full max-w-[800px] max-h-[95vh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200">
+                <h3 className="m-0 text-gray-900 text-lg sm:text-xl font-normal">Archived Resident Details</h3>
                 <button 
                   className="bg-none border-none text-2xl text-gray-600 cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded transition-all hover:bg-gray-100 hover:text-gray-900"
                   onClick={() => setShowDetailsModal(false)}
@@ -1675,9 +1675,9 @@ function Archived() {
                   </div>
                 )}
               </div>
-              <div className="px-6 py-5 border-t border-gray-200 flex justify-end gap-3">
+              <div className="px-4 sm:px-6 py-4 sm:py-5 border-t border-gray-200 flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
                 <button
-                  className="bg-green-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-green-600 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                   onClick={() => {
                     handleRestore(selectedResident.id);
                     setShowDetailsModal(false);
@@ -1687,7 +1687,7 @@ function Archived() {
                   {processingStatus === selectedResident.id ? 'Processing...' : 'Restore'}
                 </button>
                 <button
-                  className="bg-gray-900 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-gray-800"
+                  className="bg-gray-900 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-gray-800 w-full sm:w-auto"
                   onClick={() => setShowDetailsModal(false)}
                 >
                   Close
@@ -1699,7 +1699,7 @@ function Archived() {
 
         {/* View Complaint Modal */}
         {showComplaintModal && viewingComplaint && (
-          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-5" onClick={handleCloseComplaintModal}>
+          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-4 sm:p-5" onClick={handleCloseComplaintModal}>
             <div className="bg-white rounded-2xl w-full max-w-[600px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center px-6 py-5 border-b border-gray-200">
                 <h3 className="m-0 text-gray-900 text-xl font-normal">Archived Complaint Details</h3>
@@ -1756,9 +1756,9 @@ function Archived() {
                   )}
                 </div>
               </div>
-              <div className="px-6 py-5 border-t border-gray-200 flex justify-end gap-3">
+              <div className="px-4 sm:px-6 py-4 sm:py-5 border-t border-gray-200 flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
                 <button
-                  className="bg-green-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-green-600 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                   onClick={() => {
                     handleRestoreComplaint(viewingComplaint.id);
                     setShowComplaintModal(false);
@@ -1768,7 +1768,7 @@ function Archived() {
                   {processingStatus === viewingComplaint.id ? 'Processing...' : 'Restore'}
                 </button>
                 <button
-                  className="bg-gray-900 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-gray-800"
+                  className="bg-gray-900 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-gray-800 w-full sm:w-auto"
                   onClick={handleCloseComplaintModal}
                 >
                   Close
@@ -1780,7 +1780,7 @@ function Archived() {
 
         {/* View Vehicle Registration Modal */}
         {showVehicleRegistrationModal && viewingVehicleRegistration && (
-          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-5" onClick={handleCloseVehicleRegistrationModal}>
+          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-4 sm:p-5" onClick={handleCloseVehicleRegistrationModal}>
             <div className="bg-white rounded-2xl w-full max-w-[600px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center px-6 py-5 border-b border-gray-200">
                 <h3 className="m-0 text-gray-900 text-xl font-normal">Archived Vehicle Registration Details</h3>
@@ -1869,9 +1869,9 @@ function Archived() {
                   </div>
                 )}
               </div>
-              <div className="px-6 py-5 border-t border-gray-200 flex justify-end gap-3">
+              <div className="px-4 sm:px-6 py-4 sm:py-5 border-t border-gray-200 flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
                 <button
-                  className="bg-green-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-green-600 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                   onClick={() => {
                     handleRestoreVehicleRegistration(viewingVehicleRegistration.id);
                     setShowVehicleRegistrationModal(false);
@@ -1881,7 +1881,7 @@ function Archived() {
                   {processingStatus === viewingVehicleRegistration.id ? 'Processing...' : 'Restore'}
                 </button>
                 <button
-                  className="bg-gray-900 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-gray-800"
+                  className="bg-gray-900 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-gray-800 w-full sm:w-auto"
                   onClick={handleCloseVehicleRegistrationModal}
                 >
                   Close
@@ -1891,7 +1891,7 @@ function Archived() {
           </div>
         )}
         {showMaintenanceModal && viewingMaintenance && (
-          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-5" onClick={handleCloseMaintenanceModal}>
+          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-4 sm:p-5" onClick={handleCloseMaintenanceModal}>
             <div className="bg-white rounded-2xl w-full max-w-[600px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center px-6 py-5 border-b border-gray-200">
                 <h3 className="m-0 text-gray-900 text-xl font-normal">Archived Maintenance Request Details</h3>
@@ -1959,9 +1959,9 @@ function Archived() {
                   </div>
                 )}
               </div>
-              <div className="px-6 py-5 border-t border-gray-200 flex justify-end gap-3">
+              <div className="px-4 sm:px-6 py-4 sm:py-5 border-t border-gray-200 flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
                 <button
-                  className="bg-green-600 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-green-600 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                   onClick={() => {
                     handleRestoreMaintenance(viewingMaintenance.id);
                     setShowMaintenanceModal(false);
@@ -1971,7 +1971,7 @@ function Archived() {
                   {processingStatus === viewingMaintenance.id ? 'Processing...' : 'Restore'}
                 </button>
                 <button
-                  className="bg-gray-900 text-white border-none px-5 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-gray-800"
+                  className="bg-gray-900 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-gray-800 w-full sm:w-auto"
                   onClick={handleCloseMaintenanceModal}
                 >
                   Close

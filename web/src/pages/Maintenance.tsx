@@ -1,7 +1,7 @@
 import { useEffect, useState, memo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs, query, orderBy, updateDoc, doc, addDoc, Timestamp, getDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, updateDoc, doc, addDoc, Timestamp, getDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
@@ -109,7 +109,6 @@ function Maintenance() {
           });
           
           setMaintenanceRequests(maintenanceData);
-          applyDateFilter(maintenanceData);
           setLoading(false);
         }, (error2) => {
           console.error('Error listening to maintenance (fallback):', error2);
@@ -213,10 +212,6 @@ function Maintenance() {
   useEffect(() => {
     applyFilters(maintenanceRequests);
   }, [maintenanceRequests, statusFilter, filterDate, searchQuery, userNames, applyFilters]);
-
-  const applyDateFilter = useCallback((maintenanceList: Maintenance[]) => {
-    applyFilters(maintenanceList);
-  }, [applyFilters]);
 
   const handleDateFilter = useCallback(() => {
     setShowDateFilter(!showDateFilter);
@@ -588,10 +583,10 @@ function Maintenance() {
 
       {/* View Maintenance Modal */}
       {showViewModal && viewingMaintenance && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={handleCloseView}>
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 sm:p-6" onClick={handleCloseView}>
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Maintenance Request Details</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Maintenance Request Details</h2>
               <button
                 className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
                 onClick={handleCloseView}

@@ -190,7 +190,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
     <aside
         className={`fixed left-0 top-0 h-screen bg-white border-r border-gray-200 z-[1000] overflow-hidden transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
-        } lg:translate-x-0 w-[260px] md:w-[220px]`}
+        } lg:translate-x-0 w-[260px]`}
     >
       <div className="flex flex-col h-full">
         <div className="px-4 py-4 flex items-center gap-3 min-h-[64px] border-b border-gray-100">
@@ -365,10 +365,10 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
             return (
               <button
                 key={item.path}
-                className={`flex items-center gap-3 px-4 py-2.5 mx-2 border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
+                className={`flex items-center gap-3 px-4 py-2.5 mx-2 border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative touch-manipulation ${
                   location.pathname === item.path
                     ? 'bg-[#1877F2] text-white font-semibold'
-                    : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
+                    : 'bg-transparent hover:bg-gray-100 active:bg-gray-100 hover:text-[#1877F2] active:text-[#1877F2] text-gray-600'
                 }`}
                 onClick={() => {
                   handleNavigation(item.path);

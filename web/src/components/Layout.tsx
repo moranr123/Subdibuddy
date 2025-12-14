@@ -27,9 +27,9 @@ function Layout({ children }: LayoutProps) {
   }, [setSidebarOpen]);
 
   return (
-    <div className="flex min-h-screen bg-white w-full">
+    <div className="flex min-h-screen bg-white w-full overflow-x-hidden">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <main className="flex-1 min-h-screen lg:ml-[260px] md:lg:ml-[220px] lg:w-[calc(100%-260px)] md:lg:w-[calc(100%-220px)] transition-all duration-300">
+      <main className="flex-1 min-h-screen w-full lg:ml-[260px] lg:w-[calc(100%-260px)] transition-all duration-300">
         {children}
       </main>
     </div>

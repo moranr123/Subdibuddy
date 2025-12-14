@@ -25,13 +25,6 @@ interface VehicleRegistration {
   updatedAt?: any;
 }
 
-interface UserData {
-  id: string;
-  fullName?: string;
-  firstName?: string;
-  lastName?: string;
-}
-
 function VehicleRegistration() {
   const [user, setUser] = useState<any>(null);
   const [registrations, setRegistrations] = useState<VehicleRegistration[]>([]);
@@ -562,10 +555,10 @@ function VehicleRegistration() {
         </main>
 
         {showViewModal && viewingRegistration && (
-          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-5" onClick={handleCloseView}>
-            <div className="bg-white rounded-2xl w-full max-w-[600px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-              <div className="flex justify-between items-center px-6 py-5 border-b border-gray-200">
-                <h3 className="m-0 text-gray-900 text-xl font-normal">Vehicle Registration Details</h3>
+          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-4 sm:p-5" onClick={handleCloseView}>
+            <div className="bg-white rounded-lg sm:rounded-2xl w-full max-w-[600px] max-h-[95vh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200">
+                <h3 className="m-0 text-gray-900 text-lg sm:text-xl font-normal">Vehicle Registration Details</h3>
                 <button 
                   className="bg-none border-none text-2xl text-gray-600 cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded transition-all hover:bg-gray-100 hover:text-gray-900"
                   onClick={handleCloseView}
@@ -573,8 +566,8 @@ function VehicleRegistration() {
                   ✕
                 </button>
               </div>
-              <div className="overflow-y-auto px-6 py-5">
-                <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="overflow-y-auto px-4 sm:px-6 py-4 sm:py-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                   <div>
                     <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Plate Number</label>
                     <p className="text-gray-900 font-medium">{viewingRegistration.plateNumber}</p>
