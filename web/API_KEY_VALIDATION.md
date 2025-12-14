@@ -94,3 +94,4 @@ Open browser DevTools (F12) and check the Console tab for specific error message
 
 These will tell you exactly what's wrong with your API key configuration.
 
+
