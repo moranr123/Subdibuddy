@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Modal, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,6 +6,8 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, Timestamp, query, where, onSnapshot, orderBy, doc, getDoc } from 'firebase/firestore';
 import { getAuthService, db } from '../firebase/config';
 import { FontAwesome5, MaterialIcons } from '@expo/vector-icons';
+
+const { width, height } = Dimensions.get('window');
 
 interface Visitor {
   id: string;
@@ -35,6 +37,13 @@ export default function VisitorPreRegistration() {
   const [userEmail, setUserEmail] = useState('');
   const [userVisitors, setUserVisitors] = useState<Visitor[]>([]);
   const [loadingVisitors, setLoadingVisitors] = useState(true);
+  const [showRegistrationsModal, setShowRegistrationsModal] = useState(false);
+  
+  // Date and Time Picker states
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [tempDate, setTempDate] = useState<Date>(new Date());
+  const [tempTime, setTempTime] = useState<{ hour: number; minute: number }>({ hour: 12, minute: 0 });
 
   // Get current user
   useEffect(() => {
@@ -144,6 +153,95 @@ export default function VisitorPreRegistration() {
     }
     return cleaned;
   };
+
+  // Date Picker Helper Functions
+  const getDaysInMonth = useCallback((year: number, month: number) => {
+    return new Date(year, month + 1, 0).getDate();
+  }, []);
+
+  const getMonthOptions = useCallback(() => {
+    return [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+  }, []);
+
+  const getYearOptions = useCallback(() => {
+    const currentYear = new Date().getFullYear();
+    const years = [];
+    // Show current year and next 5 years for future dates
+    for (let i = currentYear; i <= currentYear + 5; i++) {
+      years.push(i);
+    }
+    return years;
+  }, []);
+
+  const formatDateForDisplay = useCallback((date: Date) => {
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  }, []);
+
+  const formatDateForStorage = useCallback((date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  const formatTimeForDisplay = useCallback((hour: number, minute: number) => {
+    const h = String(hour).padStart(2, '0');
+    const m = String(minute).padStart(2, '0');
+    return `${h}:${m}`;
+  }, []);
+
+  const formatTimeForStorage = useCallback((hour: number, minute: number) => {
+    const h = String(hour).padStart(2, '0');
+    const m = String(minute).padStart(2, '0');
+    return `${h}:${m}`;
+  }, []);
+
+  const handleDatePickerOpen = useCallback(() => {
+    if (visitorDate) {
+      const [year, month, day] = visitorDate.split('-').map(Number);
+      setTempDate(new Date(year, month - 1, day));
+    } else {
+      setTempDate(new Date());
+    }
+    setShowDatePicker(true);
+  }, [visitorDate]);
+
+  const handleDatePickerConfirm = useCallback(() => {
+    const formattedDate = formatDateForStorage(tempDate);
+    setVisitorDate(formattedDate);
+    setShowDatePicker(false);
+  }, [tempDate, formatDateForStorage]);
+
+  const handleTimePickerOpen = useCallback(() => {
+    if (visitorTime) {
+      const [hour, minute] = visitorTime.split(':').map(Number);
+      setTempTime({ hour, minute });
+    } else {
+      setTempTime({ hour: 12, minute: 0 });
+    }
+    setShowTimePicker(true);
+  }, [visitorTime]);
+
+  const handleTimePickerConfirm = useCallback(() => {
+    const formattedTime = formatTimeForStorage(tempTime.hour, tempTime.minute);
+    setVisitorTime(formattedTime);
+    setShowTimePicker(false);
+  }, [tempTime, formatTimeForStorage]);
+
+  const getHourOptions = useCallback(() => {
+    return Array.from({ length: 24 }, (_, i) => i);
+  }, []);
+
+  const getMinuteOptions = useCallback(() => {
+    return Array.from({ length: 60 }, (_, i) => i);
+  }, []);
 
 
   const submitVisitorRegistration = useCallback(async () => {
@@ -270,7 +368,13 @@ export default function VisitorPreRegistration() {
           <FontAwesome5 name="arrow-left" size={20} color="#ffffff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Visitor Pre-Registration</Text>
-        <View style={styles.headerSpacer} />
+        <TouchableOpacity 
+          onPress={() => setShowRegistrationsModal(true)}
+          style={styles.headerButton}
+          activeOpacity={0.7}
+        >
+          <MaterialIcons name="list" size={22} color="#ffffff" />
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView 
@@ -330,26 +434,29 @@ export default function VisitorPreRegistration() {
             <View style={styles.row}>
               <View style={[styles.inputGroup, styles.halfWidth]}>
                 <Text style={styles.label}>Visit Date *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="YYYY-MM-DD"
-                  value={visitorDate}
-                  onChangeText={setVisitorDate}
-                  keyboardType="default"
-                />
-                <Text style={styles.hint}>Format: YYYY-MM-DD</Text>
+                <TouchableOpacity
+                  style={styles.datePickerButton}
+                  onPress={handleDatePickerOpen}
+                >
+                  <Text style={[styles.datePickerText, !visitorDate && styles.datePickerPlaceholder]}>
+                    {visitorDate ? (() => {
+                      const [year, month, day] = visitorDate.split('-').map(Number);
+                      return formatDateForDisplay(new Date(year, month - 1, day));
+                    })() : 'Select visit date'}
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               <View style={[styles.inputGroup, styles.halfWidth]}>
                 <Text style={styles.label}>Visit Time *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="HH:MM"
-                  value={visitorTime}
-                  onChangeText={setVisitorTime}
-                  keyboardType="default"
-                />
-                <Text style={styles.hint}>Format: HH:MM (24-hour)</Text>
+                <TouchableOpacity
+                  style={styles.datePickerButton}
+                  onPress={handleTimePickerOpen}
+                >
+                  <Text style={[styles.datePickerText, !visitorTime && styles.datePickerPlaceholder]}>
+                    {visitorTime ? formatTimeForDisplay(parseInt(visitorTime.split(':')[0]), parseInt(visitorTime.split(':')[1])) : 'Select visit time'}
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -365,11 +472,243 @@ export default function VisitorPreRegistration() {
               )}
             </TouchableOpacity>
           </View>
+        </View>
+      </ScrollView>
+      </KeyboardAvoidingView>
 
-          {/* Existing Registrations Section */}
-          <View style={styles.registrationsSection}>
-            <Text style={styles.sectionTitle}>My Visitor Registrations</Text>
-            
+      {/* Date Picker Modal */}
+      <Modal
+        visible={showDatePicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDatePicker(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowDatePicker(false)}
+        >
+          <View style={styles.datePickerModalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Visit Date</Text>
+              <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.datePickerContainer}>
+              <View style={styles.datePickerColumn}>
+                <Text style={styles.datePickerLabel}>Month</Text>
+                <ScrollView style={styles.datePickerScroll}>
+                  {getMonthOptions().map((month, index) => (
+                    <TouchableOpacity
+                      key={month}
+                      style={[
+                        styles.datePickerOption,
+                        tempDate.getMonth() === index && styles.datePickerOptionSelected
+                      ]}
+                      onPress={() => {
+                        const newDate = new Date(tempDate);
+                        newDate.setMonth(index);
+                        const daysInMonth = getDaysInMonth(newDate.getFullYear(), index);
+                        if (newDate.getDate() > daysInMonth) {
+                          newDate.setDate(daysInMonth);
+                        }
+                        setTempDate(newDate);
+                      }}
+                    >
+                      <Text style={[
+                        styles.datePickerOptionText,
+                        tempDate.getMonth() === index && styles.datePickerOptionTextSelected
+                      ]}>
+                        {month}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.datePickerColumn}>
+                <Text style={styles.datePickerLabel}>Day</Text>
+                <ScrollView style={styles.datePickerScroll}>
+                  {Array.from({ length: getDaysInMonth(tempDate.getFullYear(), tempDate.getMonth()) }, (_, i) => i + 1).map((day) => (
+                    <TouchableOpacity
+                      key={day}
+                      style={[
+                        styles.datePickerOption,
+                        tempDate.getDate() === day && styles.datePickerOptionSelected
+                      ]}
+                      onPress={() => {
+                        const newDate = new Date(tempDate);
+                        newDate.setDate(day);
+                        setTempDate(newDate);
+                      }}
+                    >
+                      <Text style={[
+                        styles.datePickerOptionText,
+                        tempDate.getDate() === day && styles.datePickerOptionTextSelected
+                      ]}>
+                        {day}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.datePickerColumn}>
+                <Text style={styles.datePickerLabel}>Year</Text>
+                <ScrollView style={styles.datePickerScroll}>
+                  {getYearOptions().map((year) => (
+                    <TouchableOpacity
+                      key={year}
+                      style={[
+                        styles.datePickerOption,
+                        tempDate.getFullYear() === year && styles.datePickerOptionSelected
+                      ]}
+                      onPress={() => {
+                        const newDate = new Date(tempDate);
+                        newDate.setFullYear(year);
+                        const daysInMonth = getDaysInMonth(year, newDate.getMonth());
+                        if (newDate.getDate() > daysInMonth) {
+                          newDate.setDate(daysInMonth);
+                        }
+                        setTempDate(newDate);
+                      }}
+                    >
+                      <Text style={[
+                        styles.datePickerOptionText,
+                        tempDate.getFullYear() === year && styles.datePickerOptionTextSelected
+                      ]}>
+                        {year}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+            <View style={styles.datePickerFooter}>
+              <TouchableOpacity
+                style={styles.datePickerCancelButton}
+                onPress={() => setShowDatePicker(false)}
+              >
+                <Text style={styles.datePickerCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.datePickerConfirmButton}
+                onPress={handleDatePickerConfirm}
+              >
+                <Text style={styles.datePickerConfirmText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Time Picker Modal */}
+      <Modal
+        visible={showTimePicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowTimePicker(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowTimePicker(false)}
+        >
+          <View style={styles.datePickerModalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Visit Time</Text>
+              <TouchableOpacity onPress={() => setShowTimePicker(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.datePickerContainer}>
+              <View style={styles.datePickerColumn}>
+                <Text style={styles.datePickerLabel}>Hour</Text>
+                <ScrollView style={styles.datePickerScroll}>
+                  {getHourOptions().map((hour) => (
+                    <TouchableOpacity
+                      key={hour}
+                      style={[
+                        styles.datePickerOption,
+                        tempTime.hour === hour && styles.datePickerOptionSelected
+                      ]}
+                      onPress={() => {
+                        setTempTime({ ...tempTime, hour });
+                      }}
+                    >
+                      <Text style={[
+                        styles.datePickerOptionText,
+                        tempTime.hour === hour && styles.datePickerOptionTextSelected
+                      ]}>
+                        {String(hour).padStart(2, '0')}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.datePickerColumn}>
+                <Text style={styles.datePickerLabel}>Minute</Text>
+                <ScrollView style={styles.datePickerScroll}>
+                  {getMinuteOptions().map((minute) => (
+                    <TouchableOpacity
+                      key={minute}
+                      style={[
+                        styles.datePickerOption,
+                        tempTime.minute === minute && styles.datePickerOptionSelected
+                      ]}
+                      onPress={() => {
+                        setTempTime({ ...tempTime, minute });
+                      }}
+                    >
+                      <Text style={[
+                        styles.datePickerOptionText,
+                        tempTime.minute === minute && styles.datePickerOptionTextSelected
+                      ]}>
+                        {String(minute).padStart(2, '0')}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+            <View style={styles.datePickerFooter}>
+              <TouchableOpacity
+                style={styles.datePickerCancelButton}
+                onPress={() => setShowTimePicker(false)}
+              >
+                <Text style={styles.datePickerCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.datePickerConfirmButton}
+                onPress={handleTimePickerConfirm}
+              >
+                <Text style={styles.datePickerConfirmText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Registrations Modal */}
+      <Modal
+        visible={showRegistrationsModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowRegistrationsModal(false)}
+      >
+        <View style={styles.registrationsModalContainer}>
+          <View style={[styles.registrationsModalHeader, { paddingTop: insets.top + 16 }]}>
+            <Text style={styles.registrationsModalTitle}>My Visitor Registrations</Text>
+            <TouchableOpacity 
+              onPress={() => setShowRegistrationsModal(false)}
+              style={styles.modalCloseButton}
+            >
+              <MaterialIcons name="close" size={24} color="#111827" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView 
+            style={styles.registrationsModalContent}
+            contentContainerStyle={styles.registrationsModalScrollContent}
+          >
             {loadingVisitors ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#1877F2" />
@@ -424,10 +763,9 @@ export default function VisitorPreRegistration() {
                 ))}
               </View>
             )}
-          </View>
+          </ScrollView>
         </View>
-      </ScrollView>
-      </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -459,6 +797,11 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 36,
+  },
+  headerButton: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   keyboardAvoidingView: {
     flex: 1,
@@ -521,12 +864,131 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     marginTop: 4,
   },
+  datePickerButton: {
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+  },
+  datePickerText: {
+    fontSize: 16,
+    color: '#111827',
+  },
+  datePickerPlaceholder: {
+    color: '#9CA3AF',
+  },
   row: {
     flexDirection: 'row',
     gap: 12,
   },
   halfWidth: {
     flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    flex: 1,
+  },
+  modalCloseText: {
+    fontSize: 24,
+    color: '#6b7280',
+    padding: 4,
+  },
+  datePickerModalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    maxHeight: Math.min(height * 0.8, 600),
+    width: '100%',
+    maxWidth: Math.min(width * 0.9, 400),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  datePickerContainer: {
+    flexDirection: 'row',
+    height: 300,
+    padding: 16,
+  },
+  datePickerColumn: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  datePickerLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#6b7280',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  datePickerScroll: {
+    flex: 1,
+  },
+  datePickerOption: {
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 4,
+    alignItems: 'center',
+  },
+  datePickerOptionSelected: {
+    backgroundColor: '#111827',
+  },
+  datePickerOptionText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  datePickerOptionTextSelected: {
+    color: '#ffffff',
+    fontWeight: '500',
+  },
+  datePickerFooter: {
+    flexDirection: 'row',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    gap: 12,
+  },
+  datePickerCancelButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+  },
+  datePickerCancelText: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  datePickerConfirmButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#111827',
+  },
+  datePickerConfirmText: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '500',
   },
   submitButton: {
     backgroundColor: '#1877F2',
@@ -644,5 +1106,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4CAF50',
     fontWeight: '500',
+  },
+  registrationsModalContainer: {
+    flex: 1,
+    backgroundColor: '#f0f2f5',
+  },
+  registrationsModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  registrationsModalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  registrationsModalContent: {
+    flex: 1,
+  },
+  registrationsModalScrollContent: {
+    padding: 20,
+    paddingBottom: 40,
   },
 });
