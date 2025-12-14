@@ -60,13 +60,10 @@ function Header({
   handleSearch,
   isSearching = false,
   searchInputRef,
-  selectedPlace,
-  onUnlockView,
   suggestions = [],
   showSuggestions = false,
   onSelectSuggestion,
-  suggestionsRef,
-  isViewLocked = false
+  suggestionsRef
 }: HeaderProps) {
   const { toggleSidebar } = useSidebar();
   const [notificationCount, setNotificationCount] = useState(0);
@@ -285,204 +282,23 @@ function Header({
   return (
     <header className="bg-white text-gray-900 border-b border-gray-200 sticky top-0 z-[100]">
       <div className="w-full m-0 px-4 md:px-8 py-4">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4">
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            {/* Hamburger Menu Button for Mobile */}
-            <button
-              onClick={toggleSidebar}
-              className="lg:hidden p-2 text-gray-600 hover:text-gray-900 transition-colors"
-              aria-label="Toggle menu"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-            <h1 className="text-lg md:text-xl m-0 text-gray-900 font-normal">{title}</h1>
-          </div>
-          <div className="flex items-center gap-3 sm:gap-5 w-full md:w-auto">
-            {/* Search Bar - Desktop */}
-            {showSearchBar && (
-              <div className="hidden md:flex items-center gap-2 flex-1 max-w-4xl relative">
-                <div className="flex-1 relative">
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    placeholder="Search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery?.(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter' && handleSearch) {
-                        handleSearch();
-                      }
-                    }}
-                    onFocus={() => {
-                      if (suggestions && suggestions.length > 0) {
-                        // showSuggestions will be managed by parent
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    disabled={isSearching}
-                  />
-                  {/* Suggestions Dropdown */}
-                  {showSuggestions && suggestions && suggestions.length > 0 && (
-                    <div
-                      ref={suggestionsRef}
-                      className="absolute z-[200] w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto"
-                      style={{ pointerEvents: 'auto' }}
-                      onMouseDown={(e) => e.stopPropagation()}
-                    >
-                      {suggestions.map((suggestion, index) => (
-                        <div
-                          key={suggestion.place_id || index}
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (onSelectSuggestion) {
-                              onSelectSuggestion(suggestion.place_id, suggestion.description);
-                            }
-                          }}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (onSelectSuggestion) {
-                              onSelectSuggestion(suggestion.place_id, suggestion.description);
-                            }
-                          }}
-                          onTouchStart={(e) => {
-                            e.stopPropagation();
-                            if (onSelectSuggestion) {
-                              onSelectSuggestion(suggestion.place_id, suggestion.description);
-                            }
-                          }}
-                          className="w-full text-left px-4 py-2 hover:bg-gray-100 active:bg-gray-200 transition-colors border-b border-gray-100 last:border-b-0 cursor-pointer select-none"
-                        >
-                          <div className="flex items-start gap-2">
-                            <svg className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm text-gray-900 truncate">{suggestion.description}</p>
-                              {suggestion.structured_formatting?.secondary_text && (
-                                <p className="text-xs text-gray-500 truncate">{suggestion.structured_formatting.secondary_text}</p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={handleSearch}
-                  disabled={isSearching || !searchQuery.trim()}
-                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-md text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
-                >
-                  {isSearching ? (
-                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-            )}
-            {/* Search Bar - Mobile */}
-            {showSearchBar && (
-              <div className="md:hidden flex items-center gap-2 flex-1 relative">
-                <div className="flex-1 relative">
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    placeholder="Search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery?.(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter' && handleSearch) {
-                        handleSearch();
-                      }
-                    }}
-                    onFocus={() => {
-                      if (suggestions && suggestions.length > 0) {
-                        // showSuggestions will be managed by parent
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    disabled={isSearching}
-                  />
-                  {/* Suggestions Dropdown - Mobile */}
-                  {showSuggestions && suggestions && suggestions.length > 0 && (
-                    <div
-                      ref={suggestionsRef}
-                      className="absolute z-[200] w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto"
-                      style={{ pointerEvents: 'auto' }}
-                      onMouseDown={(e) => e.stopPropagation()}
-                    >
-                      {suggestions.map((suggestion, index) => (
-                        <div
-                          key={suggestion.place_id || index}
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (onSelectSuggestion) {
-                              onSelectSuggestion(suggestion.place_id, suggestion.description);
-                            }
-                          }}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (onSelectSuggestion) {
-                              onSelectSuggestion(suggestion.place_id, suggestion.description);
-                            }
-                          }}
-                          onTouchStart={(e) => {
-                            e.stopPropagation();
-                            if (onSelectSuggestion) {
-                              onSelectSuggestion(suggestion.place_id, suggestion.description);
-                            }
-                          }}
-                          className="w-full text-left px-4 py-2 hover:bg-gray-100 active:bg-gray-200 transition-colors border-b border-gray-100 last:border-b-0 cursor-pointer select-none"
-                        >
-                          <div className="flex items-start gap-2">
-                            <svg className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm text-gray-900 truncate">{suggestion.description}</p>
-                              {suggestion.structured_formatting?.secondary_text && (
-                                <p className="text-xs text-gray-500 truncate">{suggestion.structured_formatting.secondary_text}</p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={handleSearch}
-                  disabled={isSearching || !searchQuery.trim()}
-                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-md text-sm font-medium transition-colors"
-                >
-                  {isSearching ? (
-                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-            )}
-            <div className="relative" ref={notificationRef}>
+        <div className="flex flex-col gap-3 md:gap-4">
+          {/* First Row: Title and Notifications */}
+          <div className="flex items-center justify-between gap-3 w-full">
+            <div className="flex items-center gap-3 flex-shrink-0">
+              {/* Hamburger Menu Button for Mobile */}
+              <button
+                onClick={toggleSidebar}
+                className="lg:hidden p-2 text-gray-600 hover:text-gray-900 transition-colors flex-shrink-0"
+                aria-label="Toggle menu"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+              <h1 className="text-lg md:text-xl m-0 text-gray-900 font-normal whitespace-nowrap">{title}</h1>
+            </div>
+            <div className="relative flex-shrink-0" ref={notificationRef}>
             <button 
               className="relative p-1.5 sm:p-2 text-gray-600 hover:text-gray-900 transition-colors"
               onClick={() => setShowNotifications(!showNotifications)}
@@ -673,6 +489,97 @@ function Header({
             )}
             </div>
           </div>
+          {/* Second Row: Search Bar */}
+          {showSearchBar && (
+            <div className="w-full flex items-center gap-2 relative">
+              <div className="flex-1 relative">
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery?.(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && handleSearch) {
+                      handleSearch();
+                    }
+                  }}
+                  onFocus={() => {
+                    if (suggestions && suggestions.length > 0) {
+                      // showSuggestions will be managed by parent
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={isSearching}
+                />
+                {/* Suggestions Dropdown */}
+                {showSuggestions && suggestions && suggestions.length > 0 && (
+                  <div
+                    ref={suggestionsRef}
+                    className="absolute z-[200] w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto"
+                    style={{ pointerEvents: 'auto' }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    {suggestions.map((suggestion, index) => (
+                      <div
+                        key={suggestion.place_id || index}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (onSelectSuggestion) {
+                            onSelectSuggestion(suggestion.place_id, suggestion.description);
+                          }
+                        }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (onSelectSuggestion) {
+                            onSelectSuggestion(suggestion.place_id, suggestion.description);
+                          }
+                        }}
+                        onTouchStart={(e) => {
+                          e.stopPropagation();
+                          if (onSelectSuggestion) {
+                            onSelectSuggestion(suggestion.place_id, suggestion.description);
+                          }
+                        }}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-100 active:bg-gray-200 transition-colors border-b border-gray-100 last:border-b-0 cursor-pointer select-none"
+                      >
+                        <div className="flex items-start gap-2">
+                          <svg className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-gray-900 truncate">{suggestion.description}</p>
+                            {suggestion.structured_formatting?.secondary_text && (
+                              <p className="text-xs text-gray-500 truncate">{suggestion.structured_formatting.secondary_text}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={handleSearch}
+                disabled={isSearching || !searchQuery.trim()}
+                className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-md text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap flex-shrink-0"
+              >
+                {isSearching ? (
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>

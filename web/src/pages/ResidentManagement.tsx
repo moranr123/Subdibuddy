@@ -1,8 +1,7 @@
 import { useEffect, useState, memo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, query, orderBy, doc, updateDoc, deleteDoc, setDoc, getDoc, Timestamp, onSnapshot } from 'firebase/firestore';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
@@ -44,7 +43,7 @@ function ResidentManagement() {
   const [user, setUser] = useState<any>(null);
   const [residents, setResidents] = useState<Resident[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState<UserLocation | null>(null);
+  const [selectedLocation] = useState<UserLocation | null>(null);
   const [showMapModal, setShowMapModal] = useState(false);
   const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -231,10 +230,6 @@ function ResidentManagement() {
     }
   }, [location.pathname, navigate]);
 
-  const handleLocationClick = useCallback((location: UserLocation) => {
-    setSelectedLocation(location);
-    setShowMapModal(true);
-  }, []);
 
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'N/A';
@@ -318,12 +313,11 @@ function ResidentManagement() {
       
       // Create a separate Firebase app instance for user creation
       // This prevents the new user from replacing the admin session
-      const { initializeApp, getApps, getApp } = await import('firebase/app');
+      const { initializeApp, getApp } = await import('firebase/app');
       const { getAuth: getAuthSeparate, createUserWithEmailAndPassword: createUserSeparate, signOut: signOutSeparate } = await import('firebase/auth');
       
       // Use a separate app instance with a different name
       let separateApp;
-      const existingApps = getApps();
       const separateAppName = 'userCreationApp';
       
       try {
@@ -354,6 +348,13 @@ function ResidentManagement() {
       
       // Move to users collection with the Firebase Auth UID
       console.log(`Saving to users collection with UID: ${user.uid}`);
+      console.log('User data to save:', {
+        hasLocation: !!userData.location,
+        location: userData.location,
+        residentType: userData.residentType,
+        isTenant: userData.isTenant,
+        fullName: userData.fullName,
+      });
       await setDoc(doc(db, 'users', user.uid), {
         ...userData,
         status: 'approved',

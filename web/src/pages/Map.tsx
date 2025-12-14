@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
@@ -188,22 +188,19 @@ function Map() {
   };
 
   // Fetch verified residents and display markers
-  const fetchAndDisplayResidents = useCallback(async () => {
+  const fetchAndDisplayResidents = useCallback((snapshot: any) => {
     if (!map || !db || !window.google) {
       console.log('Map, db, or google not ready:', { map: !!map, db: !!db, google: !!window.google });
       return;
     }
 
     try {
-      console.log('Fetching residents from users collection...');
-      // Fetch all users and filter in JavaScript to handle cases where status field might not exist
-      const allUsersQuery = collection(db, 'users');
-      const allUsersSnapshot = await getDocs(allUsersQuery);
+      console.log('Processing residents from users collection...');
       const markers: any[] = [];
       let totalUsers = 0;
       let usersWithLocation = 0;
 
-      allUsersSnapshot.forEach((doc) => {
+      snapshot.forEach((doc: any) => {
         totalUsers++;
         const data = doc.data();
         
@@ -237,17 +234,35 @@ function Map() {
 
         if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
           usersWithLocation++;
-          const isHomeowner = data.residentType === 'homeowner' || (!data.isTenant && data.residentType !== 'tenant');
+          
+          // Determine if homeowner or tenant
+          // A user is a tenant if: residentType === 'tenant' OR isTenant === true
+          // Otherwise, they are a homeowner
+          const isTenant = data.residentType === 'tenant' || data.isTenant === true;
+          const isHomeowner = !isTenant;
           
           // Determine marker color: green for homeowner, grey for tenant
-          const markerColor = isHomeowner ? 'green' : 'gray';
-          const markerIcon = `http://maps.google.com/mapfiles/ms/icons/${markerColor}-dot.png`;
+          // Both use the same marker style, just different colors
+          let markerIcon;
+          if (isHomeowner) {
+            // Green marker for homeowners
+            markerIcon = {
+              url: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png',
+              scaledSize: new window.google.maps.Size(32, 32),
+            };
+          } else {
+            // Blue marker for tenants - same style as homeowner, just different color
+            markerIcon = {
+              url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+              scaledSize: new window.google.maps.Size(32, 32),
+            };
+          }
           
           const fullName = data.fullName || 
             `${data.firstName || ''} ${data.middleName || ''} ${data.lastName || ''}`.trim() ||
             'Resident';
           
-          console.log(`Adding marker for ${fullName} at ${lat}, ${lng} (${markerColor})`);
+          console.log(`Adding marker for ${fullName} at ${lat}, ${lng} (${isHomeowner ? 'green' : 'grey'}, residentType: ${data.residentType}, isTenant: ${data.isTenant}, isHomeowner: ${isHomeowner})`);
           
           try {
             const marker = new window.google.maps.Marker({
@@ -257,10 +272,7 @@ function Map() {
               },
               map: map,
               title: fullName,
-              icon: {
-                url: markerIcon,
-                scaledSize: new window.google.maps.Size(32, 32),
-              },
+              icon: markerIcon,
               visible: true,
               zIndex: 1000,
               animation: window.google.maps.Animation.DROP,
@@ -273,7 +285,9 @@ function Map() {
               position: markerPosition ? { lat: markerPosition.lat(), lng: markerPosition.lng() } : null,
               map: markerMap ? 'attached' : 'not attached',
               visible: marker.getVisible(),
-              iconUrl: markerIcon,
+              iconType: isHomeowner ? 'green' : 'grey',
+              isHomeowner: isHomeowner,
+              isTenant: isTenant,
             });
             
             // Force marker to be visible
@@ -322,16 +336,36 @@ function Map() {
         return markers;
       });
     } catch (error) {
-      console.error('Error fetching residents:', error);
+      console.error('Error processing residents:', error);
     }
   }, [map, db]);
 
-  // Fetch and display residents when map is ready
+  // Set up real-time listener for residents when map is ready
   useEffect(() => {
-    if (map && !isLoading && db) {
-      console.log('Map is ready, fetching residents...');
-      fetchAndDisplayResidents();
+    if (!map || isLoading || !db) {
+      return;
     }
+
+    console.log('Map is ready, setting up real-time listener for residents...');
+    
+    // Set up real-time listener for users collection
+    const usersCollection = collection(db, 'users');
+    const unsubscribe = onSnapshot(
+      usersCollection,
+      (snapshot) => {
+        console.log('Users collection updated, refreshing markers...');
+        fetchAndDisplayResidents(snapshot);
+      },
+      (error) => {
+        console.error('Error in real-time listener:', error);
+      }
+    );
+
+    // Cleanup listener on unmount
+    return () => {
+      console.log('Cleaning up real-time listener');
+      unsubscribe();
+    };
   }, [map, isLoading, db, fetchAndDisplayResidents]);
 
   // Clean up markers when component unmounts
@@ -484,7 +518,7 @@ function Map() {
             if (currentLocation && predictions.length > 0) {
               sortedPredictions = [...predictions].sort((a, b) => {
                 // Calculate approximate distance (Haversine formula simplified)
-                const getDistance = (prediction: any) => {
+                const getDistance = (_prediction: any) => {
                   // Try to extract location from prediction if available
                   // Since we don't have coordinates in predictions, we'll use the order from Google
                   // which already prioritizes by location bias
@@ -508,31 +542,6 @@ function Map() {
 
   // Close suggestions when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      const clickedElement = event.target as HTMLElement;
-      
-      // Don't close if clicking inside suggestions dropdown
-      if (suggestionsRef.current?.contains(target)) {
-        return;
-      }
-      
-      // Don't close if clicking on the search input
-      if (searchInputRef.current?.contains(target)) {
-        return;
-      }
-      
-      // Close if clicking outside both
-      if (
-        suggestionsRef.current &&
-        !suggestionsRef.current.contains(target) &&
-        searchInputRef.current &&
-        !searchInputRef.current.contains(target)
-      ) {
-        setShowSuggestions(false);
-      }
-    };
-
     // Use mousedown with capture phase to catch events early, but allow suggestions to handle their own clicks
     const handleMouseDown = (event: MouseEvent) => {
       const target = event.target as Node;

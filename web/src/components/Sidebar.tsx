@@ -11,16 +11,16 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
-  { path: '/dashboard', label: 'Dashboard', icon: '▦' },
-  { path: '/map', label: 'Map', icon: '📍' },
-  { path: '/announcement', label: 'Announcement', icon: '◈' },
-  { path: '/complaints', label: 'Complaints', icon: '⚠' },
-  { path: '/visitor-pre-registration', label: 'Visitor Pre-Registration', icon: '○' },
-  { path: '/resident-management', label: 'Resident Management', icon: '⬟' },
-  { path: '/billing-payment', label: 'Billing & Payment', icon: '$' },
-  { path: '/maintenance', label: 'Maintenance', icon: '⚙' },
-  { path: '/vehicle-registration', label: 'Vehicle Registration', icon: '🚗' },
-  { path: '/archived', label: 'Archived', icon: '' },
+  { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { path: '/map', label: 'Map', icon: 'map' },
+  { path: '/announcement', label: 'Announcement', icon: 'campaign' },
+  { path: '/complaints', label: 'Complaints', icon: 'warning' },
+  { path: '/visitor-pre-registration', label: 'Visitor Pre-Registration', icon: 'person_add' },
+  { path: '/resident-management', label: 'Resident Management', icon: 'people' },
+  { path: '/billing-payment', label: 'Billing & Payment', icon: 'payments' },
+  { path: '/maintenance', label: 'Maintenance', icon: 'build' },
+  { path: '/vehicle-registration', label: 'Vehicle Registration', icon: 'directions_car' },
+  { path: '/archived', label: 'Archived', icon: 'archive' },
 ];
 
 interface SidebarProps {
@@ -226,6 +226,9 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                         : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                     }`}
                   >
+                    <span className="material-symbols-outlined text-xl">
+                      {item.icon}
+                    </span>
                     <span className="font-normal text-sm flex-1">
                       {item.label}
                     </span>
@@ -234,7 +237,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                         {pendingApplicationsCount > 9 ? '9+' : pendingApplicationsCount}
                       </span>
                     )}
-                    <span className={`text-xs transition-transform ${residentManagementOpen ? 'rotate-90' : ''}`}>›</span>
+                    <span className={`material-symbols-outlined text-sm transition-transform ${residentManagementOpen ? 'rotate-90' : ''}`}>chevron_right</span>
                   </button>
                   {residentManagementOpen && (
                     <div className="ml-4 mt-1 space-y-1">
@@ -252,6 +255,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                           }
                         }}
                       >
+                        <span className="material-symbols-outlined text-lg">description</span>
                         <span className="text-xs">Applications</span>
                       </button>
                       <button
@@ -268,6 +272,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                           }
                         }}
                       >
+                        <span className="material-symbols-outlined text-lg">verified_user</span>
                         <span className="text-xs">Registered</span>
                       </button>
                     </div>
@@ -295,6 +300,9 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                         : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                     }`}
                   >
+                    <span className="material-symbols-outlined text-xl">
+                      {item.icon}
+                    </span>
                     <span className="font-normal text-sm flex-1">
                       {item.label}
                     </span>
@@ -303,7 +311,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                         {pendingVehicleRegistrationsCount > 9 ? '9+' : pendingVehicleRegistrationsCount}
                       </span>
                     )}
-                    <span className={`text-xs transition-transform ${vehicleRegistrationOpen ? 'rotate-90' : ''}`}>›</span>
+                    <span className={`material-symbols-outlined text-sm transition-transform ${vehicleRegistrationOpen ? 'rotate-90' : ''}`}>chevron_right</span>
                   </button>
                   {vehicleRegistrationOpen && (
                     <div className="ml-4 mt-1 space-y-1">
@@ -321,6 +329,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                           }
                         }}
                       >
+                        <span className="material-symbols-outlined text-lg">description</span>
                         <span className="text-xs">Applications</span>
                       </button>
                       <button
@@ -337,6 +346,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                           }
                         }}
                       >
+                        <span className="material-symbols-outlined text-lg">verified_user</span>
                         <span className="text-xs">Registered</span>
                       </button>
                     </div>
@@ -368,6 +378,9 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                   }
                 }}
               >
+                <span className="material-symbols-outlined text-xl">
+                  {item.icon}
+                </span>
                 <span className="font-normal text-sm flex-1">
                   {item.label}
                 </span>
@@ -383,10 +396,11 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
 
         <div className="w-full border-t border-gray-100 p-2">
           <button
-            className="bg-gray-900 text-white border-none px-4 py-2 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-800 w-full"
+            className="flex items-center justify-center gap-2 bg-gray-900 text-white border-none px-4 py-2 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-800 w-full"
             onClick={handleSignOut}
           >
-            Sign Out
+            <span className="material-symbols-outlined text-lg">logout</span>
+            <span>Sign Out</span>
           </button>
         </div>
       </div>
