@@ -297,7 +297,7 @@ function VisitorPreRegistration() {
     switch (status) {
       case 'pending': return '#FFA500';
       case 'approved': return '#4CAF50';
-      case 'rejected': return '#1e40af';
+      case 'rejected': return '#F44336';
       default: return '#666666';
     }
   };
@@ -312,8 +312,11 @@ function VisitorPreRegistration() {
   }, []);
 
   const filteredVisitors = visitors.filter(visitor => {
-    // Apply view filter - visitors-list shows only approved, applications shows all
+    // Apply view filter - visitors-list shows only approved, applications excludes approved
     if (activeView === 'visitors-list' && visitor.status !== 'approved') {
+      return false;
+    }
+    if (activeView === 'applications' && visitor.status === 'approved') {
       return false;
     }
     
@@ -469,23 +472,20 @@ function VisitorPreRegistration() {
                         </div>
 
                         <div className="flex flex-col gap-2 pt-3 border-t border-gray-200">
-                          <select
-                            className={`px-2.5 py-1.5 border border-gray-200 rounded text-xs bg-white text-gray-900 transition-colors hover:border-primary focus:outline-none focus:border-primary w-full ${
-                              visitor.status === 'approved' || visitor.status === 'rejected' 
-                                ? 'cursor-not-allowed opacity-60 bg-gray-100' 
-                                : 'cursor-pointer'
-                            }`}
-                            value={visitor.status}
-                            onChange={(e) => handleStatusChange(visitor.id, e.target.value as Visitor['status'], visitor.status)}
-                            disabled={visitor.status === 'approved' || visitor.status === 'rejected'}
-                          >
-                            <option value="pending">Pending</option>
-                            <option value="approved">Approve</option>
-                            <option value="rejected">Reject</option>
-                          </select>
-                          {(visitor.status === 'approved' && !visitor.gatePassVerified) || (visitor.status === 'approved' || visitor.status === 'rejected') ? (
+                          {visitor.status === 'pending' && (
+                            <select
+                              className="px-2.5 py-1.5 border border-gray-200 rounded text-xs bg-white text-gray-900 transition-colors hover:border-primary focus:outline-none focus:border-primary w-full cursor-pointer"
+                              value={visitor.status}
+                              onChange={(e) => handleStatusChange(visitor.id, e.target.value as Visitor['status'], visitor.status)}
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="approved">Approve</option>
+                              <option value="rejected">Reject</option>
+                            </select>
+                          )}
+                          {(visitor.status === 'approved' && !visitor.gatePassVerified && activeView === 'visitors-list') || (visitor.status === 'approved' || visitor.status === 'rejected') ? (
                             <div className="flex gap-2">
-                              {visitor.status === 'approved' && !visitor.gatePassVerified && (
+                              {visitor.status === 'approved' && !visitor.gatePassVerified && activeView === 'visitors-list' && (
                                 <button
                                   className="flex-1 px-3 py-1.5 bg-green-500 text-white text-xs rounded hover:bg-[#45a049] transition-colors"
                                   onClick={() => handleVerifyGatePass(visitor.id)}
@@ -519,7 +519,12 @@ function VisitorPreRegistration() {
                           <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Purpose</th>
                           <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Visit Date/Time</th>
                           <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Resident</th>
-                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
+                          {activeView !== 'visitors-list' && (
+                            <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
+                          )}
+                          {activeView === 'visitors-list' && (
+                            <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Gate Pass</th>
+                          )}
                           <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
                         </tr>
                       </thead>
@@ -534,50 +539,62 @@ function VisitorPreRegistration() {
                             </td>
                             <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{visitor.visitorDate} {visitor.visitorTime}</td>
                             <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{residentNames[visitor.residentId] || visitor.residentEmail || 'Unknown Resident'}</td>
-                            <td className="px-4 py-4 border-b border-gray-100 align-top">
-                              <span
-                                className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block"
-                                style={{ backgroundColor: getStatusColor(visitor.status) }}
-                              >
-                                {visitor.status.toUpperCase()}
-                              </span>
-                            </td>
-                            <td className="px-4 py-4 border-b border-gray-100 align-top">
-                              <div className="flex flex-col gap-2">
-                                <select
-                                  className={`px-2.5 py-1.5 border border-gray-200 rounded text-xs bg-white text-gray-900 transition-colors hover:border-primary focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(30,64,175,0.1)] ${
-                                    visitor.status === 'approved' || visitor.status === 'rejected' 
-                                      ? 'cursor-not-allowed opacity-60 bg-gray-100' 
-                                      : 'cursor-pointer'
-                                  }`}
-                                  value={visitor.status}
-                                  onChange={(e) => handleStatusChange(visitor.id, e.target.value as Visitor['status'], visitor.status)}
-                                  disabled={visitor.status === 'approved' || visitor.status === 'rejected'}
+                            {activeView !== 'visitors-list' && (
+                              <td className="px-4 py-4 border-b border-gray-100 align-top">
+                                <span
+                                  className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block"
+                                  style={{ backgroundColor: getStatusColor(visitor.status) }}
                                 >
-                                  <option value="pending">Pending</option>
-                                  <option value="approved">Approve</option>
-                                  <option value="rejected">Reject</option>
-                                </select>
-                                {(visitor.status === 'approved' && !visitor.gatePassVerified) || (visitor.status === 'approved' || visitor.status === 'rejected') ? (
-                                  <div className="flex gap-2">
-                                    {visitor.status === 'approved' && !visitor.gatePassVerified && (
-                                      <button
-                                        className="flex-1 bg-green-500 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-[#45a049]"
-                                        onClick={() => handleVerifyGatePass(visitor.id)}
-                                      >
-                                        Verify Gate Pass
-                                      </button>
-                                    )}
-                                    {(visitor.status === 'approved' || visitor.status === 'rejected') && (
-                                      <button
-                                        className="flex-1 bg-gray-500 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-600"
-                                        onClick={() => handleArchive(visitor.id)}
-                                      >
-                                        Archive
-                                      </button>
-                                    )}
-                                  </div>
-                                ) : null}
+                                  {visitor.status.toUpperCase()}
+                                </span>
+                              </td>
+                            )}
+                            {activeView === 'visitors-list' && (
+                              <td className="px-4 py-4 border-b border-gray-100 align-top">
+                                {visitor.status === 'approved' ? (
+                                  visitor.gatePassVerified ? (
+                                    <span className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block bg-green-600">
+                                      Verified
+                                    </span>
+                                  ) : (
+                                    <span className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block bg-orange-500">
+                                      Not Verified
+                                    </span>
+                                  )
+                                ) : (
+                                  <span className="text-gray-400 text-xs">-</span>
+                                )}
+                              </td>
+                            )}
+                            <td className="px-4 py-4 border-b border-gray-100 align-top">
+                              <div className="flex gap-2 items-center">
+                                {visitor.status === 'pending' && (
+                                  <select
+                                    className="px-2.5 py-1.5 border border-gray-200 rounded text-xs bg-white text-gray-900 transition-colors hover:border-primary focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(30,64,175,0.1)] cursor-pointer"
+                                    value={visitor.status}
+                                    onChange={(e) => handleStatusChange(visitor.id, e.target.value as Visitor['status'], visitor.status)}
+                                  >
+                                    <option value="pending">Pending</option>
+                                    <option value="approved">Approve</option>
+                                    <option value="rejected">Reject</option>
+                                  </select>
+                                )}
+                                {visitor.status === 'approved' && !visitor.gatePassVerified && activeView === 'visitors-list' && (
+                                  <button
+                                    className="bg-green-500 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-[#45a049] whitespace-nowrap"
+                                    onClick={() => handleVerifyGatePass(visitor.id)}
+                                  >
+                                    Verify Gate Pass
+                                  </button>
+                                )}
+                                {(visitor.status === 'approved' || visitor.status === 'rejected') && (
+                                  <button
+                                    className="bg-gray-500 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-600 whitespace-nowrap"
+                                    onClick={() => handleArchive(visitor.id)}
+                                  >
+                                    Archive
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
