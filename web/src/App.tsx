@@ -22,6 +22,8 @@ function App() {
       <Route path="/announcement" element={<Announcement />} />
       <Route path="/complaints" element={<Complaints />} />
       <Route path="/visitor-pre-registration" element={<VisitorPreRegistration />} />
+      <Route path="/visitor-pre-registration/applications" element={<VisitorPreRegistration />} />
+      <Route path="/visitor-pre-registration/visitors-list" element={<VisitorPreRegistration />} />
       <Route path="/resident-management" element={<ResidentManagement />} />
       <Route path="/resident-management/applications" element={<ResidentManagement />} />
       <Route path="/resident-management/registered" element={<ResidentManagement />} />

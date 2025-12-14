@@ -1,13 +1,11 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Animated, Dimensions, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, Timestamp, query, where, onSnapshot, orderBy, doc, getDoc } from 'firebase/firestore';
 import { getAuthService, db } from '../firebase/config';
-import Sidebar from '../components/Sidebar';
-import { useNotifications } from '../hooks/useNotifications';
-import { MaterialIcons } from '@expo/vector-icons';
+import { FontAwesome5, MaterialIcons } from '@expo/vector-icons';
 
 interface Visitor {
   id: string;
@@ -27,8 +25,6 @@ interface Visitor {
 export default function VisitorPreRegistration() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const sidebarAnimation = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
   const [visitorName, setVisitorName] = useState('');
   const [visitorPhone, setVisitorPhone] = useState('');
   const [visitorPurpose, setVisitorPurpose] = useState('');
@@ -39,7 +35,6 @@ export default function VisitorPreRegistration() {
   const [userEmail, setUserEmail] = useState('');
   const [userVisitors, setUserVisitors] = useState<Visitor[]>([]);
   const [loadingVisitors, setLoadingVisitors] = useState(true);
-  const { unreadCount } = useNotifications();
 
   // Get current user
   useEffect(() => {
@@ -131,17 +126,6 @@ export default function VisitorPreRegistration() {
 
     return () => unsubscribe();
   }, [user, db]);
-
-  const toggleSidebar = () => {
-    const toValue = sidebarOpen ? -Dimensions.get('window').width : 0;
-    Animated.spring(sidebarAnimation, {
-      toValue,
-      useNativeDriver: true,
-      tension: 65,
-      friction: 11,
-    }).start();
-    setSidebarOpen(!sidebarOpen);
-  };
 
   const formatPhoneNumber = (text: string) => {
     // Remove all non-numeric characters
@@ -276,12 +260,19 @@ export default function VisitorPreRegistration() {
 
   return (
     <View style={styles.container}>
-      <Sidebar 
-        isOpen={sidebarOpen}
-        onClose={toggleSidebar}
-        animation={sidebarAnimation}
-      />
-      
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <TouchableOpacity 
+          onPress={() => router.back()}
+          style={styles.backButton}
+          activeOpacity={0.7}
+        >
+          <FontAwesome5 name="arrow-left" size={20} color="#ffffff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Visitor Pre-Registration</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
       <KeyboardAvoidingView 
         style={styles.keyboardAvoidingView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -293,33 +284,7 @@ export default function VisitorPreRegistration() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={[styles.content, { paddingTop: insets.top + 16 }]}>
-            {/* Menu and Notification Buttons */}
-            <View style={styles.headerButtons}>
-              <TouchableOpacity 
-                onPress={toggleSidebar}
-                style={styles.menuButton}
-                activeOpacity={0.7}
-              >
-                <MaterialIcons name="menu" size={24} color="#111827" />
-              </TouchableOpacity>
-              <TouchableOpacity 
-                onPress={() => router.push('/notifications')}
-                style={styles.notificationButton}
-                activeOpacity={0.7}
-              >
-                <MaterialIcons name="notifications" size={24} color="#111827" />
-                {unreadCount > 0 && (
-                  <View style={styles.notificationBadge}>
-                    <Text style={styles.notificationBadgeText}>
-                      {unreadCount > 9 ? '9+' : unreadCount}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.title}>Visitor Pre-Registration</Text>
+          <View style={styles.content}>
             <Text style={styles.subtitle}>Register your visitors in advance for easier access</Text>
 
           {/* Form Section */}
@@ -470,7 +435,30 @@ export default function VisitorPreRegistration() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#f0f2f5',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#111827',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ffffff',
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 36,
   },
   keyboardAvoidingView: {
     flex: 1,
@@ -482,44 +470,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   content: {
-    padding: 16,
-    paddingTop: 16,
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  menuButton: {
-    padding: 8,
-  },
-  notificationButton: {
-    padding: 8,
-    position: 'relative',
-  },
-  notificationBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: '#EF4444',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  notificationBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 8,
+    padding: 20,
   },
   subtitle: {
     fontSize: 16,

@@ -31,6 +31,7 @@ interface SidebarProps {
 function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [residentManagementOpen, setResidentManagementOpen] = useState(false);
   const [vehicleRegistrationOpen, setVehicleRegistrationOpen] = useState(false);
+  const [visitorPreRegistrationOpen, setVisitorPreRegistrationOpen] = useState(false);
   const [pendingComplaintsCount, setPendingComplaintsCount] = useState(0);
   const [pendingVehicleRegistrationsCount, setPendingVehicleRegistrationsCount] = useState(0);
   const [pendingMaintenanceCount, setPendingMaintenanceCount] = useState(0);
@@ -317,6 +318,80 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                 </div>
               );
             }
+            if (item.path === '/visitor-pre-registration') {
+              const isActive = location.pathname.startsWith('/visitor-pre-registration');
+              return (
+                <div 
+                  key={item.path} 
+                  className="relative"
+                  onMouseEnter={() => {
+                    setVisitorPreRegistrationOpen(true);
+                  }}
+                  onMouseLeave={() => {
+                    setVisitorPreRegistrationOpen(false);
+                  }}
+                >
+                  <button
+                    className={`flex items-center gap-3 px-4 py-2.5 mx-2 border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
+                      isActive
+                        ? 'bg-[#1877F2] text-white font-semibold'
+                        : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-xl">
+                      {item.icon}
+                    </span>
+                    <span className="font-normal text-sm flex-1">
+                      {item.label}
+                    </span>
+                    {pendingVisitorsCount > 0 && (
+                      <span className="bg-red-500 text-white text-xs font-semibold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+                        {pendingVisitorsCount > 9 ? '9+' : pendingVisitorsCount}
+                      </span>
+                    )}
+                    <span className={`material-symbols-outlined text-sm transition-transform ${visitorPreRegistrationOpen ? 'rotate-90' : ''}`}>chevron_right</span>
+                  </button>
+                  {visitorPreRegistrationOpen && (
+                    <div className="ml-4 mt-1 space-y-1">
+                      <button
+                        className={`flex items-center gap-3 px-4 py-2 w-full border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left ${
+                          location.pathname === '/visitor-pre-registration/applications'
+                            ? 'bg-[#1877F2] text-white font-semibold'
+                            : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
+                        }`}
+                        onClick={() => {
+                          handleNavigation('/visitor-pre-registration/applications');
+                          setVisitorPreRegistrationOpen(false);
+                          if (window.innerWidth < 1024) {
+                            onClose();
+                          }
+                        }}
+                      >
+                        <span className="material-symbols-outlined text-lg">description</span>
+                        <span className="text-xs">Applications</span>
+                      </button>
+                      <button
+                        className={`flex items-center gap-3 px-4 py-2 w-full border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left ${
+                          location.pathname === '/visitor-pre-registration/visitors-list'
+                            ? 'bg-[#1877F2] text-white font-semibold'
+                            : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
+                        }`}
+                        onClick={() => {
+                          handleNavigation('/visitor-pre-registration/visitors-list');
+                          setVisitorPreRegistrationOpen(false);
+                          if (window.innerWidth < 1024) {
+                            onClose();
+                          }
+                        }}
+                      >
+                        <span className="material-symbols-outlined text-lg">verified_user</span>
+                        <span className="text-xs">Visitors List</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            }
             if (item.path === '/vehicle-registration') {
               const isActive = location.pathname.startsWith('/vehicle-registration');
               return (
@@ -397,8 +472,6 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
               badgeCount = pendingComplaintsCount;
             } else if (item.path === '/maintenance') {
               badgeCount = pendingMaintenanceCount;
-            } else if (item.path === '/visitor-pre-registration') {
-              badgeCount = pendingVisitorsCount;
             }
 
             return (

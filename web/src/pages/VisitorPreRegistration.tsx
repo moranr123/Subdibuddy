@@ -1,5 +1,5 @@
 import { useEffect, useState, memo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, query, orderBy, updateDoc, doc, getDoc, addDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
@@ -33,6 +33,10 @@ function VisitorPreRegistration() {
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [residentNames, setResidentNames] = useState<Record<string, string>>({});
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Determine active view from URL
+  const activeView = location.pathname.includes('/visitors-list') ? 'visitors-list' : 'applications';
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -174,10 +178,44 @@ function VisitorPreRegistration() {
     }
     
     try {
+      // Get visitor data before updating
+      const visitorDoc = await getDoc(doc(db, 'visitors', visitorId));
+      if (!visitorDoc.exists()) {
+        alert('Visitor not found');
+        return;
+      }
+      const visitorData = visitorDoc.data() as Visitor;
+      
+      // Update visitor status
       await updateDoc(doc(db, 'visitors', visitorId), {
         status: newStatus,
         updatedAt: new Date(),
       });
+      
+      // Create notification for the resident if status changed to approved or rejected
+      if (currentStatus !== newStatus && visitorData.residentId && (newStatus === 'approved' || newStatus === 'rejected')) {
+        let message = '';
+        if (newStatus === 'approved') {
+          message = `Your visitor registration for ${visitorData.visitorName} has been approved. Visit scheduled for ${visitorData.visitorDate} at ${visitorData.visitorTime}.`;
+        } else if (newStatus === 'rejected') {
+          message = `Your visitor registration for ${visitorData.visitorName} has been rejected.`;
+        }
+        
+        await addDoc(collection(db, 'notifications'), {
+          type: 'visitor_registration_status',
+          visitorId: visitorId,
+          userId: visitorData.residentId,
+          userEmail: visitorData.residentEmail || '',
+          subject: `Visitor Registration ${newStatus === 'approved' ? 'Approved' : 'Rejected'}: ${visitorData.visitorName}`,
+          message: message,
+          status: newStatus,
+          recipientType: 'user',
+          recipientUserId: visitorData.residentId,
+          isRead: false,
+          createdAt: Timestamp.now(),
+        });
+      }
+      
       await fetchVisitors();
     } catch (error) {
       console.error('Error updating visitor status:', error);
@@ -274,6 +312,11 @@ function VisitorPreRegistration() {
   }, []);
 
   const filteredVisitors = visitors.filter(visitor => {
+    // Apply view filter - visitors-list shows only approved, applications shows all
+    if (activeView === 'visitors-list' && visitor.status !== 'approved') {
+      return false;
+    }
+    
     // Apply status filter
     const matchesStatus = filterStatus === 'all' || visitor.status === filterStatus;
     
@@ -322,7 +365,9 @@ function VisitorPreRegistration() {
           <div className="flex flex-col gap-4 md:gap-6 w-full max-w-full">
             <div className="w-full bg-white rounded-xl p-4 md:p-6 lg:p-8 border border-gray-100 shadow-sm">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 md:mb-6">
-                <h2 className="m-0 text-gray-900 text-base md:text-lg font-normal">Gate Pass Management</h2>
+                <h2 className="m-0 text-gray-900 text-base md:text-lg font-normal">
+                  {activeView === 'visitors-list' ? 'Visitors List' : 'Applications'}
+                </h2>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
                   <input
                     type="text"
@@ -331,16 +376,18 @@ function VisitorPreRegistration() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="px-3 md:px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-48 md:w-64"
                   />
-                  <select
-                    value={filterStatus}
-                    onChange={(e) => setFilterStatus(e.target.value)}
-                    className="px-3 md:px-4 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 cursor-pointer transition-colors hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-auto"
-                  >
-                    <option value="all">All Status</option>
-                    <option value="pending">Pending</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
+                  {activeView === 'applications' && (
+                    <select
+                      value={filterStatus}
+                      onChange={(e) => setFilterStatus(e.target.value)}
+                      className="px-3 md:px-4 py-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 cursor-pointer transition-colors hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-auto"
+                    >
+                      <option value="all">All Status</option>
+                      <option value="pending">Pending</option>
+                      <option value="approved">Approved</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  )}
                   <button
                     className="px-3 md:px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-200 whitespace-nowrap"
                     onClick={handleDateFilter}
@@ -419,14 +466,6 @@ function VisitorPreRegistration() {
                             <span className="text-xs font-medium text-gray-600">Resident: </span>
                             <span className="text-xs text-gray-900">{residentNames[visitor.residentId] || visitor.residentEmail || 'Unknown Resident'}</span>
                           </div>
-                          <div>
-                            <span className="text-xs font-medium text-gray-600">Gate Pass: </span>
-                            {visitor.gatePassVerified ? (
-                              <span className="text-xs text-green-600 font-semibold">✓ Verified</span>
-                            ) : (
-                              <span className="text-xs text-orange-600 font-semibold">Not Verified</span>
-                            )}
-                          </div>
                         </div>
 
                         <div className="flex flex-col gap-2 pt-3 border-t border-gray-200">
@@ -444,22 +483,26 @@ function VisitorPreRegistration() {
                             <option value="approved">Approve</option>
                             <option value="rejected">Reject</option>
                           </select>
-                          {visitor.status === 'approved' && !visitor.gatePassVerified && (
-                            <button
-                              className="w-full px-3 py-1.5 bg-green-500 text-white text-xs rounded hover:bg-[#45a049] transition-colors"
-                              onClick={() => handleVerifyGatePass(visitor.id)}
-                            >
-                              Verify Gate Pass
-                            </button>
-                          )}
-                          {(visitor.status === 'approved' || visitor.status === 'rejected') && (
-                            <button
-                              className="w-full px-3 py-1.5 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors"
-                              onClick={() => handleArchive(visitor.id)}
-                            >
-                              Archive
-                            </button>
-                          )}
+                          {(visitor.status === 'approved' && !visitor.gatePassVerified) || (visitor.status === 'approved' || visitor.status === 'rejected') ? (
+                            <div className="flex gap-2">
+                              {visitor.status === 'approved' && !visitor.gatePassVerified && (
+                                <button
+                                  className="flex-1 px-3 py-1.5 bg-green-500 text-white text-xs rounded hover:bg-[#45a049] transition-colors"
+                                  onClick={() => handleVerifyGatePass(visitor.id)}
+                                >
+                                  Verify Gate Pass
+                                </button>
+                              )}
+                              {(visitor.status === 'approved' || visitor.status === 'rejected') && (
+                                <button
+                                  className="flex-1 px-3 py-1.5 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors"
+                                  onClick={() => handleArchive(visitor.id)}
+                                >
+                                  Archive
+                                </button>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     ))}
@@ -477,7 +520,6 @@ function VisitorPreRegistration() {
                           <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Visit Date/Time</th>
                           <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Resident</th>
                           <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
-                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Gate Pass</th>
                           <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
                         </tr>
                       </thead>
@@ -501,13 +543,6 @@ function VisitorPreRegistration() {
                               </span>
                             </td>
                             <td className="px-4 py-4 border-b border-gray-100 align-top">
-                              {visitor.gatePassVerified ? (
-                                <span className="px-2.5 py-1 rounded bg-green-500 text-white text-xs font-semibold">✓ Verified</span>
-                              ) : (
-                                <span className="px-2.5 py-1 rounded bg-orange-500 text-white text-xs font-semibold">Not Verified</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-4 border-b border-gray-100 align-top">
                               <div className="flex flex-col gap-2">
                                 <select
                                   className={`px-2.5 py-1.5 border border-gray-200 rounded text-xs bg-white text-gray-900 transition-colors hover:border-primary focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(30,64,175,0.1)] ${
@@ -523,22 +558,26 @@ function VisitorPreRegistration() {
                                   <option value="approved">Approve</option>
                                   <option value="rejected">Reject</option>
                                 </select>
-                                {visitor.status === 'approved' && !visitor.gatePassVerified && (
-                                  <button
-                                    className="bg-green-500 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-[#45a049]"
-                                    onClick={() => handleVerifyGatePass(visitor.id)}
-                                  >
-                                    Verify Gate Pass
-                                  </button>
-                                )}
-                                {(visitor.status === 'approved' || visitor.status === 'rejected') && (
-                                  <button
-                                    className="bg-gray-500 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-600"
-                                    onClick={() => handleArchive(visitor.id)}
-                                  >
-                                    Archive
-                                  </button>
-                                )}
+                                {(visitor.status === 'approved' && !visitor.gatePassVerified) || (visitor.status === 'approved' || visitor.status === 'rejected') ? (
+                                  <div className="flex gap-2">
+                                    {visitor.status === 'approved' && !visitor.gatePassVerified && (
+                                      <button
+                                        className="flex-1 bg-green-500 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-[#45a049]"
+                                        onClick={() => handleVerifyGatePass(visitor.id)}
+                                      >
+                                        Verify Gate Pass
+                                      </button>
+                                    )}
+                                    {(visitor.status === 'approved' || visitor.status === 'rejected') && (
+                                      <button
+                                        className="flex-1 bg-gray-500 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-gray-600"
+                                        onClick={() => handleArchive(visitor.id)}
+                                      >
+                                        Archive
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : null}
                               </div>
                             </td>
                           </tr>
