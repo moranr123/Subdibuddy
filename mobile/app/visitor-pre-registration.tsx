@@ -396,7 +396,7 @@ export default function VisitorPreRegistration() {
             <Text style={styles.sectionTitle}>Visitor Information</Text>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Visitor Name *</Text>
+              <Text style={styles.label}>Visitor Name</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Enter visitor's full name"
@@ -407,7 +407,7 @@ export default function VisitorPreRegistration() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Visitor Phone *</Text>
+              <Text style={styles.label}>Visitor Phone</Text>
               <TextInput
                 style={styles.input}
                 placeholder="09XX-XXX-XXXX"
@@ -419,7 +419,7 @@ export default function VisitorPreRegistration() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Purpose of Visit *</Text>
+              <Text style={styles.label}>Purpose of Visit</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
                 placeholder="Describe the purpose of the visit"
@@ -433,7 +433,7 @@ export default function VisitorPreRegistration() {
 
             <View style={styles.row}>
               <View style={[styles.inputGroup, styles.halfWidth]}>
-                <Text style={styles.label}>Visit Date *</Text>
+                <Text style={styles.label}>Visit Date</Text>
                 <TouchableOpacity
                   style={styles.datePickerButton}
                   onPress={handleDatePickerOpen}
@@ -448,7 +448,7 @@ export default function VisitorPreRegistration() {
               </View>
 
               <View style={[styles.inputGroup, styles.halfWidth]}>
-                <Text style={styles.label}>Visit Time *</Text>
+                <Text style={styles.label}>Visit Time</Text>
                 <TouchableOpacity
                   style={styles.datePickerButton}
                   onPress={handleTimePickerOpen}
@@ -1137,5 +1137,6 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 });
+
 
 

@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Dimensions, ActivityIndicator, Modal, Alert, Image } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, orderBy, onSnapshot, updateDoc, doc, Timestamp, addDoc } from 'firebase/firestore';
@@ -9,6 +9,7 @@ import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import { getAuthService, db, storage } from '../firebase/config';
 import { useNotifications } from '../hooks/useNotifications';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Payment {
   amount: number;
@@ -37,6 +38,7 @@ interface Billing {
 
 export default function Billing() {
   const router = useRouter();
+  const { theme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sidebarAnimation = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
 
@@ -144,17 +146,367 @@ export default function Billing() {
     }
   };
 
+  const dynamicStyles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    content: {
+      flex: 1,
+    },
+    section: {
+      padding: 20,
+    },
+    title: {
+      fontSize: 24,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 6,
+    },
+    description: {
+      fontSize: 15,
+      color: theme.textSecondary,
+    },
+    loadingBox: {
+      marginHorizontal: 16,
+      padding: 16,
+      borderRadius: 12,
+      backgroundColor: theme.cardBackground,
+      borderColor: theme.border,
+      borderWidth: 1,
+      alignItems: 'center',
+      gap: 8,
+    },
+    loadingText: {
+      color: theme.textSecondary,
+      fontSize: 14,
+    },
+    emptyBox: {
+      marginHorizontal: 16,
+      padding: 20,
+      borderRadius: 12,
+      backgroundColor: theme.cardBackground,
+      borderColor: theme.border,
+      borderWidth: 1,
+      alignItems: 'center',
+    },
+    emptyText: {
+      color: theme.textSecondary,
+      fontSize: 14,
+    },
+    list: {
+      paddingHorizontal: 16,
+      gap: 12,
+      paddingBottom: 16,
+    },
+    card: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 14,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+      shadowColor: '#000',
+      shadowOpacity: 0.04,
+      shadowOffset: { width: 0, height: 2 },
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    cardOverdue: {
+      borderColor: '#fecaca',
+      backgroundColor: theme.cardBackground,
+    },
+    cardHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    cardTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    amount: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: theme.text,
+      marginBottom: 4,
+    },
+    rowText: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      marginTop: 2,
+    },
+    statusPill: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 999,
+    },
+    statusText: {
+      color: 'white',
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    typePill: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 999,
+    },
+    typePillWater: {
+      backgroundColor: '#dbeafe',
+    },
+    typePillElectricity: {
+      backgroundColor: '#fef3c7',
+    },
+    typePillText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    proofButton: {
+      marginTop: 10,
+      alignSelf: 'flex-start',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 999,
+      backgroundColor: '#2563eb',
+    },
+    proofButtonText: {
+      color: 'white',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 18,
+    },
+    modalCard: {
+      width: '100%',
+      borderRadius: 18,
+      backgroundColor: theme.cardBackground,
+      padding: 20,
+      shadowColor: '#000',
+      shadowOpacity: 0.18,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 8,
+    },
+    modalHeader: {
+      marginBottom: 8,
+    },
+    modalTitle: {
+      fontSize: 19,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    modalSubtitle: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      marginTop: 4,
+      marginBottom: 6,
+    },
+    modalBody: {
+      marginTop: 4,
+      gap: 10,
+    },
+    modalActions: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      marginTop: 16,
+      gap: 10,
+    },
+    modalButton: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 999,
+    },
+    modalCancel: {
+      backgroundColor: theme.border,
+    },
+    modalSubmit: {
+      backgroundColor: '#2563eb',
+    },
+    modalCancelText: {
+      color: theme.text,
+      fontSize: 13,
+      fontWeight: '500',
+    },
+    modalSubmitText: {
+      color: 'white',
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    modalButtonDisabled: {
+      opacity: 0.6,
+    },
+    submitButtonContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    proofActionsRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    proofActionButton: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.inputBackground,
+      alignItems: 'center',
+    },
+    proofActionPrimary: {
+      backgroundColor: '#e0ecff',
+      borderColor: '#bfdbfe',
+    },
+    proofActionText: {
+      color: theme.text,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    proofActionPrimaryText: {
+      color: '#1d4ed8',
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    proofPreview: {
+      width: '100%',
+      height: 200,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      resizeMode: 'cover',
+      backgroundColor: theme.inputBackground,
+    },
+    modalHint: {
+      color: theme.textSecondary,
+      fontSize: 13,
+    },
+    riskChip: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 999,
+    },
+    riskChipText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    riskChipOverdue: {
+      backgroundColor: '#fee2e2',
+    },
+    riskChipSoon: {
+      backgroundColor: '#fef3c7',
+    },
+    riskChipSafe: {
+      backgroundColor: '#dcfce7',
+    },
+    summaryCard: {
+      marginHorizontal: 16,
+      marginBottom: 12,
+      padding: 16,
+      borderRadius: 14,
+      backgroundColor: theme.headerBackground,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    summaryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    summaryMain: {
+      flex: 1,
+    },
+    summaryLabel: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      marginBottom: 2,
+    },
+    summaryValue: {
+      color: theme.text,
+      fontSize: 20,
+      fontWeight: '700',
+    },
+    summaryBadgeGroup: {
+      marginLeft: 8,
+      alignItems: 'flex-end',
+    },
+    summaryPill: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 999,
+    },
+    summaryPillOverdue: {
+      backgroundColor: '#fef3c7',
+    },
+    summaryPillLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: '#92400e',
+    },
+    summaryMetaRow: {
+      marginTop: 10,
+    },
+    summaryMetaText: {
+      color: theme.textSecondary,
+      fontSize: 12,
+    },
+    viewProofButton: {
+      marginTop: 8,
+      alignSelf: 'flex-start',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.inputBackground,
+    },
+    viewProofButtonText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    seeAllButton: {
+      marginHorizontal: 16,
+      marginTop: 12,
+      marginBottom: 8,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 12,
+      backgroundColor: theme.cardBackground,
+      borderWidth: 1,
+      borderColor: theme.border,
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOpacity: 0.04,
+      shadowOffset: { width: 0, height: 2 },
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    seeAllButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#2563eb',
+    },
+  }), [theme]);
+
   const renderStatus = (billing: Billing) => (
-    <View style={[styles.statusPill, { backgroundColor: getStatusColor(billing.status) }]}>
-      <Text style={styles.statusText}>{billing.status.toUpperCase()}</Text>
+    <View style={[dynamicStyles.statusPill, { backgroundColor: getStatusColor(billing.status) }]}>
+      <Text style={dynamicStyles.statusText}>{billing.status.toUpperCase()}</Text>
     </View>
   );
 
   const getRiskChip = (billing: Billing) => {
     if (billing.status === 'paid') {
       return (
-        <View style={[styles.riskChip, styles.riskChipSafe]}>
-          <Text style={styles.riskChipText}>Paid</Text>
+        <View style={[dynamicStyles.riskChip, dynamicStyles.riskChipSafe]}>
+          <Text style={dynamicStyles.riskChipText}>Paid</Text>
         </View>
       );
     }
@@ -264,19 +616,43 @@ export default function Billing() {
     setProofModalVisible(true);
   }, []);
 
-  const pickImage = useCallback(async (fromCamera: boolean) => {
-    const perms = fromCamera
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perms.granted) {
-      Alert.alert('Permission needed', 'Please allow access to proceed.');
-      return;
-    }
-    const result = fromCamera
-      ? await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.7 })
-      : await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, quality: 0.7 });
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setProofImage(result.assets[0].uri);
+  const showImageSourcePicker = useCallback(() => {
+    Alert.alert(
+      'Select Image Source',
+      'Choose an option',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Camera', onPress: () => pickImage('camera') },
+        { text: 'Gallery', onPress: () => pickImage('gallery') },
+      ]
+    );
+  }, []);
+
+  const pickImage = useCallback(async (source: 'camera' | 'gallery') => {
+    try {
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Please allow camera access to proceed.');
+          return;
+        }
+        const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.7 });
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          setProofImage(result.assets[0].uri);
+        }
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Please allow gallery access to proceed.');
+          return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, quality: 0.7 });
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          setProofImage(result.assets[0].uri);
+        }
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
     }
   }, []);
 
@@ -355,39 +731,389 @@ export default function Billing() {
     return billing.status !== 'paid' && balance > 0;
   });
 
+  const dynamicStyles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    content: {
+      flex: 1,
+    },
+    section: {
+      padding: 20,
+    },
+    title: {
+      fontSize: 24,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 6,
+    },
+    description: {
+      fontSize: 15,
+      color: theme.textSecondary,
+    },
+    loadingBox: {
+      marginHorizontal: 16,
+      padding: 16,
+      borderRadius: 12,
+      backgroundColor: theme.cardBackground,
+      borderColor: theme.border,
+      borderWidth: 1,
+      alignItems: 'center',
+      gap: 8,
+    },
+    loadingText: {
+      color: theme.textSecondary,
+      fontSize: 14,
+    },
+    emptyBox: {
+      marginHorizontal: 16,
+      padding: 20,
+      borderRadius: 12,
+      backgroundColor: theme.cardBackground,
+      borderColor: theme.border,
+      borderWidth: 1,
+      alignItems: 'center',
+    },
+    emptyText: {
+      color: theme.textSecondary,
+      fontSize: 14,
+    },
+    list: {
+      paddingHorizontal: 16,
+      gap: 12,
+      paddingBottom: 16,
+    },
+    card: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 14,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+      shadowColor: '#000',
+      shadowOpacity: 0.04,
+      shadowOffset: { width: 0, height: 2 },
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    cardOverdue: {
+      borderColor: '#fecaca',
+      backgroundColor: theme.cardBackground,
+    },
+    cardHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    cardTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    amount: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: theme.text,
+      marginBottom: 4,
+    },
+    rowText: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      marginTop: 2,
+    },
+    statusPill: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 999,
+    },
+    statusText: {
+      color: 'white',
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    typePill: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 999,
+    },
+    typePillWater: {
+      backgroundColor: '#dbeafe',
+    },
+    typePillElectricity: {
+      backgroundColor: '#fef3c7',
+    },
+    typePillText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    proofButton: {
+      marginTop: 10,
+      alignSelf: 'flex-start',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 999,
+      backgroundColor: '#2563eb',
+    },
+    proofButtonText: {
+      color: 'white',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 18,
+    },
+    modalCard: {
+      width: '100%',
+      borderRadius: 18,
+      backgroundColor: theme.cardBackground,
+      padding: 20,
+      shadowColor: '#000',
+      shadowOpacity: 0.18,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 8,
+    },
+    modalHeader: {
+      marginBottom: 8,
+    },
+    modalTitle: {
+      fontSize: 19,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    modalSubtitle: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      marginTop: 4,
+      marginBottom: 6,
+    },
+    modalBody: {
+      marginTop: 4,
+      gap: 10,
+    },
+    modalActions: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      marginTop: 16,
+      gap: 10,
+    },
+    modalButton: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 999,
+    },
+    modalCancel: {
+      backgroundColor: theme.border,
+    },
+    modalSubmit: {
+      backgroundColor: '#2563eb',
+    },
+    modalCancelText: {
+      color: theme.text,
+      fontSize: 13,
+      fontWeight: '500',
+    },
+    modalSubmitText: {
+      color: 'white',
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    modalButtonDisabled: {
+      opacity: 0.6,
+    },
+    submitButtonContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    proofActionsRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    proofActionButton: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.inputBackground,
+      alignItems: 'center',
+    },
+    proofActionPrimary: {
+      backgroundColor: '#e0ecff',
+      borderColor: '#bfdbfe',
+    },
+    proofActionText: {
+      color: theme.text,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    proofActionPrimaryText: {
+      color: '#1d4ed8',
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    proofPreview: {
+      width: '100%',
+      height: 200,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      resizeMode: 'cover',
+      backgroundColor: theme.inputBackground,
+    },
+    modalHint: {
+      color: theme.textSecondary,
+      fontSize: 13,
+    },
+    riskChip: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 999,
+    },
+    riskChipText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    riskChipOverdue: {
+      backgroundColor: '#fee2e2',
+    },
+    riskChipSoon: {
+      backgroundColor: '#fef3c7',
+    },
+    riskChipSafe: {
+      backgroundColor: '#dcfce7',
+    },
+    summaryCard: {
+      marginHorizontal: 16,
+      marginBottom: 12,
+      padding: 16,
+      borderRadius: 14,
+      backgroundColor: theme.headerBackground,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    summaryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    summaryMain: {
+      flex: 1,
+    },
+    summaryLabel: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      marginBottom: 2,
+    },
+    summaryValue: {
+      color: theme.text,
+      fontSize: 20,
+      fontWeight: '700',
+    },
+    summaryBadgeGroup: {
+      marginLeft: 8,
+      alignItems: 'flex-end',
+    },
+    summaryPill: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 999,
+    },
+    summaryPillOverdue: {
+      backgroundColor: '#fef3c7',
+    },
+    summaryPillLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: '#92400e',
+    },
+    summaryMetaRow: {
+      marginTop: 10,
+    },
+    summaryMetaText: {
+      color: theme.textSecondary,
+      fontSize: 12,
+    },
+    viewProofButton: {
+      marginTop: 8,
+      alignSelf: 'flex-start',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.inputBackground,
+    },
+    viewProofButtonText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    seeAllButton: {
+      marginHorizontal: 16,
+      marginTop: 12,
+      marginBottom: 8,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 12,
+      backgroundColor: theme.cardBackground,
+      borderWidth: 1,
+      borderColor: theme.border,
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOpacity: 0.04,
+      shadowOffset: { width: 0, height: 2 },
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    seeAllButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#2563eb',
+    },
+  }), [theme]);
+
   return (
-    <View style={styles.container}>
+    <View style={dynamicStyles.container}>
       <Header
         onMenuPress={toggleSidebar}
         onNotificationPress={() => router.push('/notifications')}
         notificationCount={unreadCount}
       />
       <Sidebar isOpen={sidebarOpen} onClose={toggleSidebar} animation={sidebarAnimation} />
-      <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 24 }}>
-        <View style={styles.section}>
-          <Text style={styles.title}>Billings & Payment</Text>
-          <Text style={styles.description}>Your bills and payment history.</Text>
+      <ScrollView style={dynamicStyles.content} contentContainerStyle={{ paddingBottom: 24 }}>
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.title}>Billings & Payment</Text>
+          <Text style={dynamicStyles.description}>Your bills and payment history.</Text>
         </View>
 
         {billings.length > 0 && (
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryRow}>
-              <View style={styles.summaryMain}>
-                <Text style={styles.summaryLabel}>Total outstanding</Text>
-                <Text style={styles.summaryValue}>
+          <View style={dynamicStyles.summaryCard}>
+            <View style={dynamicStyles.summaryRow}>
+              <View style={dynamicStyles.summaryMain}>
+                <Text style={dynamicStyles.summaryLabel}>Total outstanding</Text>
+                <Text style={dynamicStyles.summaryValue}>
                   {formatCurrency(summary.totalOutstanding)}
                 </Text>
               </View>
-              <View style={styles.summaryBadgeGroup}>
-                <View style={[styles.summaryPill, styles.summaryPillOverdue]}>
-                  <Text style={styles.summaryPillLabel}>
+              <View style={dynamicStyles.summaryBadgeGroup}>
+                <View style={[dynamicStyles.summaryPill, dynamicStyles.summaryPillOverdue]}>
+                  <Text style={dynamicStyles.summaryPillLabel}>
                     {summary.overdueCount} overdue
                   </Text>
                 </View>
               </View>
             </View>
-            <View style={styles.summaryMetaRow}>
-              <Text style={styles.summaryMetaText}>
+            <View style={dynamicStyles.summaryMetaRow}>
+              <Text style={dynamicStyles.summaryMetaText}>
                 Next due:{' '}
                 {summary.nextDueDate
                   ? summary.nextDueDate.toLocaleDateString()
@@ -399,46 +1125,46 @@ export default function Billing() {
 
         {billings.length > 0 && (
           <TouchableOpacity
-            style={styles.seeAllButton}
+            style={dynamicStyles.seeAllButton}
             onPress={() => router.push('/billing-all')}
             activeOpacity={0.7}
           >
-            <Text style={styles.seeAllButtonText}>See all billings</Text>
+            <Text style={dynamicStyles.seeAllButtonText}>See all billings</Text>
           </TouchableOpacity>
         )}
 
         {loading ? (
-          <View style={styles.loadingBox}>
-            <ActivityIndicator size="small" color="#111827" />
-            <Text style={styles.loadingText}>Loading your billings...</Text>
+          <View style={dynamicStyles.loadingBox}>
+            <ActivityIndicator size="small" color={theme.text} />
+            <Text style={dynamicStyles.loadingText}>Loading your billings...</Text>
           </View>
         ) : unpaidBillings.length === 0 ? (
-          <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>No outstanding billings.</Text>
+          <View style={dynamicStyles.emptyBox}>
+            <Text style={dynamicStyles.emptyText}>No outstanding billings.</Text>
           </View>
         ) : (
-          <View style={styles.list}>
+          <View style={dynamicStyles.list}>
             {unpaidBillings.slice(0, 3).map((billing) => (
               <View
                 key={billing.id}
                 style={[
-                  styles.card,
-                  billing.status === 'overdue' ? styles.cardOverdue : null,
+                  dynamicStyles.card,
+                  billing.status === 'overdue' ? dynamicStyles.cardOverdue : null,
                 ]}
               >
-                <View style={styles.cardHeader}>
+                <View style={dynamicStyles.cardHeader}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={styles.cardTitle}>{billing.billingCycle || 'Billing'}</Text>
+                    <Text style={dynamicStyles.cardTitle}>{billing.billingCycle || 'Billing'}</Text>
                     {billing.billingType && (
                       <View
                         style={[
-                          styles.typePill,
+                          dynamicStyles.typePill,
                           billing.billingType === 'water'
-                            ? styles.typePillWater
-                            : styles.typePillElectricity,
+                            ? dynamicStyles.typePillWater
+                            : dynamicStyles.typePillElectricity,
                         ]}
                       >
-                        <Text style={styles.typePillText}>
+                        <Text style={dynamicStyles.typePillText}>
                           {billing.billingType === 'water' ? 'Water' : 'Electricity'}
                         </Text>
                       </View>
@@ -449,41 +1175,41 @@ export default function Billing() {
                     {getRiskChip(billing)}
                   </View>
                 </View>
-                <Text style={styles.amount}>{formatCurrency(billing.amount)}</Text>
-                <Text style={styles.rowText}>Due: {formatDate(billing.dueDate)}</Text>
-                <Text style={styles.rowText}>Description: {billing.description || '—'}</Text>
-                <Text style={styles.rowText}>
+                <Text style={dynamicStyles.amount}>{formatCurrency(billing.amount)}</Text>
+                <Text style={dynamicStyles.rowText}>Due: {formatDate(billing.dueDate)}</Text>
+                <Text style={dynamicStyles.rowText}>Description: {billing.description || '—'}</Text>
+                <Text style={dynamicStyles.rowText}>
                   Paid: {formatCurrency(billing.totalPaid || 0)} | Balance:{' '}
                   {formatCurrency(billing.balance || billing.amount)}
                 </Text>
 
                 {billing.userProofStatus === 'pending' ? (
-                  <Text style={[styles.rowText, { marginTop: 6, color: '#2563eb' }]}>
+                  <Text style={[dynamicStyles.rowText, { marginTop: 6, color: '#2563eb' }]}>
                     Proof submitted. Waiting for admin verification.
                   </Text>
                 ) : billing.userProofStatus === 'verified' ? (
-                  <Text style={[styles.rowText, { marginTop: 6, color: '#16a34a' }]}>
+                  <Text style={[dynamicStyles.rowText, { marginTop: 6, color: '#16a34a' }]}>
                     Proof verified by admin.
                   </Text>
                 ) : billing.userProofStatus === 'rejected' ? (
-                  <Text style={[styles.rowText, { marginTop: 6, color: '#dc2626' }]}>
+                  <Text style={[dynamicStyles.rowText, { marginTop: 6, color: '#dc2626' }]}>
                     Proof rejected. Please contact admin.
                   </Text>
                 ) : billing.status !== 'paid' ? (
                   <TouchableOpacity
-                    style={styles.proofButton}
+                    style={dynamicStyles.proofButton}
                     onPress={() => openProofModal(billing)}
                   >
-                    <Text style={styles.proofButtonText}>Send Proof of Payment</Text>
+                    <Text style={dynamicStyles.proofButtonText}>Send Proof of Payment</Text>
                   </TouchableOpacity>
                 ) : null}
 
                 {(billing.userProofImageUrl || billing.userProofDetails) && (
                   <TouchableOpacity
-                    style={styles.viewProofButton}
+                    style={dynamicStyles.viewProofButton}
                     onPress={() => openViewProofModal(billing)}
                   >
-                    <Text style={styles.viewProofButtonText}>View receipt / proof</Text>
+                    <Text style={dynamicStyles.viewProofButtonText}>View receipt / proof</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -502,56 +1228,53 @@ export default function Billing() {
           setProofImage(null);
         }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Proof of Payment</Text>
+        <View style={dynamicStyles.modalOverlay}>
+          <View style={dynamicStyles.modalCard}>
+            <View style={dynamicStyles.modalHeader}>
+              <Text style={dynamicStyles.modalTitle}>Proof of Payment</Text>
               {selectedBilling && (
-                <Text style={styles.modalSubtitle}>
+                <Text style={dynamicStyles.modalSubtitle}>
                   {selectedBilling.billingCycle || 'Billing'} · {formatCurrency(selectedBilling.amount)}
                 </Text>
               )}
             </View>
 
-            <View style={styles.modalBody}>
-              <View style={styles.proofActionsRow}>
-                <TouchableOpacity style={[styles.proofActionButton, styles.proofActionPrimary]} onPress={() => pickImage(true)}>
-                  <Text style={styles.proofActionPrimaryText}>Use Camera</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.proofActionButton} onPress={() => pickImage(false)}>
-                  <Text style={styles.proofActionText}>Gallery</Text>
+            <View style={dynamicStyles.modalBody}>
+              <View style={dynamicStyles.proofActionsRow}>
+                <TouchableOpacity style={[dynamicStyles.proofActionButton, dynamicStyles.proofActionPrimary]} onPress={showImageSourcePicker}>
+                  <Text style={dynamicStyles.proofActionPrimaryText}>Select Image</Text>
                 </TouchableOpacity>
               </View>
               {proofImage ? (
-                <Image source={{ uri: proofImage }} style={styles.proofPreview} />
+                <Image source={{ uri: proofImage }} style={dynamicStyles.proofPreview} />
               ) : (
-                <Text style={styles.modalHint}>Attach a clear photo or screenshot of your payment.</Text>
+                <Text style={dynamicStyles.modalHint}>Attach a clear photo or screenshot of your payment.</Text>
               )}
             </View>
 
-            <View style={styles.modalActions}>
+            <View style={dynamicStyles.modalActions}>
               <TouchableOpacity
-                style={[styles.modalButton, styles.modalCancel]}
+                style={[dynamicStyles.modalButton, dynamicStyles.modalCancel]}
                 onPress={() => {
                   setProofModalVisible(false);
                   setSelectedBilling(null);
                   setProofImage(null);
                 }}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={dynamicStyles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalButton, styles.modalSubmit, submittingProof && styles.modalButtonDisabled]}
+                style={[dynamicStyles.modalButton, dynamicStyles.modalSubmit, submittingProof && dynamicStyles.modalButtonDisabled]}
                 onPress={handleSubmitProof}
                 disabled={submittingProof}
               >
                 {submittingProof ? (
-                  <View style={styles.submitButtonContent}>
+                  <View style={dynamicStyles.submitButtonContent}>
                     <ActivityIndicator size="small" color="#ffffff" />
-                    <Text style={styles.modalSubmitText}>Submitting...</Text>
+                    <Text style={dynamicStyles.modalSubmitText}>Submitting...</Text>
                   </View>
                 ) : (
-                  <Text style={styles.modalSubmitText}>Submit Proof</Text>
+                  <Text style={dynamicStyles.modalSubmitText}>Submit Proof</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -568,34 +1291,34 @@ export default function Billing() {
           setViewProofBilling(null);
         }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Billing Receipt / Proof</Text>
+        <View style={dynamicStyles.modalOverlay}>
+          <View style={dynamicStyles.modalCard}>
+            <View style={dynamicStyles.modalHeader}>
+              <Text style={dynamicStyles.modalTitle}>Billing Receipt / Proof</Text>
               {viewProofBilling && (
-                <Text style={styles.modalSubtitle}>
+                <Text style={dynamicStyles.modalSubtitle}>
                   {viewProofBilling.billingCycle || 'Billing'} ·{' '}
                   {formatCurrency(viewProofBilling.amount)}
                 </Text>
               )}
             </View>
 
-            <View style={styles.modalBody}>
+            <View style={dynamicStyles.modalBody}>
               {viewProofBilling?.userProofImageUrl ? (
                 <Image
                   source={{ uri: viewProofBilling.userProofImageUrl }}
-                  style={styles.proofPreview}
+                  style={dynamicStyles.proofPreview}
                 />
               ) : viewProofBilling?.userProofDetails ? (
-                <Text style={styles.modalHint}>{viewProofBilling.userProofDetails}</Text>
+                <Text style={dynamicStyles.modalHint}>{viewProofBilling.userProofDetails}</Text>
               ) : (
-                <Text style={styles.modalHint}>
+                <Text style={dynamicStyles.modalHint}>
                   No proof image or details available.
                 </Text>
               )}
 
               {viewProofBilling && (
-                <Text style={[styles.rowText, { marginTop: 10 }]}>
+                <Text style={[dynamicStyles.rowText, { marginTop: 10 }]}>
                   Status:{' '}
                   {viewProofBilling.userProofStatus
                     ? viewProofBilling.userProofStatus.toUpperCase()
@@ -604,15 +1327,15 @@ export default function Billing() {
               )}
             </View>
 
-            <View style={styles.modalActions}>
+            <View style={dynamicStyles.modalActions}>
               <TouchableOpacity
-                style={[styles.modalButton, styles.modalSubmit]}
+                style={[dynamicStyles.modalButton, dynamicStyles.modalSubmit]}
                 onPress={() => {
                   setViewProofModalVisible(false);
                   setViewProofBilling(null);
                 }}
               >
-                <Text style={styles.modalSubmitText}>Close</Text>
+                <Text style={dynamicStyles.modalSubmitText}>Close</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -621,368 +1344,3 @@ export default function Billing() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-  },
-  content: {
-    flex: 1,
-  },
-  section: {
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 6,
-  },
-  description: {
-    fontSize: 15,
-    color: '#6b7280',
-  },
-  loadingBox: {
-    marginHorizontal: 16,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: '#ffffff',
-    borderColor: '#e5e7eb',
-    borderWidth: 1,
-    alignItems: 'center',
-    gap: 8,
-  },
-  loadingText: {
-    color: '#4b5563',
-    fontSize: 14,
-  },
-  emptyBox: {
-    marginHorizontal: 16,
-    padding: 20,
-    borderRadius: 12,
-    backgroundColor: '#ffffff',
-    borderColor: '#e5e7eb',
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  emptyText: {
-    color: '#6b7280',
-    fontSize: 14,
-  },
-  list: {
-    paddingHorizontal: 16,
-    gap: 12,
-    paddingBottom: 16,
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  cardOverdue: {
-    borderColor: '#fecaca',
-    backgroundColor: '#fff1f2',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  amount: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  rowText: {
-    fontSize: 13,
-    color: '#4b5563',
-    marginTop: 2,
-  },
-  statusPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  statusText: {
-    color: 'white',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  typePill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  typePillWater: {
-    backgroundColor: '#dbeafe',
-  },
-  typePillElectricity: {
-    backgroundColor: '#fef3c7',
-  },
-  typePillText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  proofButton: {
-    marginTop: 10,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: '#2563eb',
-  },
-  proofButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 18,
-  },
-  modalCard: {
-    width: '100%',
-    borderRadius: 18,
-    backgroundColor: '#ffffff',
-    padding: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-  },
-  modalHeader: {
-    marginBottom: 8,
-  },
-  modalTitle: {
-    fontSize: 19,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  modalSubtitle: {
-    fontSize: 13,
-    color: '#6b7280',
-    marginTop: 4,
-    marginBottom: 6,
-  },
-  modalBody: {
-    marginTop: 4,
-    gap: 10,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 16,
-    gap: 10,
-  },
-  modalButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  modalCancel: {
-    backgroundColor: '#f3f4f6',
-  },
-  modalSubmit: {
-    backgroundColor: '#2563eb',
-  },
-  modalCancelText: {
-    color: '#111827',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  modalSubmitText: {
-    color: 'white',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  modalButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  proofActionsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  proofActionButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#f8fafc',
-    alignItems: 'center',
-  },
-  proofActionPrimary: {
-    backgroundColor: '#e0ecff',
-    borderColor: '#bfdbfe',
-  },
-  proofActionText: {
-    color: '#1f2937',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  proofActionPrimaryText: {
-    color: '#1d4ed8',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  proofPreview: {
-    width: '100%',
-    height: 200,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    resizeMode: 'cover',
-    backgroundColor: '#f8fafc',
-  },
-  modalHint: {
-    color: '#6b7280',
-    fontSize: 13,
-  },
-  riskChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  riskChipText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  riskChipOverdue: {
-    backgroundColor: '#fee2e2',
-  },
-  riskChipSoon: {
-    backgroundColor: '#fef3c7',
-  },
-  riskChipSafe: {
-    backgroundColor: '#dcfce7',
-  },
-  summaryCard: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 14,
-    backgroundColor: '#111827',
-    borderWidth: 1,
-    borderColor: '#1f2937',
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  summaryMain: {
-    flex: 1,
-  },
-  summaryLabel: {
-    color: '#9ca3af',
-    fontSize: 12,
-    marginBottom: 2,
-  },
-  summaryValue: {
-    color: '#f9fafb',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  summaryBadgeGroup: {
-    marginLeft: 8,
-    alignItems: 'flex-end',
-  },
-  summaryPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  summaryPillOverdue: {
-    backgroundColor: '#fef3c7',
-  },
-  summaryPillLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#92400e',
-  },
-  summaryMetaRow: {
-    marginTop: 10,
-  },
-  summaryMetaText: {
-    color: '#d1d5db',
-    fontSize: 12,
-  },
-  summarySeeAllButton: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: '#111827',
-    borderWidth: 1,
-    borderColor: '#4b5563',
-  },
-  summarySeeAllText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#e5e7eb',
-  },
-  viewProofButton: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#f9fafb',
-  },
-  viewProofButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  seeAllButton: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  seeAllButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2563eb',
-  },
-});

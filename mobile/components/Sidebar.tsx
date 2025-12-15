@@ -5,6 +5,8 @@ import { signOut } from 'firebase/auth';
 import { getAuthService } from '../firebase/config';
 import { Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useTheme } from '../contexts/ThemeContext';
+import { useMemo } from 'react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -16,6 +18,7 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
 
   const isActive = (route: string) => {
     return pathname === route;
@@ -50,6 +53,53 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
     );
   };
 
+  const dynamicStyles = useMemo(() => StyleSheet.create({
+    sidebar: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      bottom: 0,
+      width: Dimensions.get('window').width * 0.65,
+      maxWidth: 280,
+      backgroundColor: theme.cardBackground,
+      zIndex: 999,
+      borderRightWidth: 1,
+      borderRightColor: theme.border,
+    },
+    sidebarHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+      minHeight: 56,
+    },
+    sidebarTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.text,
+      letterSpacing: -0.3,
+    },
+    sidebarItemText: {
+      fontSize: 16,
+      color: theme.text,
+      fontWeight: '400',
+      letterSpacing: -0.2,
+    },
+    sidebarItemActive: {
+      backgroundColor: theme.border,
+      borderRadius: 8,
+      marginHorizontal: 8,
+    },
+    sidebarDivider: {
+      height: 8,
+      backgroundColor: theme.background,
+      marginVertical: 4,
+    },
+  }), [theme]);
+
   return (
     <>
       {/* Overlay */}
@@ -64,7 +114,7 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
       {/* Sidebar */}
       <Animated.View
         style={[
-          styles.sidebar,
+          dynamicStyles.sidebar,
           {
             transform: [{ translateX: animation }],
             paddingTop: insets.top + 8,
@@ -73,12 +123,12 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
         pointerEvents={isOpen ? 'auto' : 'none'}
       >
         <View style={styles.sidebarContent}>
-          <View style={styles.sidebarHeader}>
+          <View style={dynamicStyles.sidebarHeader}>
             <View style={styles.sidebarHeaderContent}>
-              <Text style={styles.sidebarTitle}>Menu</Text>
+              <Text style={dynamicStyles.sidebarTitle}>Menu</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.sidebarCloseButton}>
-              <MaterialIcons name="close" size={24} color="#6b7280" />
+              <MaterialIcons name="close" size={24} color={theme.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -86,7 +136,7 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
             <TouchableOpacity
               style={[
                 styles.sidebarItem,
-                isActive('/profile') ? styles.sidebarItemActive : null
+                isActive('/profile') ? dynamicStyles.sidebarItemActive : null
               ]}
               onPress={() => {
                 onClose();
@@ -97,11 +147,11 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
               <MaterialIcons 
                 name="person" 
                 size={24} 
-                color={isActive('/profile') ? '#1877F2' : '#111827'} 
+                color={isActive('/profile') ? '#1877F2' : theme.text} 
                 style={styles.sidebarItemIcon}
               />
               <Text style={[
-                styles.sidebarItemText,
+                dynamicStyles.sidebarItemText,
                 isActive('/profile') ? styles.sidebarItemTextActive : null
               ]}>Profile</Text>
             </TouchableOpacity>
@@ -109,7 +159,7 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
             <TouchableOpacity
               style={[
                 styles.sidebarItem,
-                isActive('/history') ? styles.sidebarItemActive : null
+                isActive('/history') ? dynamicStyles.sidebarItemActive : null
               ]}
               onPress={() => {
                 onClose();
@@ -120,11 +170,11 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
               <MaterialIcons 
                 name="history" 
                 size={24} 
-                color={isActive('/history') ? '#1877F2' : '#111827'} 
+                color={isActive('/history') ? '#1877F2' : theme.text} 
                 style={styles.sidebarItemIcon}
               />
               <Text style={[
-                styles.sidebarItemText,
+                dynamicStyles.sidebarItemText,
                 isActive('/history') ? styles.sidebarItemTextActive : null
               ]}>History</Text>
             </TouchableOpacity>
@@ -132,7 +182,7 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
             <TouchableOpacity
               style={[
                 styles.sidebarItem,
-                isActive('/registered-vehicles') ? styles.sidebarItemActive : null
+                isActive('/registered-vehicles') ? dynamicStyles.sidebarItemActive : null
               ]}
               onPress={() => {
                 onClose();
@@ -143,11 +193,11 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
               <MaterialIcons 
                 name="directions-car" 
                 size={24} 
-                color={isActive('/registered-vehicles') ? '#1877F2' : '#111827'} 
+                color={isActive('/registered-vehicles') ? '#1877F2' : theme.text} 
                 style={styles.sidebarItemIcon}
               />
               <Text style={[
-                styles.sidebarItemText,
+                dynamicStyles.sidebarItemText,
                 isActive('/registered-vehicles') ? styles.sidebarItemTextActive : null
               ]}>Registered Vehicles</Text>
             </TouchableOpacity>
@@ -155,7 +205,7 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
             <TouchableOpacity
               style={[
                 styles.sidebarItem,
-                isActive('/visitor-pre-registration') ? styles.sidebarItemActive : null
+                isActive('/visitor-pre-registration') ? dynamicStyles.sidebarItemActive : null
               ]}
               onPress={() => {
                 onClose();
@@ -166,16 +216,39 @@ export default function Sidebar({ isOpen, onClose, animation }: SidebarProps) {
               <MaterialIcons 
                 name="person-add" 
                 size={24} 
-                color={isActive('/visitor-pre-registration') ? '#1877F2' : '#111827'} 
+                color={isActive('/visitor-pre-registration') ? '#1877F2' : theme.text} 
                 style={styles.sidebarItemIcon}
               />
               <Text style={[
-                styles.sidebarItemText,
+                dynamicStyles.sidebarItemText,
                 isActive('/visitor-pre-registration') ? styles.sidebarItemTextActive : null
               ]}>Visitor Pre-registration</Text>
             </TouchableOpacity>
 
-            <View style={styles.sidebarDivider} />
+            <TouchableOpacity
+              style={[
+                styles.sidebarItem,
+                isActive('/settings') ? dynamicStyles.sidebarItemActive : null
+              ]}
+              onPress={() => {
+                onClose();
+                router.push('/settings');
+              }}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons 
+                name="settings" 
+                size={24} 
+                color={isActive('/settings') ? '#1877F2' : theme.text} 
+                style={styles.sidebarItemIcon}
+              />
+              <Text style={[
+                dynamicStyles.sidebarItemText,
+                isActive('/settings') ? styles.sidebarItemTextActive : null
+              ]}>Settings</Text>
+            </TouchableOpacity>
+
+            <View style={dynamicStyles.sidebarDivider} />
 
             <TouchableOpacity
               style={[styles.sidebarItem, styles.sidebarItemSignOut]}
@@ -207,41 +280,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     zIndex: 998,
   },
-  sidebar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    bottom: 0,
-    width: Dimensions.get('window').width * 0.65,
-    maxWidth: 280,
-    backgroundColor: '#ffffff',
-    zIndex: 999,
-    borderRightWidth: 1,
-    borderRightColor: '#e5e7eb',
-  },
   sidebarContent: {
     flex: 1,
-  },
-  sidebarHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    minHeight: 56,
   },
   sidebarHeaderContent: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-  },
-  sidebarTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    letterSpacing: -0.3,
   },
   sidebarCloseButton: {
     width: 36,
@@ -269,25 +314,9 @@ const styles = StyleSheet.create({
   sidebarItemIcon: {
     marginRight: 12,
   },
-  sidebarItemText: {
-    fontSize: 16,
-    color: '#111827',
-    fontWeight: '400',
-    letterSpacing: -0.2,
-  },
-  sidebarItemActive: {
-    backgroundColor: '#e5e7eb',
-    borderRadius: 8,
-    marginHorizontal: 8,
-  },
   sidebarItemTextActive: {
     color: '#1877F2',
     fontWeight: '600',
-  },
-  sidebarDivider: {
-    height: 8,
-    backgroundColor: '#f3f4f6',
-    marginVertical: 4,
   },
   sidebarItemSignOut: {
     marginTop: 'auto',

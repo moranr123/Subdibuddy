@@ -1,11 +1,12 @@
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Image, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { getAuthService, db } from '../firebase/config';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface UserData {
   id: string;
@@ -36,6 +37,7 @@ interface UserData {
 export default function Profile() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const [user, setUser] = useState<any>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -100,10 +102,84 @@ export default function Profile() {
     return parts.length > 0 ? parts.join(', ') : 'N/A';
   };
 
+  const dynamicStyles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: theme.headerBackground,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: '#ffffff',
+      flex: 1,
+      textAlign: 'center',
+    },
+    content: {
+      flex: 1,
+    },
+    sectionCard: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 1,
+      },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 2,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+      paddingBottom: 8,
+    },
+    label: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: theme.textSecondary,
+      flex: 1,
+    },
+    value: {
+      fontSize: 14,
+      color: theme.text,
+      flex: 2,
+      textAlign: 'right',
+    },
+    emptyText: {
+      fontSize: 16,
+      color: theme.textSecondary,
+    },
+    imageLabel: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: theme.textSecondary,
+      marginBottom: 8,
+    },
+  }), [theme]);
+
   if (loading) {
     return (
-      <View style={styles.container}>
-        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={dynamicStyles.container}>
+        <View style={[dynamicStyles.header, { paddingTop: insets.top + 12 }]}>
           <TouchableOpacity 
             onPress={() => router.back()}
             style={styles.backButton}
@@ -111,7 +187,7 @@ export default function Profile() {
           >
             <FontAwesome5 name="arrow-left" size={20} color="#ffffff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Profile</Text>
+          <Text style={dynamicStyles.headerTitle}>Profile</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.loadingContainer}>
@@ -122,9 +198,9 @@ export default function Profile() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={dynamicStyles.container}>
       {/* Back Button */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[dynamicStyles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity 
           onPress={() => router.back()}
           style={styles.backButton}
@@ -132,109 +208,109 @@ export default function Profile() {
         >
           <FontAwesome5 name="arrow-left" size={20} color="#ffffff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile</Text>
+        <Text style={dynamicStyles.headerTitle}>Profile</Text>
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView style={dynamicStyles.content} contentContainerStyle={styles.contentContainer}>
         <View style={styles.section}>
           
           {userData ? (
             <View style={styles.profileCard}>
               {/* Personal Information */}
-              <View style={styles.sectionCard}>
-                <Text style={styles.sectionTitle}>Personal Information</Text>
+              <View style={dynamicStyles.sectionCard}>
+                <Text style={dynamicStyles.sectionTitle}>Personal Information</Text>
                 
                 <View style={styles.infoRow}>
-                  <Text style={styles.label}>Full Name:</Text>
-                  <Text style={styles.value}>{getFullName()}</Text>
+                  <Text style={dynamicStyles.label}>Full Name:</Text>
+                  <Text style={dynamicStyles.value}>{getFullName()}</Text>
                 </View>
 
                 {userData.firstName && (
                   <View style={styles.infoRow}>
-                    <Text style={styles.label}>First Name:</Text>
-                    <Text style={styles.value}>{userData.firstName}</Text>
+                    <Text style={dynamicStyles.label}>First Name:</Text>
+                    <Text style={dynamicStyles.value}>{userData.firstName}</Text>
                   </View>
                 )}
 
                 {userData.middleName && (
                   <View style={styles.infoRow}>
-                    <Text style={styles.label}>Middle Name:</Text>
-                    <Text style={styles.value}>{userData.middleName}</Text>
+                    <Text style={dynamicStyles.label}>Middle Name:</Text>
+                    <Text style={dynamicStyles.value}>{userData.middleName}</Text>
                   </View>
                 )}
 
                 {userData.lastName && (
                   <View style={styles.infoRow}>
-                    <Text style={styles.label}>Last Name:</Text>
-                    <Text style={styles.value}>{userData.lastName}</Text>
+                    <Text style={dynamicStyles.label}>Last Name:</Text>
+                    <Text style={dynamicStyles.value}>{userData.lastName}</Text>
                   </View>
                 )}
 
                 {userData.email && (
                   <View style={styles.infoRow}>
-                    <Text style={styles.label}>Email:</Text>
-                    <Text style={styles.value}>{userData.email}</Text>
+                    <Text style={dynamicStyles.label}>Email:</Text>
+                    <Text style={dynamicStyles.value}>{userData.email}</Text>
                   </View>
                 )}
 
                 {userData.phone && (
                   <View style={styles.infoRow}>
-                    <Text style={styles.label}>Phone:</Text>
-                    <Text style={styles.value}>{userData.phone}</Text>
+                    <Text style={dynamicStyles.label}>Phone:</Text>
+                    <Text style={dynamicStyles.value}>{userData.phone}</Text>
                   </View>
                 )}
 
                 {userData.birthdate && (
                   <View style={styles.infoRow}>
-                    <Text style={styles.label}>Birthdate:</Text>
-                    <Text style={styles.value}>{formatDate(userData.birthdate)}</Text>
+                    <Text style={dynamicStyles.label}>Birthdate:</Text>
+                    <Text style={dynamicStyles.value}>{formatDate(userData.birthdate)}</Text>
                   </View>
                 )}
 
                 {userData.age && (
                   <View style={styles.infoRow}>
-                    <Text style={styles.label}>Age:</Text>
-                    <Text style={styles.value}>{userData.age}</Text>
+                    <Text style={dynamicStyles.label}>Age:</Text>
+                    <Text style={dynamicStyles.value}>{userData.age}</Text>
                   </View>
                 )}
 
                 {userData.sex && (
                   <View style={styles.infoRow}>
-                    <Text style={styles.label}>Sex:</Text>
-                    <Text style={styles.value}>{userData.sex}</Text>
+                    <Text style={dynamicStyles.label}>Sex:</Text>
+                    <Text style={dynamicStyles.value}>{userData.sex}</Text>
                   </View>
                 )}
               </View>
 
               {/* Address Information */}
               {userData.address && (
-                <View style={styles.sectionCard}>
-                  <Text style={styles.sectionTitle}>Address</Text>
+                <View style={dynamicStyles.sectionCard}>
+                  <Text style={dynamicStyles.sectionTitle}>Address</Text>
                   
                   <View style={styles.infoRow}>
-                    <Text style={styles.label}>Address:</Text>
-                    <Text style={styles.value}>{getAddress()}</Text>
+                    <Text style={dynamicStyles.label}>Address:</Text>
+                    <Text style={dynamicStyles.value}>{getAddress()}</Text>
                   </View>
 
                   {userData.address.block && (
                     <View style={styles.infoRow}>
-                      <Text style={styles.label}>Block:</Text>
-                      <Text style={styles.value}>{userData.address.block}</Text>
+                      <Text style={dynamicStyles.label}>Block:</Text>
+                      <Text style={dynamicStyles.value}>{userData.address.block}</Text>
                     </View>
                   )}
 
                   {userData.address.lot && (
                     <View style={styles.infoRow}>
-                      <Text style={styles.label}>Lot:</Text>
-                      <Text style={styles.value}>{userData.address.lot}</Text>
+                      <Text style={dynamicStyles.label}>Lot:</Text>
+                      <Text style={dynamicStyles.value}>{userData.address.lot}</Text>
                     </View>
                   )}
 
                   {userData.address.street && (
                     <View style={styles.infoRow}>
-                      <Text style={styles.label}>Street:</Text>
-                      <Text style={styles.value}>{userData.address.street}</Text>
+                      <Text style={dynamicStyles.label}>Street:</Text>
+                      <Text style={dynamicStyles.value}>{userData.address.street}</Text>
                     </View>
                   )}
                 </View>
@@ -242,18 +318,18 @@ export default function Profile() {
 
               {/* Tenant Information */}
               {userData.isTenant !== undefined && (
-                <View style={styles.sectionCard}>
-                  <Text style={styles.sectionTitle}>Tenant Information</Text>
+                <View style={dynamicStyles.sectionCard}>
+                  <Text style={dynamicStyles.sectionTitle}>Tenant Information</Text>
                   
                   <View style={styles.infoRow}>
-                    <Text style={styles.label}>Is Tenant:</Text>
-                    <Text style={styles.value}>{userData.isTenant ? 'Yes' : 'No'}</Text>
+                    <Text style={dynamicStyles.label}>Is Tenant:</Text>
+                    <Text style={dynamicStyles.value}>{userData.isTenant ? 'Yes' : 'No'}</Text>
                   </View>
 
                   {userData.isTenant && userData.tenantRelation && (
                     <View style={styles.infoRow}>
-                      <Text style={styles.label}>Tenant Relation:</Text>
-                      <Text style={styles.value}>{userData.tenantRelation}</Text>
+                      <Text style={dynamicStyles.label}>Tenant Relation:</Text>
+                      <Text style={dynamicStyles.value}>{userData.tenantRelation}</Text>
                     </View>
                   )}
                 </View>
@@ -261,12 +337,12 @@ export default function Profile() {
 
               {/* ID Images */}
               {(userData.idFront || userData.idBack) && (
-                <View style={styles.sectionCard}>
-                  <Text style={styles.sectionTitle}>ID Images</Text>
+                <View style={dynamicStyles.sectionCard}>
+                  <Text style={dynamicStyles.sectionTitle}>ID Images</Text>
                   
                   {userData.idFront && (
                     <View style={styles.imageContainer}>
-                      <Text style={styles.imageLabel}>ID Front:</Text>
+                      <Text style={dynamicStyles.imageLabel}>ID Front:</Text>
                       <Image 
                         source={{ uri: userData.idFront }} 
                         style={styles.idImage}
@@ -277,7 +353,7 @@ export default function Profile() {
 
                   {userData.idBack && (
                     <View style={styles.imageContainer}>
-                      <Text style={styles.imageLabel}>ID Back:</Text>
+                      <Text style={dynamicStyles.imageLabel}>ID Back:</Text>
                       <Image 
                         source={{ uri: userData.idBack }} 
                         style={styles.idImage}
@@ -290,47 +366,65 @@ export default function Profile() {
 
               {/* Documents */}
               {userData.documents && Object.keys(userData.documents).length > 0 && (
-                <View style={styles.sectionCard}>
-                  <Text style={styles.sectionTitle}>Documents</Text>
+                <View style={dynamicStyles.sectionCard}>
+                  <Text style={dynamicStyles.sectionTitle}>Documents</Text>
                   
                   {Object.entries(userData.documents).map(([key, value]) => (
-                    <View key={key} style={styles.infoRow}>
-                      <Text style={styles.label}>{key}:</Text>
-                      <Text style={styles.value}>{value}</Text>
-                    </View>
+                    value && typeof value === 'string' && value.startsWith('http') ? (
+                      <View key={key} style={styles.imageContainer}>
+                        <Text style={dynamicStyles.imageLabel}>
+                          {key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1').trim()}:
+                        </Text>
+                        <Image 
+                          source={{ uri: value }} 
+                          style={styles.idImage}
+                          resizeMode="contain"
+                          onError={(error) => {
+                            console.error(`Error loading document image ${key}:`, error);
+                          }}
+                        />
+                      </View>
+                    ) : (
+                      <View key={key} style={styles.infoRow}>
+                        <Text style={dynamicStyles.label}>
+                          {key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1').trim()}:
+                        </Text>
+                        <Text style={dynamicStyles.value}>{value || 'N/A'}</Text>
+                      </View>
+                    )
                   ))}
                 </View>
               )}
 
               {/* Account Information */}
-              <View style={styles.sectionCard}>
-                <Text style={styles.sectionTitle}>Account Information</Text>
+              <View style={dynamicStyles.sectionCard}>
+                <Text style={dynamicStyles.sectionTitle}>Account Information</Text>
                 
                 {userData.status && (
                   <View style={styles.infoRow}>
-                    <Text style={styles.label}>Status:</Text>
-                    <Text style={[styles.value, styles.statusValue]}>{userData.status}</Text>
+                    <Text style={dynamicStyles.label}>Status:</Text>
+                    <Text style={[dynamicStyles.value, styles.statusValue]}>{userData.status}</Text>
                   </View>
                 )}
 
                 {userData.createdAt && (
                   <View style={styles.infoRow}>
-                    <Text style={styles.label}>Account Created:</Text>
-                    <Text style={styles.value}>{formatDate(userData.createdAt)}</Text>
+                    <Text style={dynamicStyles.label}>Account Created:</Text>
+                    <Text style={dynamicStyles.value}>{formatDate(userData.createdAt)}</Text>
                   </View>
                 )}
 
                 {userData.updatedAt && (
                   <View style={styles.infoRow}>
-                    <Text style={styles.label}>Last Updated:</Text>
-                    <Text style={styles.value}>{formatDate(userData.updatedAt)}</Text>
+                    <Text style={dynamicStyles.label}>Last Updated:</Text>
+                    <Text style={dynamicStyles.value}>{formatDate(userData.updatedAt)}</Text>
                   </View>
                 )}
               </View>
             </View>
           ) : (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No profile data found</Text>
+              <Text style={dynamicStyles.emptyText}>No profile data found</Text>
             </View>
           )}
         </View>
@@ -340,35 +434,11 @@ export default function Profile() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#111827',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
   backButton: {
     padding: 8,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#ffffff',
-    flex: 1,
-    textAlign: 'center',
-  },
   headerSpacer: {
     width: 36,
-  },
-  content: {
-    flex: 1,
   },
   contentContainer: {
     paddingBottom: 20,
@@ -381,37 +451,8 @@ const styles = StyleSheet.create({
   section: {
     padding: 20,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 20,
-  },
   profileCard: {
     gap: 16,
-  },
-  sectionCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    paddingBottom: 8,
   },
   infoRow: {
     flexDirection: 'row',
@@ -422,30 +463,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6b7280',
-    flex: 1,
-  },
-  value: {
-    fontSize: 14,
-    color: '#111827',
-    flex: 2,
-    textAlign: 'right',
-  },
   statusValue: {
     textTransform: 'capitalize',
     fontWeight: '600',
   },
   imageContainer: {
     marginBottom: 16,
-  },
-  imageLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6b7280',
-    marginBottom: 8,
   },
   idImage: {
     width: '100%',
@@ -456,10 +479,6 @@ const styles = StyleSheet.create({
   emptyContainer: {
     padding: 40,
     alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#6b7280',
   },
 });
 

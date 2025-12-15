@@ -33,6 +33,12 @@ function Map() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   const [residentMarkers, setResidentMarkers] = useState<any[]>([]);
+  const [residentData, setResidentData] = useState<any[]>([]);
+  const [residentSearchQuery, setResidentSearchQuery] = useState<string>('');
+  const [residentSearchSuggestions, setResidentSearchSuggestions] = useState<any[]>([]);
+  const [showResidentSuggestions, setShowResidentSuggestions] = useState(false);
+  const residentSearchInputRef = useRef<HTMLInputElement>(null);
+  const residentSuggestionsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -198,6 +204,7 @@ function Map() {
     try {
       console.log('Processing residents from users collection...');
       const markers: any[] = [];
+      const residents: any[] = [];
       let totalUsers = 0;
       let usersWithLocation = 0;
 
@@ -233,6 +240,24 @@ function Map() {
           }
         }
 
+        const fullName = data.fullName || 
+          `${data.firstName || ''} ${data.middleName || ''} ${data.lastName || ''}`.trim() ||
+          'Resident';
+
+        // Store resident data for search
+        const residentInfo = {
+          id: doc.id,
+          fullName,
+          firstName: data.firstName || '',
+          lastName: data.lastName || '',
+          email: data.email || '',
+          address: data.address ? `${data.address.block || ''} ${data.address.lot || ''} ${data.address.street || ''}`.trim() : '',
+          lat,
+          lng,
+          data,
+        };
+        residents.push(residentInfo);
+
         if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
           usersWithLocation++;
           
@@ -258,10 +283,6 @@ function Map() {
               scaledSize: new window.google.maps.Size(32, 32),
             };
           }
-          
-          const fullName = data.fullName || 
-            `${data.firstName || ''} ${data.middleName || ''} ${data.lastName || ''}`.trim() ||
-            'Resident';
           
           console.log(`Adding marker for ${fullName} at ${lat}, ${lng} (${isHomeowner ? 'green' : 'grey'}, residentType: ${data.residentType}, isTenant: ${data.isTenant}, isHomeowner: ${isHomeowner})`);
           
@@ -318,6 +339,10 @@ function Map() {
               infoWindow.open(map, marker);
             });
 
+            // Store resident info with marker for search functionality
+            (marker as any).residentInfo = residentInfo;
+            (marker as any).infoWindow = infoWindow;
+
             markers.push(marker);
           } catch (markerError) {
             console.error(`Error creating marker for ${fullName}:`, markerError);
@@ -329,6 +354,7 @@ function Map() {
 
       console.log(`Total users: ${totalUsers}, Users with location: ${usersWithLocation}, Markers created: ${markers.length}`);
 
+      setResidentData(residents);
       setResidentMarkers(prevMarkers => {
         // Clear previous markers
         prevMarkers.forEach(marker => {
@@ -541,6 +567,82 @@ function Map() {
     return () => clearTimeout(timer);
   }, [searchQuery, currentLocation, map]);
 
+  // Filter markers based on resident search query
+  useEffect(() => {
+    if (!map || residentMarkers.length === 0) return;
+
+    const query = residentSearchQuery.toLowerCase().trim();
+    
+    residentMarkers.forEach((marker) => {
+      const residentInfo = (marker as any).residentInfo;
+      if (!residentInfo) {
+        marker.setVisible(true);
+        return;
+      }
+
+      const matchesSearch = 
+        !query ||
+        residentInfo.fullName.toLowerCase().includes(query) ||
+        residentInfo.firstName.toLowerCase().includes(query) ||
+        residentInfo.lastName.toLowerCase().includes(query) ||
+        residentInfo.email.toLowerCase().includes(query) ||
+        residentInfo.address.toLowerCase().includes(query);
+
+      marker.setVisible(matchesSearch);
+    });
+  }, [residentSearchQuery, residentMarkers, map]);
+
+  // Generate resident search suggestions
+  useEffect(() => {
+    if (!residentSearchQuery.trim() || residentSearchQuery.length < 2) {
+      setResidentSearchSuggestions([]);
+      setShowResidentSuggestions(false);
+      return;
+    }
+
+    const query = residentSearchQuery.toLowerCase().trim();
+    const filtered = residentData
+      .filter((resident) => {
+        return (
+          resident.fullName.toLowerCase().includes(query) ||
+          resident.firstName.toLowerCase().includes(query) ||
+          resident.lastName.toLowerCase().includes(query) ||
+          resident.email.toLowerCase().includes(query) ||
+          resident.address.toLowerCase().includes(query)
+        );
+      })
+      .slice(0, 5); // Limit to 5 suggestions
+
+    setResidentSearchSuggestions(filtered);
+    setShowResidentSuggestions(filtered.length > 0);
+  }, [residentSearchQuery, residentData]);
+
+  // Handle selecting a resident from suggestions
+  const handleSelectResident = useCallback((resident: any) => {
+    if (!map || !resident.lat || !resident.lng) return;
+
+    setResidentSearchQuery(resident.fullName);
+    setShowResidentSuggestions(false);
+
+    // Find the marker for this resident
+    const marker = residentMarkers.find((m) => {
+      const info = (m as any).residentInfo;
+      return info && info.id === resident.id;
+    });
+
+    if (marker) {
+      // Center map on resident location
+      map.setCenter({ lat: resident.lat, lng: resident.lng });
+      map.setZoom(18);
+
+      // Open info window
+      const infoWindow = (marker as any).infoWindow;
+      if (infoWindow) {
+        infoWindow.open(map, marker);
+      }
+    }
+  }, [map, residentMarkers]);
+
   // Close suggestions when clicking outside
   useEffect(() => {
     // Use mousedown with capture phase to catch events early, but allow suggestions to handle their own clicks
@@ -556,17 +658,32 @@ function Map() {
       if (searchInputRef.current?.contains(target)) {
         return;
       }
+
+      // If clicking inside resident suggestions, don't close
+      if (residentSuggestionsRef.current?.contains(target)) {
+        return;
+      }
+      
+      // If clicking on resident search input, don't close
+      if (residentSearchInputRef.current?.contains(target)) {
+        return;
+      }
       
       // Close if clicking outside
       if (
         suggestionsRef.current &&
         !suggestionsRef.current.contains(target) &&
         searchInputRef.current &&
-        !searchInputRef.current.contains(target)
+        !searchInputRef.current.contains(target) &&
+        residentSuggestionsRef.current &&
+        !residentSuggestionsRef.current.contains(target) &&
+        residentSearchInputRef.current &&
+        !residentSearchInputRef.current.contains(target)
       ) {
         // Use setTimeout to allow click events to fire first
         setTimeout(() => {
           setShowSuggestions(false);
+          setShowResidentSuggestions(false);
         }, 0);
       }
     };
@@ -684,6 +801,68 @@ function Map() {
             </div>
           )}
           <div className="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden m-4 md:m-6 lg:m-8 min-h-0 relative">
+            {/* Resident Search Bar */}
+            <div className="absolute top-4 left-4 z-10 w-full max-w-md">
+              <div className="relative">
+                <input
+                  ref={residentSearchInputRef}
+                  type="text"
+                  value={residentSearchQuery}
+                  onChange={(e) => setResidentSearchQuery(e.target.value)}
+                  onFocus={() => {
+                    if (residentSearchSuggestions.length > 0) {
+                      setShowResidentSuggestions(true);
+                    }
+                  }}
+                  placeholder="Search residents by name, email, or address..."
+                  className="w-full px-4 py-2 pl-10 pr-10 border border-gray-300 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                />
+                <svg
+                  className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {residentSearchQuery && (
+                  <button
+                    onClick={() => {
+                      setResidentSearchQuery('');
+                      setShowResidentSuggestions(false);
+                    }}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+                {/* Resident Suggestions Dropdown */}
+                {showResidentSuggestions && residentSearchSuggestions.length > 0 && (
+                  <div
+                    ref={residentSuggestionsRef}
+                    className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto z-20"
+                  >
+                    {residentSearchSuggestions.map((resident) => (
+                      <div
+                        key={resident.id}
+                        onClick={() => handleSelectResident(resident)}
+                        className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                      >
+                        <div className="font-medium text-gray-900 text-sm">{resident.fullName}</div>
+                        {resident.email && (
+                          <div className="text-xs text-gray-500 mt-1">{resident.email}</div>
+                        )}
+                        {resident.address && (
+                          <div className="text-xs text-gray-500">{resident.address}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
             <div 
               ref={mapRef} 
               className="w-full h-full"

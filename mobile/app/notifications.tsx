@@ -1,11 +1,12 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, onSnapshot, orderBy, updateDoc, doc, Timestamp, where, deleteDoc } from 'firebase/firestore';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { getAuthService, db } from '../firebase/config';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Notification {
   id: string;
@@ -22,6 +23,7 @@ interface Notification {
 export default function Notifications() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filteredNotifications, setFilteredNotifications] = useState<Notification[]>([]);
   const [activeFilter, setActiveFilter] = useState<
@@ -223,31 +225,234 @@ export default function Notifications() {
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
+  const dynamicStyles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: theme.headerBackground,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    backButton: {
+      padding: 8,
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: '#ffffff',
+      flex: 1,
+      textAlign: 'center',
+    },
+    headerSpacer: {
+      width: 36,
+    },
+    content: {
+      flex: 1,
+    },
+    contentContainer: {
+      paddingBottom: 20,
+    },
+    section: {
+      padding: 20,
+    },
+    titleRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    deleteAllButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      backgroundColor: '#ef4444',
+      borderRadius: 8,
+    },
+    deleteAllButtonText: {
+      color: '#ffffff',
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    filterScrollView: {
+      marginBottom: 20,
+    },
+    filterContainer: {
+      paddingRight: 20,
+      gap: 8,
+    },
+    filterButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: theme.cardBackground,
+      borderWidth: 1,
+      borderColor: theme.border,
+      marginRight: 8,
+    },
+    filterButtonActive: {
+      backgroundColor: '#1877F2',
+      borderColor: '#1877F2',
+    },
+    filterButtonText: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: theme.text,
+    },
+    filterButtonTextActive: {
+      color: '#ffffff',
+      fontWeight: '600',
+    },
+    loadingContainer: {
+      padding: 40,
+      alignItems: 'center',
+    },
+    emptyContainer: {
+      padding: 40,
+      alignItems: 'center',
+    },
+    emptyText: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 8,
+    },
+    emptySubtext: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      textAlign: 'center',
+    },
+    notificationsList: {
+      gap: 12,
+    },
+    notificationCard: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 12,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    notificationContent: {
+      flex: 1,
+    },
+    notificationRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      marginBottom: 8,
+    },
+    iconContainer: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: theme.inputBackground,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    notificationTextContainer: {
+      flex: 1,
+    },
+    notificationHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 4,
+    },
+    notificationSubject: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.text,
+      flex: 1,
+    },
+    notificationTime: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      marginLeft: 8,
+    },
+    unreadDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: '#1877F2',
+      marginLeft: 8,
+    },
+    notificationMessage: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      lineHeight: 20,
+      marginBottom: 8,
+    },
+    rejectionReasonContainer: {
+      marginTop: 8,
+      padding: 12,
+      backgroundColor: theme.inputBackground,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    rejectionReasonLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 4,
+    },
+    rejectionReasonText: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      lineHeight: 20,
+    },
+    statusContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    statusLabel: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: theme.text,
+    },
+    statusValue: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.text,
+      textTransform: 'uppercase',
+    },
+    deleteButton: {
+      padding: 8,
+      marginLeft: 8,
+    },
+  }), [theme]);
+
   return (
-    <View style={styles.container}>
+    <View style={dynamicStyles.container}>
       {/* Back Button */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[dynamicStyles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity 
           onPress={() => router.back()}
-          style={styles.backButton}
+          style={dynamicStyles.backButton}
           activeOpacity={0.7}
         >
           <FontAwesome5 name="arrow-left" size={20} color="#ffffff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
-        <View style={styles.headerSpacer} />
+        <Text style={dynamicStyles.headerTitle}>Notifications</Text>
+        <View style={dynamicStyles.headerSpacer} />
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        <View style={styles.section}>
-          <View style={styles.titleRow}>
+      <ScrollView style={dynamicStyles.content} contentContainerStyle={dynamicStyles.contentContainer}>
+        <View style={dynamicStyles.section}>
+          <View style={dynamicStyles.titleRow}>
             {notifications.length > 0 && (
               <TouchableOpacity
-                style={styles.deleteAllButton}
+                style={dynamicStyles.deleteAllButton}
                 onPress={deleteAllNotifications}
                 activeOpacity={0.7}
               >
-                <Text style={styles.deleteAllButtonText}>Delete All</Text>
+                <Text style={dynamicStyles.deleteAllButtonText}>Delete All</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -256,110 +461,110 @@ export default function Notifications() {
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterContainer}
-            style={styles.filterScrollView}
+            contentContainerStyle={dynamicStyles.filterContainer}
+            style={dynamicStyles.filterScrollView}
           >
             <TouchableOpacity
               style={[
-                styles.filterButton,
-                activeFilter === 'all' && styles.filterButtonActive
+                dynamicStyles.filterButton,
+                activeFilter === 'all' && dynamicStyles.filterButtonActive
               ]}
               onPress={() => setActiveFilter('all')}
               activeOpacity={0.7}
             >
               <Text style={[
-                styles.filterButtonText,
-                activeFilter === 'all' && styles.filterButtonTextActive
+                dynamicStyles.filterButtonText,
+                activeFilter === 'all' && dynamicStyles.filterButtonTextActive
               ]}>
                 All
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
-                styles.filterButton,
-                activeFilter === 'complaint' && styles.filterButtonActive
+                dynamicStyles.filterButton,
+                activeFilter === 'complaint' && dynamicStyles.filterButtonActive
               ]}
               onPress={() => setActiveFilter('complaint')}
               activeOpacity={0.7}
             >
               <Text style={[
-                styles.filterButtonText,
-                activeFilter === 'complaint' && styles.filterButtonTextActive
+                dynamicStyles.filterButtonText,
+                activeFilter === 'complaint' && dynamicStyles.filterButtonTextActive
               ]}>
                 Complaints
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
-                styles.filterButton,
-                activeFilter === 'vehicle_registration' && styles.filterButtonActive
+                dynamicStyles.filterButton,
+                activeFilter === 'vehicle_registration' && dynamicStyles.filterButtonActive
               ]}
               onPress={() => setActiveFilter('vehicle_registration')}
               activeOpacity={0.7}
             >
               <Text style={[
-                styles.filterButtonText,
-                activeFilter === 'vehicle_registration' && styles.filterButtonTextActive
+                dynamicStyles.filterButtonText,
+                activeFilter === 'vehicle_registration' && dynamicStyles.filterButtonTextActive
               ]}>
                 Vehicle
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
-                styles.filterButton,
-                activeFilter === 'maintenance' && styles.filterButtonActive
+                dynamicStyles.filterButton,
+                activeFilter === 'maintenance' && dynamicStyles.filterButtonActive
               ]}
               onPress={() => setActiveFilter('maintenance')}
               activeOpacity={0.7}
             >
               <Text style={[
-                styles.filterButtonText,
-                activeFilter === 'maintenance' && styles.filterButtonTextActive
+                dynamicStyles.filterButtonText,
+                activeFilter === 'maintenance' && dynamicStyles.filterButtonTextActive
               ]}>
                 Maintenance
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
-                styles.filterButton,
-                activeFilter === 'announcement' && styles.filterButtonActive
+                dynamicStyles.filterButton,
+                activeFilter === 'announcement' && dynamicStyles.filterButtonActive
               ]}
               onPress={() => setActiveFilter('announcement')}
               activeOpacity={0.7}
             >
               <Text style={[
-                styles.filterButtonText,
-                activeFilter === 'announcement' && styles.filterButtonTextActive
+                dynamicStyles.filterButtonText,
+                activeFilter === 'announcement' && dynamicStyles.filterButtonTextActive
               ]}>
                 Announcements
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
-                styles.filterButton,
-                activeFilter === 'billing' && styles.filterButtonActive
+                dynamicStyles.filterButton,
+                activeFilter === 'billing' && dynamicStyles.filterButtonActive
               ]}
               onPress={() => setActiveFilter('billing')}
               activeOpacity={0.7}
             >
               <Text style={[
-                styles.filterButtonText,
-                activeFilter === 'billing' && styles.filterButtonTextActive
+                dynamicStyles.filterButtonText,
+                activeFilter === 'billing' && dynamicStyles.filterButtonTextActive
               ]}>
                 Billing & Payments
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
-                styles.filterButton,
-                activeFilter === 'visitor_registration' && styles.filterButtonActive
+                dynamicStyles.filterButton,
+                activeFilter === 'visitor_registration' && dynamicStyles.filterButtonActive
               ]}
               onPress={() => setActiveFilter('visitor_registration')}
               activeOpacity={0.7}
             >
               <Text style={[
-                styles.filterButtonText,
-                activeFilter === 'visitor_registration' && styles.filterButtonTextActive
+                dynamicStyles.filterButtonText,
+                activeFilter === 'visitor_registration' && dynamicStyles.filterButtonTextActive
               ]}>
                 Visitor
               </Text>
@@ -367,13 +572,13 @@ export default function Notifications() {
           </ScrollView>
           
           {loading ? (
-            <View style={styles.loadingContainer}>
+            <View style={dynamicStyles.loadingContainer}>
               <ActivityIndicator size="large" color="#1877F2" />
             </View>
           ) : filteredNotifications.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No notifications</Text>
-              <Text style={styles.emptySubtext}>
+            <View style={dynamicStyles.emptyContainer}>
+              <Text style={dynamicStyles.emptyText}>No notifications</Text>
+              <Text style={dynamicStyles.emptySubtext}>
                 {notifications.length === 0 
                   ? "You're all caught up!" 
                   : activeFilter === 'all'
@@ -382,17 +587,17 @@ export default function Notifications() {
               </Text>
             </View>
           ) : (
-            <View style={styles.notificationsList}>
+            <View style={dynamicStyles.notificationsList}>
               {filteredNotifications.map((notification) => (
                 <View
                   key={notification.id}
                   style={[
-                    styles.notificationItem,
-                    !notification.isRead && styles.notificationItemUnread
+                    dynamicStyles.notificationCard,
+                    !notification.isRead && { borderLeftWidth: 3, borderLeftColor: '#1877F2' }
                   ]}
                 >
                   <TouchableOpacity
-                    style={styles.notificationContent}
+                    style={dynamicStyles.notificationContent}
                     onPress={() => {
                       if (!notification.isRead) {
                         markAsRead(notification.id);
@@ -403,8 +608,8 @@ export default function Notifications() {
                     }}
                     activeOpacity={0.7}
                   >
-                    <View style={styles.notificationRow}>
-                      <View style={styles.iconContainer}>
+                    <View style={dynamicStyles.notificationRow}>
+                      <View style={dynamicStyles.iconContainer}>
                         <FontAwesome5 
                           name={getNotificationIcon(notification.type).name as any} 
                           size={20} 
@@ -412,9 +617,9 @@ export default function Notifications() {
                           solid
                         />
                       </View>
-                      <View style={styles.notificationTextContainer}>
-                        <View style={styles.notificationHeader}>
-                          <Text style={styles.notificationSubject}>
+                      <View style={dynamicStyles.notificationTextContainer}>
+                        <View style={dynamicStyles.notificationHeader}>
+                          <Text style={dynamicStyles.notificationSubject}>
                             {notification.subject || 
                               (notification.type === 'vehicle_registration' || notification.type === 'vehicle_registration_status' 
                                 ? 'Vehicle Registration Update' 
@@ -427,38 +632,44 @@ export default function Notifications() {
                                 : 'Complaint Update')}
                           </Text>
                           {!notification.isRead && (
-                            <View style={styles.unreadDot} />
+                            <View style={dynamicStyles.unreadDot} />
                           )}
                         </View>
-                    <Text style={styles.notificationMessage}>
+                    <Text style={dynamicStyles.notificationMessage}>
                       {notification.message}
                     </Text>
                     {notification.rejectionReason && (
-                      <View style={styles.rejectionReasonContainer}>
-                        <Text style={styles.rejectionReasonLabel}>Rejection Reason: </Text>
-                        <Text style={styles.rejectionReasonText}>{notification.rejectionReason}</Text>
+                      <View style={dynamicStyles.rejectionReasonContainer}>
+                        <Text style={dynamicStyles.rejectionReasonLabel}>Rejection Reason: </Text>
+                        <Text style={dynamicStyles.rejectionReasonText}>{notification.rejectionReason}</Text>
                       </View>
                     )}
                     {notification.status && (
-                      <View style={styles.statusContainer}>
-                        <Text style={styles.statusLabel}>Status: </Text>
-                        <Text style={[styles.statusValue, styles[`status${notification.status.charAt(0).toUpperCase() + notification.status.slice(1).replace('-', '')}`]]}>
+                      <View style={dynamicStyles.statusContainer}>
+                        <Text style={dynamicStyles.statusLabel}>Status: </Text>
+                        <Text style={[
+                          dynamicStyles.statusValue,
+                          notification.status === 'pending' && { color: '#f59e0b' },
+                          notification.status === 'in-progress' && { color: '#3b82f6' },
+                          notification.status === 'resolved' && { color: '#10b981' },
+                          notification.status === 'rejected' && { color: '#ef4444' },
+                        ]}>
                           {notification.status}
                         </Text>
                       </View>
                     )}
-                        <Text style={styles.notificationTime}>
+                        <Text style={dynamicStyles.notificationTime}>
                           {formatTimeAgo(notification.createdAt)}
                         </Text>
                       </View>
                     </View>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.deleteButton}
+                    style={dynamicStyles.deleteButton}
                     onPress={() => deleteNotification(notification.id)}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.deleteButtonText}>×</Text>
+                    <FontAwesome5 name="times" size={16} color={theme.textSecondary} />
                   </TouchableOpacity>
                 </View>
               ))}
@@ -469,12 +680,6 @@ export default function Notifications() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f0f2f5',
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

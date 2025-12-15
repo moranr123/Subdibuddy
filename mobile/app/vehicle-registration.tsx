@@ -508,7 +508,7 @@ export default function VehicleRegistration() {
 
               <View style={styles.form}>
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Plate Number *</Text>
+                  <Text style={styles.label}>Plate Number</Text>
                   <TextInput
                     style={styles.input}
                     value={plateNumber}
@@ -521,7 +521,7 @@ export default function VehicleRegistration() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Brand *</Text>
+                  <Text style={styles.label}>Brand</Text>
                   <TouchableOpacity
                     style={styles.input}
                     onPress={() => setShowBrandPicker(true)}
@@ -534,7 +534,7 @@ export default function VehicleRegistration() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Model *</Text>
+                  <Text style={styles.label}>Model</Text>
                   <TextInput
                     style={styles.input}
                     value={model}
@@ -545,7 +545,7 @@ export default function VehicleRegistration() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Color *</Text>
+                  <Text style={styles.label}>Color</Text>
                   <TextInput
                     style={styles.input}
                     value={color}
@@ -556,7 +556,7 @@ export default function VehicleRegistration() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Year *</Text>
+                  <Text style={styles.label}>Year</Text>
                   <TextInput
                     style={styles.input}
                     value={year}
@@ -568,7 +568,7 @@ export default function VehicleRegistration() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Vehicle Type *</Text>
+                  <Text style={styles.label}>Vehicle Type</Text>
                   <TextInput
                     style={styles.input}
                     value={vehicleType}
@@ -579,8 +579,8 @@ export default function VehicleRegistration() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Vehicle Image *</Text>
-                  <TouchableOpacity style={styles.imageButton} onPress={() => pickImage('vehicle')} activeOpacity={0.7}>
+                  <Text style={styles.label}>Vehicle Image</Text>
+                  <TouchableOpacity style={styles.imageButton} onPress={() => showImageSourcePicker('vehicle')} activeOpacity={0.7}>
                     {vehicleImageUri ? (
                       <Image source={{ uri: vehicleImageUri }} style={styles.previewImage} />
                     ) : (
@@ -601,7 +601,7 @@ export default function VehicleRegistration() {
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Registration Document (Optional)</Text>
-                  <TouchableOpacity style={styles.imageButton} onPress={() => pickImage('registration')} activeOpacity={0.7}>
+                  <TouchableOpacity style={styles.imageButton} onPress={() => showImageSourcePicker('registration')} activeOpacity={0.7}>
                     {registrationImageUri ? (
                       <Image source={{ uri: registrationImageUri }} style={styles.previewImage} />
                     ) : (

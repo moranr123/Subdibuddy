@@ -281,12 +281,26 @@ export default function Signup() {
           #searchContainer {
             position: absolute;
             top: 10px;
-            left: 10px;
-            right: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 400px;
             z-index: 1000;
             display: flex;
             flex-direction: column;
             gap: 8px;
+          }
+          @media (max-width: 480px) {
+            #searchContainer {
+              width: 85%;
+              max-width: 350px;
+            }
+          }
+          @media (max-width: 360px) {
+            #searchContainer {
+              width: 80%;
+              max-width: 300px;
+            }
           }
           #searchInputWrapper {
             display: flex;
@@ -294,15 +308,22 @@ export default function Signup() {
           }
           #searchInput {
             flex: 1;
-            padding: 12px 16px;
+            padding: 10px 14px;
             border: 1px solid #d1d5db;
             border-radius: 8px;
             font-size: 14px;
             background: white;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            min-width: 0;
+          }
+          @media (max-width: 480px) {
+            #searchInput {
+              padding: 8px 12px;
+              font-size: 13px;
+            }
           }
           #searchButton {
-            padding: 12px 20px;
+            padding: 10px 16px;
             background: #1877F2;
             color: white;
             border: none;
@@ -312,6 +333,13 @@ export default function Signup() {
             cursor: pointer;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             white-space: nowrap;
+            flex-shrink: 0;
+          }
+          @media (max-width: 480px) {
+            #searchButton {
+              padding: 8px 14px;
+              font-size: 13px;
+            }
           }
           #searchButton:active {
             background: #1565C0;
@@ -324,6 +352,7 @@ export default function Signup() {
             max-height: 200px;
             overflow-y: auto;
             display: none;
+            width: 100%;
           }
           .suggestionItem {
             padding: 12px 16px;
@@ -352,8 +381,10 @@ export default function Signup() {
           #confirmButton {
             position: absolute;
             bottom: 72px;
-            left: 10px;
-            right: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 400px;
             padding: 14px;
             background: #111827;
             color: white;
@@ -363,6 +394,20 @@ export default function Signup() {
             font-weight: 600;
             cursor: pointer;
             box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+          }
+          @media (max-width: 480px) {
+            #confirmButton {
+              width: 85%;
+              max-width: 350px;
+              padding: 12px;
+              font-size: 13px;
+            }
+          }
+          @media (max-width: 360px) {
+            #confirmButton {
+              width: 80%;
+              max-width: 300px;
+            }
           }
           #confirmButton:active {
             background: #0f172a;

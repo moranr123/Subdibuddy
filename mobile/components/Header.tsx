@@ -3,6 +3,7 @@ import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { memo, useCallback, useMemo } from 'react';
+import { useTheme } from '../contexts/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -16,6 +17,7 @@ function Header({ onMenuPress, onNotificationPress, notificationCount = 0 }: Hea
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
 
   const navigationItems = useMemo(() => [
     { key: 'home', route: '/home', icon: 'home', label: 'Home' },
@@ -35,15 +37,54 @@ function Header({ onMenuPress, onNotificationPress, notificationCount = 0 }: Hea
     return pathname === route;
   }, [pathname]);
 
+  const dynamicStyles = useMemo(() => StyleSheet.create({
+    header: {
+      backgroundColor: theme.headerBackground,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+      borderBottomLeftRadius: 12,
+      borderBottomRightRadius: 12,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 1,
+      },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 2,
+      overflow: 'hidden',
+      width: '100%',
+    },
+    headerTitle: {
+      fontSize: getResponsiveSize(18, 1),
+      color: '#ffffff',
+      fontWeight: '600',
+      letterSpacing: -0.5,
+      maxWidth: SCREEN_WIDTH * 0.5,
+    },
+    navLabel: {
+      fontSize: getResponsiveSize(10, 1),
+      color: '#ffffff',
+      fontWeight: '400',
+      marginTop: 4,
+      textAlign: 'center',
+      maxWidth: '100%',
+    },
+    navLabelActive: {
+      color: '#1877F2',
+      fontWeight: '500',
+    },
+  }), [theme]);
+
   return (
-    <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+    <View style={[dynamicStyles.header, styles.headerBase, { paddingTop: insets.top + 8 }]}>
       <View style={styles.headerTop}>
         <TouchableOpacity 
           style={styles.menuButton}
           onPress={onMenuPress}
           activeOpacity={0.7}
         >
-          <MaterialIcons name="menu" size={SCREEN_WIDTH < 375 ? 20 : SCREEN_WIDTH < 414 ? 22 : 24} color="#000000" />
+          <MaterialIcons name="menu" size={SCREEN_WIDTH < 375 ? 20 : SCREEN_WIDTH < 414 ? 22 : 24} color="#ffffff" />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
           <Image 
@@ -51,7 +92,7 @@ function Header({ onMenuPress, onNotificationPress, notificationCount = 0 }: Hea
             style={styles.headerLogo}
             resizeMode="contain"
           />
-          <Text style={styles.headerTitle}>Subdibuddy</Text>
+          <Text style={dynamicStyles.headerTitle}>Subdibuddy</Text>
         </View>
         <TouchableOpacity 
           style={styles.notificationButtonTop}
@@ -59,7 +100,7 @@ function Header({ onMenuPress, onNotificationPress, notificationCount = 0 }: Hea
           activeOpacity={0.7}
         >
           <View style={styles.notificationIconContainer}>
-            <MaterialIcons name="notifications" size={SCREEN_WIDTH < 375 ? 20 : SCREEN_WIDTH < 414 ? 22 : 24} color="#000000" />
+            <MaterialIcons name="notifications" size={SCREEN_WIDTH < 375 ? 20 : SCREEN_WIDTH < 414 ? 22 : 24} color="#ffffff" />
             {notificationCount > 0 && (
               <View style={styles.notificationBadge}>
                 <Text style={styles.notificationBadgeText}>
@@ -86,12 +127,12 @@ function Header({ onMenuPress, onNotificationPress, notificationCount = 0 }: Hea
             <MaterialIcons 
               name={item.icon as any} 
               size={SCREEN_WIDTH < 375 ? 20 : SCREEN_WIDTH < 414 ? 22 : 24} 
-              color={isActive(item.route) ? '#1877F2' : '#000000'}
+              color={isActive(item.route) ? '#1877F2' : '#ffffff'}
             />
             <Text 
               style={[
-                styles.navLabel,
-                isActive(item.route) && styles.navLabelActive
+                dynamicStyles.navLabel,
+                isActive(item.route) && dynamicStyles.navLabelActive
               ]}
               numberOfLines={1}
               ellipsizeMode="tail"
@@ -114,10 +155,7 @@ const getResponsiveSize = (baseSize: number, scale: number = 1) => {
 };
 
 const styles = StyleSheet.create({
-  header: {
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+  headerBase: {
     borderBottomLeftRadius: 12,
     borderBottomRightRadius: 12,
     shadowColor: '#000',
@@ -169,13 +207,6 @@ const styles = StyleSheet.create({
     maxWidth: 32,
     maxHeight: 32,
   },
-  headerTitle: {
-    fontSize: getResponsiveSize(18, 1),
-    color: '#111827',
-    fontWeight: '600',
-    letterSpacing: -0.5,
-    maxWidth: SCREEN_WIDTH * 0.5,
-  },
   headerNav: {
     borderTopWidth: 0,
     flexDirection: 'row',
@@ -199,18 +230,6 @@ const styles = StyleSheet.create({
   },
   navButtonActive: {
     backgroundColor: 'transparent',
-  },
-  navLabel: {
-    fontSize: getResponsiveSize(10, 1),
-    color: '#000000',
-    fontWeight: '400',
-    marginTop: 4,
-    textAlign: 'center',
-    maxWidth: '100%',
-  },
-  navLabelActive: {
-    color: '#1877F2',
-    fontWeight: '500',
   },
   notificationButton: {
     position: 'relative',

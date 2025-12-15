@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, onSnapshot, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, Timestamp, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useSidebar } from '../contexts/SidebarContext';
 
@@ -74,6 +74,9 @@ function Header({
   const [visitorRegistrationNotifications, setVisitorRegistrationNotifications] = useState<Notification[]>([]);
   const [billingNotifications, setBillingNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<
+    'all' | 'application' | 'complaint' | 'vehicle_registration' | 'maintenance' | 'visitor_registration' | 'billing'
+  >('all');
   const notificationRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -251,6 +254,14 @@ function Header({
     return unified;
   })();
 
+  // Filter notifications based on active filter
+  const filteredNotifications = (() => {
+    if (activeFilter === 'all') {
+      return allNotifications;
+    }
+    return allNotifications.filter(notif => notif.type === activeFilter);
+  })();
+
   // Calculate total notification count
   useEffect(() => {
     setNotificationCount(
@@ -340,6 +351,46 @@ function Header({
     return fullName.substring(0, 2).toUpperCase();
   };
 
+  const deleteNotification = async (notificationId: string, notificationType: UnifiedNotification['type']) => {
+    if (!db) return;
+    
+    try {
+      if (notificationType === 'application') {
+        // Applications are in pendingUsers collection, but we'll just remove from display
+        // For now, we'll skip deleting applications as they're managed elsewhere
+        return;
+      } else {
+        await deleteDoc(doc(db, 'notifications', notificationId));
+      }
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+      alert('Failed to delete notification. Please try again.');
+    }
+  };
+
+  const deleteAllNotifications = async () => {
+    if (!db || filteredNotifications.length === 0) return;
+    
+    const confirmed = window.confirm(
+      `Are you sure you want to delete all ${filteredNotifications.length} notification${filteredNotifications.length > 1 ? 's' : ''}? This action cannot be undone.`
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      const notificationsToDelete = filteredNotifications
+        .filter(notif => notif.type !== 'application') // Skip applications
+        .map(notif => notif.id);
+      
+      await Promise.all(
+        notificationsToDelete.map(id => deleteDoc(doc(db, 'notifications', id)))
+      );
+    } catch (error) {
+      console.error('Error deleting all notifications:', error);
+      alert('Failed to delete all notifications. Please try again.');
+    }
+  };
+
   return (
     <header className="bg-white text-gray-900 border-b border-gray-200 sticky top-0 z-[100]">
       <div className="w-full m-0 px-4 md:px-8 py-4">
@@ -378,15 +429,99 @@ function Header({
             {showNotifications && (
               <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-96 max-w-sm bg-white rounded-lg shadow-2xl border border-gray-200 z-50 overflow-hidden">
                 <div className="p-3 sm:p-4 border-b border-gray-200 bg-gray-50">
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center mb-3">
                     <h3 className="text-sm sm:text-base font-semibold text-gray-900">Notifications</h3>
                     {notificationCount > 0 && (
                       <span className="text-xs text-gray-500">{notificationCount} new</span>
                     )}
                   </div>
+                  {/* Delete All Button */}
+                  {filteredNotifications.length > 0 && (
+                    <div className="flex justify-end">
+                      <button
+                        onClick={deleteAllNotifications}
+                        className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
+                      >
+                        Delete All
+                      </button>
+                    </div>
+                  )}
+                  {/* Filter Buttons */}
+                  <div className="flex gap-2 mt-3 overflow-x-auto pb-2 scrollbar-hide">
+                    <button
+                      onClick={() => setActiveFilter('all')}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${
+                        activeFilter === 'all'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => setActiveFilter('application')}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${
+                        activeFilter === 'application'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      Applications
+                    </button>
+                    <button
+                      onClick={() => setActiveFilter('complaint')}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${
+                        activeFilter === 'complaint'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      Complaints
+                    </button>
+                    <button
+                      onClick={() => setActiveFilter('vehicle_registration')}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${
+                        activeFilter === 'vehicle_registration'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      Vehicle
+                    </button>
+                    <button
+                      onClick={() => setActiveFilter('maintenance')}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${
+                        activeFilter === 'maintenance'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      Maintenance
+                    </button>
+                    <button
+                      onClick={() => setActiveFilter('visitor_registration')}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${
+                        activeFilter === 'visitor_registration'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      Visitor
+                    </button>
+                    <button
+                      onClick={() => setActiveFilter('billing')}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${
+                        activeFilter === 'billing'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      Billing
+                    </button>
+                  </div>
                 </div>
                 <div className="max-h-[60vh] sm:max-h-[500px] overflow-y-auto">
-                  {notificationCount === 0 ? (
+                  {filteredNotifications.length === 0 ? (
                     <div className="p-6 sm:p-8 text-center">
                       <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full bg-gray-100 flex items-center justify-center">
                         <svg className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -398,15 +533,27 @@ function Header({
                     </div>
                   ) : (
                     <div>
-                      {allNotifications.map((unified) => {
+                      {filteredNotifications.map((unified) => {
                         if (unified.type === 'application') {
                           const application = unified.data as PendingApplication;
                           return (
                         <div
                               key={unified.id}
-                              className="px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors"
+                              className="px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors relative group"
                           onClick={handleViewApplications}
                         >
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteNotification(unified.id, unified.type);
+                                }}
+                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-red-600"
+                                title="Delete notification"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
                               <div className="flex items-start gap-2 sm:gap-3">
                             {/* Avatar */}
                                 <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
@@ -442,9 +589,21 @@ function Header({
                           return (
                             <div
                               key={unified.id}
-                              className="px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors"
+                              className="px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors relative group"
                               onClick={handleViewComplaints}
                             >
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteNotification(unified.id, unified.type);
+                                }}
+                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-red-600"
+                                title="Delete notification"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
                               <div className="flex items-start gap-2 sm:gap-3">
                                 {/* Avatar */}
                                 <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-orange-500 flex items-center justify-center flex-shrink-0">
@@ -480,9 +639,21 @@ function Header({
                           return (
                             <div
                               key={unified.id}
-                              className="px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors"
+                              className="px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors relative group"
                               onClick={handleViewVehicleRegistrations}
                             >
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteNotification(unified.id, unified.type);
+                                }}
+                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-red-600"
+                                title="Delete notification"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
                               <div className="flex items-start gap-2 sm:gap-3">
                                 {/* Avatar */}
                                 <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
@@ -513,9 +684,21 @@ function Header({
                           return (
                             <div
                               key={unified.id}
-                              className="px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors"
+                              className="px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors relative group"
                               onClick={handleViewVisitorRegistrations}
                             >
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteNotification(unified.id, unified.type);
+                                }}
+                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-red-600"
+                                title="Delete notification"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
                               <div className="flex items-start gap-2 sm:gap-3">
                                 {/* Avatar */}
                                 <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-pink-500 flex items-center justify-center flex-shrink-0">
@@ -546,9 +729,21 @@ function Header({
                           return (
                             <div
                               key={unified.id}
-                              className="px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors"
+                              className="px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors relative group"
                               onClick={handleViewBillingProofs}
                             >
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteNotification(unified.id, unified.type);
+                                }}
+                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-red-600"
+                                title="Delete notification"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
                               <div className="flex items-start gap-2 sm:gap-3">
                                 {/* Avatar */}
                                 <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-indigo-500 flex items-center justify-center flex-shrink-0">
@@ -584,9 +779,21 @@ function Header({
                           return (
                             <div
                               key={unified.id}
-                              className="px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors"
+                              className="px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer transition-colors relative group"
                               onClick={handleViewMaintenance}
                             >
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteNotification(unified.id, unified.type);
+                                }}
+                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-red-600"
+                                title="Delete notification"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
                               <div className="flex items-start gap-2 sm:gap-3">
                                 {/* Avatar */}
                                 <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-purple-500 flex items-center justify-center flex-shrink-0">

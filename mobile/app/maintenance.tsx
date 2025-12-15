@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image, Alert, ActivityIndicator, Animated, Dimensions, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, Timestamp, query, where, onSnapshot, orderBy, updateDoc, doc } from 'firebase/firestore';
@@ -10,6 +10,7 @@ import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import { useNotifications } from '../hooks/useNotifications';
 import { FontAwesome5 } from '@expo/vector-icons';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Maintenance {
   id: string;
@@ -24,6 +25,7 @@ interface Maintenance {
 
 export default function Maintenance() {
   const router = useRouter();
+  const { theme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sidebarAnimation = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
   const [maintenanceType, setMaintenanceType] = useState<'Water' | 'Electricity' | 'Garbage disposal' | ''>('');
@@ -100,6 +102,7 @@ export default function Maintenance() {
       setLoadingMaintenance(false);
     }, (error: any) => {
       console.error('Error fetching maintenance:', error);
+      // If error is about missing index, try without orderBy
       if (error.code === 'failed-precondition' || error.message?.includes('index')) {
         const q2 = query(
           collection(db, 'maintenance'),
@@ -113,19 +116,20 @@ export default function Maintenance() {
               id: doc.id,
               ...data,
             } as Maintenance;
-            console.log('Maintenance item status (fallback):', maintenanceItem.status, 'for item:', maintenanceItem.id);
+            // Only include maintenance requests that are pending or in-progress (exclude resolved and rejected)
             if (maintenanceItem.status === 'pending' || maintenanceItem.status === 'in-progress') {
               maintenance.push(maintenanceItem);
             }
           });
+          // Sort manually by createdAt descending
           maintenance.sort((a, b) => {
-            const aDate = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-            const bDate = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
-            return bDate - aDate;
+            const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+            const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+            return bTime - aTime;
           });
           setUserMaintenance(maintenance);
           setLoadingMaintenance(false);
-        }, (error2) => {
+        }, (error2: any) => {
           console.error('Error fetching maintenance (fallback):', error2);
           setLoadingMaintenance(false);
         });
@@ -149,28 +153,68 @@ export default function Maintenance() {
     setSidebarOpen(!sidebarOpen);
   };
 
-  const pickImage = useCallback(async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions to upload images!');
-      return;
-    }
+  const showImageSourcePicker = () => {
+    Alert.alert(
+      'Select Image Source',
+      'Choose an option',
+      [
+        {
+          text: 'Camera',
+          onPress: () => pickImage('camera'),
+        },
+        {
+          text: 'Gallery',
+          onPress: () => pickImage('gallery'),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
-    });
+  const pickImage = async (source: 'camera' | 'gallery') => {
+    try {
+      let result;
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'Camera permission is required to take photos.');
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+        });
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'Gallery permission is required to select images.');
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+        });
+      }
 
-    if (!result.canceled && result.assets[0]) {
-      setImageUri(result.assets[0].uri);
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setImageUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
     }
-  }, []);
+  };
 
   const uploadImageToStorage = useCallback(async (uri: string, path: string): Promise<string | null> => {
     if (!storage) {
-      console.error('Storage is not initialized');
+      console.error('Storage not initialized');
       return null;
     }
 
@@ -199,6 +243,7 @@ export default function Maintenance() {
   }, []);
 
   const handleEdit = useCallback((maintenance: Maintenance) => {
+    // Only allow editing if maintenance is pending
     if (maintenance.status === 'pending') {
       setEditingMaintenance(maintenance);
       setMaintenanceType(maintenance.maintenanceType);
@@ -224,8 +269,11 @@ export default function Maintenance() {
     try {
       let imageURL: string | null = null;
 
+      // Upload image if selected (and it's a new image, not the existing one)
       if (imageUri) {
+        // Check if it's a new image (starts with file://) or existing URL (starts with http)
         if (imageUri.startsWith('file://') || imageUri.startsWith('content://')) {
+          // New image, upload it
           const imagePath = `maintenance/${user.uid}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
           imageURL = await uploadImageToStorage(imageUri, imagePath);
           if (!imageURL) {
@@ -234,43 +282,48 @@ export default function Maintenance() {
             return;
           }
         } else {
+          // Existing image URL, keep it
           imageURL = imageUri;
         }
       }
 
       if (editingMaintenance) {
+        // Update existing maintenance
         await updateDoc(doc(db, 'maintenance', editingMaintenance.id), {
-          maintenanceType: maintenanceType as 'Water' | 'Electricity' | 'Garbage disposal',
+          maintenanceType: maintenanceType.trim(),
           description: description.trim(),
           imageURL: imageURL || editingMaintenance.imageURL || null,
           updatedAt: Timestamp.now(),
         });
 
+        // Create notification for admins about the update
         await addDoc(collection(db, 'notifications'), {
           type: 'maintenance',
           maintenanceId: editingMaintenance.id,
           userId: user.uid,
           userEmail: user.email || '',
-          subject: `${maintenanceType} Maintenance Request`,
-          message: `Maintenance request updated: ${maintenanceType}`,
+          maintenanceType: maintenanceType.trim(),
+          message: `Maintenance request updated: ${maintenanceType.trim()}`,
           recipientType: 'admin',
           isRead: false,
           createdAt: Timestamp.now(),
         });
 
+        // Clear form and exit edit mode
         setMaintenanceType('');
         setDescription('');
         setImageUri(null);
         setEditingMaintenance(null);
 
         Alert.alert(
-          'Maintenance Updated',
+          'Maintenance Request Updated',
           'Your maintenance request has been updated successfully.',
           [{ text: 'OK' }]
         );
       } else {
+        // Create new maintenance
         const maintenanceRef = await addDoc(collection(db, 'maintenance'), {
-          maintenanceType: maintenanceType as 'Water' | 'Electricity' | 'Garbage disposal',
+          maintenanceType: maintenanceType.trim(),
           description: description.trim(),
           userId: user.uid,
           userEmail: user.email || '',
@@ -280,24 +333,26 @@ export default function Maintenance() {
           updatedAt: Timestamp.now(),
         });
 
+        // Create notification for admins
         await addDoc(collection(db, 'notifications'), {
           type: 'maintenance',
           maintenanceId: maintenanceRef.id,
           userId: user.uid,
           userEmail: user.email || '',
-          subject: `${maintenanceType} Maintenance Request`,
-          message: `New maintenance request submitted: ${maintenanceType}`,
+          maintenanceType: maintenanceType.trim(),
+          message: `New maintenance request submitted: ${maintenanceType.trim()}`,
           recipientType: 'admin',
           isRead: false,
           createdAt: Timestamp.now(),
         });
 
+        // Clear form
         setMaintenanceType('');
         setDescription('');
         setImageUri(null);
 
         Alert.alert(
-          'Maintenance Submitted',
+          'Maintenance Request Submitted',
           'Your maintenance request has been submitted successfully. It will be reviewed by an admin.',
           [{ text: 'OK' }]
         );
@@ -316,7 +371,7 @@ export default function Maintenance() {
       return;
     }
 
-    if (!maintenanceType) {
+    if (!maintenanceType.trim()) {
       Alert.alert('Validation Error', 'Please select a maintenance type.');
       return;
     }
@@ -336,6 +391,7 @@ export default function Maintenance() {
       return;
     }
 
+    // Show confirmation dialog
     Alert.alert(
       editingMaintenance ? 'Update Maintenance Request' : 'Submit Maintenance Request',
       editingMaintenance 
@@ -356,8 +412,312 @@ export default function Maintenance() {
     );
   }, [canSubmitNew, editingMaintenance, maintenanceType, description, user, db, submitMaintenance]);
 
+  const dynamicStyles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    keyboardAvoidingView: {
+      flex: 1,
+    },
+    content: {
+      flex: 1,
+    },
+    contentContainer: {
+      paddingBottom: 20,
+    },
+    section: {
+      padding: 20,
+    },
+    title: {
+      fontSize: 24,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 8,
+    },
+    description: {
+      fontSize: 16,
+      color: theme.textSecondary,
+      marginBottom: 24,
+    },
+    loadingContainer: {
+      padding: 40,
+      alignItems: 'center',
+    },
+    maintenanceList: {
+      marginBottom: 24,
+      gap: 12,
+    },
+    maintenanceCard: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 8,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    maintenanceHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 8,
+    },
+    maintenanceType: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.text,
+      flex: 1,
+      marginRight: 8,
+    },
+    statusBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 4,
+    },
+    statusText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: '#ffffff',
+    },
+    statusPending: {
+      backgroundColor: '#f59e0b',
+    },
+    statusInprogress: {
+      backgroundColor: '#3b82f6',
+    },
+    statusResolved: {
+      backgroundColor: '#10b981',
+    },
+    statusRejected: {
+      backgroundColor: '#ef4444',
+    },
+    maintenanceDescription: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      marginBottom: 8,
+      lineHeight: 20,
+    },
+    maintenanceImage: {
+      width: '100%',
+      height: 150,
+      borderRadius: 8,
+      marginBottom: 8,
+    },
+    maintenanceFooter: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    maintenanceDate: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      flex: 1,
+    },
+    editButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      backgroundColor: '#1877F2',
+      borderRadius: 6,
+    },
+    editButtonText: {
+      color: '#ffffff',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    formHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    cancelEditButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      backgroundColor: '#ef4444',
+      borderRadius: 6,
+    },
+    cancelEditText: {
+      color: '#ffffff',
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    formSection: {
+      marginTop: 24,
+      paddingTop: 24,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
+    formTitle: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 8,
+    },
+    formDescription: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      marginBottom: 16,
+    },
+    form: {
+      marginTop: 8,
+    },
+    infoBox: {
+      backgroundColor: theme.cardBackground,
+      padding: 12,
+      borderRadius: 8,
+      marginBottom: 24,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    infoText: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      lineHeight: 20,
+    },
+    inputGroup: {
+      marginBottom: 20,
+    },
+    label: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: theme.text,
+      marginBottom: 8,
+    },
+    dropdownButton: {
+      backgroundColor: theme.inputBackground,
+      borderWidth: 1,
+      borderColor: theme.inputBorder,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    dropdownButtonText: {
+      fontSize: 16,
+      color: theme.text,
+    },
+    dropdownPlaceholder: {
+      color: theme.placeholderText,
+    },
+    input: {
+      backgroundColor: theme.inputBackground,
+      borderWidth: 1,
+      borderColor: theme.inputBorder,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      fontSize: 16,
+      color: theme.text,
+    },
+    textArea: {
+      minHeight: 120,
+      paddingTop: 12,
+    },
+    imagePickerButton: {
+      backgroundColor: theme.cardBackground,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderStyle: 'dashed',
+      borderRadius: 8,
+      paddingVertical: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    imagePickerText: {
+      fontSize: 16,
+      color: theme.textSecondary,
+    },
+    imageContainer: {
+      marginTop: 8,
+    },
+    imagePreview: {
+      width: '100%',
+      height: 200,
+      borderRadius: 8,
+      marginBottom: 8,
+    },
+    removeImageButton: {
+      backgroundColor: '#ef4444',
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      borderRadius: 6,
+      alignSelf: 'flex-start',
+    },
+    removeImageText: {
+      color: '#ffffff',
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    submitButton: {
+      backgroundColor: '#1877F2',
+      paddingVertical: 14,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 8,
+    },
+    submitButtonDisabled: {
+      backgroundColor: theme.border,
+      opacity: 0.6,
+    },
+    submitButtonText: {
+      color: '#ffffff',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    modalContent: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 20,
+      width: '90%',
+      maxWidth: 400,
+      maxHeight: '70%',
+      paddingBottom: 20,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    modalOption: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    modalOptionSelected: {
+      backgroundColor: theme.sectionBackground,
+    },
+    modalOptionText: {
+      fontSize: 16,
+      color: theme.text,
+    },
+    modalOptionTextSelected: {
+      color: '#1877F2',
+      fontWeight: '600',
+    },
+  }), [theme]);
+
   return (
-    <View style={styles.container}>
+    <View style={dynamicStyles.container}>
       <Header 
         onMenuPress={toggleSidebar}
         onNotificationPress={() => router.push('/notifications')}
@@ -369,46 +729,46 @@ export default function Maintenance() {
         animation={sidebarAnimation}
       />
       <KeyboardAvoidingView 
-        style={styles.keyboardAvoidingView}
+        style={dynamicStyles.keyboardAvoidingView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView 
-          style={styles.content} 
-          contentContainerStyle={styles.contentContainer}
+          style={dynamicStyles.content} 
+          contentContainerStyle={dynamicStyles.contentContainer}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.section}>
+          <View style={dynamicStyles.section}>
             {/* User's Maintenance List */}
             {!loadingMaintenance && userMaintenance.length > 0 && (
               <>
-                <Text style={styles.title}>My Maintenance Requests</Text>
-                <View style={styles.maintenanceList}>
+                <Text style={dynamicStyles.title}>My Maintenance Requests</Text>
+                <View style={dynamicStyles.maintenanceList}>
                   {userMaintenance.map((maintenance) => (
-                    <View key={maintenance.id} style={styles.maintenanceCard}>
-                      <View style={styles.maintenanceHeader}>
-                        <Text style={styles.maintenanceType}>{maintenance.maintenanceType}</Text>
-                        <View style={[styles.statusBadge, styles[getStatusStyleName(maintenance.status)]]}>
-                          <Text style={styles.statusText}>{maintenance.status.toUpperCase()}</Text>
+                    <View key={maintenance.id} style={dynamicStyles.maintenanceCard}>
+                      <View style={dynamicStyles.maintenanceHeader}>
+                        <Text style={dynamicStyles.maintenanceType}>{maintenance.maintenanceType}</Text>
+                        <View style={[dynamicStyles.statusBadge, dynamicStyles[getStatusStyleName(maintenance.status)]]}>
+                          <Text style={dynamicStyles.statusText}>{maintenance.status.toUpperCase()}</Text>
                         </View>
                       </View>
-                      <Text style={styles.maintenanceDescription} numberOfLines={3}>
+                      <Text style={dynamicStyles.maintenanceDescription} numberOfLines={3}>
                         {maintenance.description}
                       </Text>
                       {maintenance.imageURL && (
-                        <Image source={{ uri: maintenance.imageURL }} style={styles.maintenanceImage} />
+                        <Image source={{ uri: maintenance.imageURL }} style={dynamicStyles.maintenanceImage} />
                       )}
-                      <View style={styles.maintenanceFooter}>
-                        <Text style={styles.maintenanceDate}>
+                      <View style={dynamicStyles.maintenanceFooter}>
+                        <Text style={dynamicStyles.maintenanceDate}>
                           Submitted: {maintenance.createdAt?.toDate ? maintenance.createdAt.toDate().toLocaleDateString() : 'N/A'}
                         </Text>
                         {maintenance.status === 'pending' && (
                           <TouchableOpacity
-                            style={styles.editButton}
+                            style={dynamicStyles.editButton}
                             onPress={() => handleEdit(maintenance)}
                             disabled={editingMaintenance !== null}
                           >
-                            <Text style={styles.editButtonText}>Edit</Text>
+                            <Text style={dynamicStyles.editButtonText}>Edit</Text>
                           </TouchableOpacity>
                         )}
                       </View>
@@ -419,51 +779,52 @@ export default function Maintenance() {
             )}
 
             {loadingMaintenance && (
-              <View style={styles.loadingContainer}>
+              <View style={dynamicStyles.loadingContainer}>
                 <ActivityIndicator size="large" color="#1877F2" />
               </View>
             )}
 
             {/* Submit/Edit Form */}
             {(canSubmitNew || editingMaintenance) && (
-              <View style={styles.formSection}>
-                <View style={styles.formHeader}>
-                  <Text style={styles.formTitle}>
+              <View style={dynamicStyles.formSection}>
+                <View style={dynamicStyles.formHeader}>
+                  <Text style={dynamicStyles.formTitle}>
                     {editingMaintenance ? 'Edit Maintenance Request' : 'Submit a Maintenance Request'}
                   </Text>
                   {editingMaintenance && (
                     <TouchableOpacity
-                      style={styles.cancelEditButton}
+                      style={dynamicStyles.cancelEditButton}
                       onPress={handleCancelEdit}
                     >
-                      <Text style={styles.cancelEditText}>Cancel</Text>
+                      <Text style={dynamicStyles.cancelEditText}>Cancel</Text>
                     </TouchableOpacity>
                   )}
                 </View>
-                <Text style={styles.formDescription}>
+                <Text style={dynamicStyles.formDescription}>
                   {editingMaintenance ? 'Update your maintenance request details below' : 'Fill out the form below to submit your maintenance request'}
                 </Text>
 
-                <View style={styles.form}>
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Maintenance Type *</Text>
+                <View style={dynamicStyles.form}>
+                  <View style={dynamicStyles.inputGroup}>
+                    <Text style={dynamicStyles.label}>Maintenance Type</Text>
                     <TouchableOpacity
-                      style={styles.dropdownButton}
+                      style={dynamicStyles.dropdownButton}
                       onPress={() => setShowTypeModal(true)}
                       disabled={submitting}
                     >
-                      <Text style={[styles.dropdownButtonText, !maintenanceType && styles.dropdownPlaceholder]}>
+                      <Text style={[dynamicStyles.dropdownButtonText, !maintenanceType && dynamicStyles.dropdownPlaceholder]}>
                         {maintenanceType || 'Select maintenance type'}
                       </Text>
-                      <FontAwesome5 name="chevron-down" size={14} color="#6b7280" />
+                      <FontAwesome5 name="chevron-down" size={14} color={theme.textSecondary} />
                     </TouchableOpacity>
                   </View>
 
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Description *</Text>
+                  <View style={dynamicStyles.inputGroup}>
+                    <Text style={dynamicStyles.label}>Description</Text>
                     <TextInput
-                      style={[styles.input, styles.textArea]}
+                      style={[dynamicStyles.input, dynamicStyles.textArea]}
                       placeholder="Describe your maintenance request in detail"
+                      placeholderTextColor={theme.placeholderText}
                       value={description}
                       onChangeText={setDescription}
                       multiline
@@ -473,39 +834,39 @@ export default function Maintenance() {
                     />
                   </View>
 
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Image (Optional)</Text>
+                  <View style={dynamicStyles.inputGroup}>
+                    <Text style={dynamicStyles.label}>Image (Optional)</Text>
                     {imageUri ? (
-                      <View style={styles.imageContainer}>
-                        <Image source={{ uri: imageUri }} style={styles.imagePreview} />
+                      <View style={dynamicStyles.imageContainer}>
+                        <Image source={{ uri: imageUri }} style={dynamicStyles.imagePreview} />
                         <TouchableOpacity
-                          style={styles.removeImageButton}
+                          style={dynamicStyles.removeImageButton}
                           onPress={() => setImageUri(null)}
                           disabled={submitting}
                         >
-                          <Text style={styles.removeImageText}>Remove Image</Text>
+                          <Text style={dynamicStyles.removeImageText}>Remove Image</Text>
                         </TouchableOpacity>
                       </View>
                     ) : (
                       <TouchableOpacity
-                        style={styles.imagePickerButton}
-                        onPress={pickImage}
+                        style={dynamicStyles.imagePickerButton}
+                        onPress={showImageSourcePicker}
                         disabled={submitting}
                       >
-                        <Text style={styles.imagePickerText}>Select Image</Text>
+                        <Text style={dynamicStyles.imagePickerText}>Select Image</Text>
                       </TouchableOpacity>
                     )}
                   </View>
 
                   <TouchableOpacity
-                    style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+                    style={[dynamicStyles.submitButton, submitting && dynamicStyles.submitButtonDisabled]}
                     onPress={handleSubmit}
                     disabled={submitting}
                   >
                     {submitting ? (
                       <ActivityIndicator color="#ffffff" />
                     ) : (
-                      <Text style={styles.submitButtonText}>
+                      <Text style={dynamicStyles.submitButtonText}>
                         {editingMaintenance ? 'Update Request' : 'Submit Request'}
                       </Text>
                     )}
@@ -515,8 +876,8 @@ export default function Maintenance() {
             )}
 
             {!canSubmitNew && !editingMaintenance && (
-              <View style={styles.infoBox}>
-                <Text style={styles.infoText}>
+              <View style={dynamicStyles.infoBox}>
+                <Text style={dynamicStyles.infoText}>
                   You have an active maintenance request. Please wait for it to be reviewed before submitting a new one. Once your request is resolved, you can submit a new one.
                 </Text>
               </View>
@@ -532,25 +893,25 @@ export default function Maintenance() {
         animationType="fade"
         onRequestClose={() => setShowTypeModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Maintenance Type</Text>
+        <View style={dynamicStyles.modalOverlay}>
+          <View style={dynamicStyles.modalContent}>
+            <View style={dynamicStyles.modalHeader}>
+              <Text style={dynamicStyles.modalTitle}>Select Maintenance Type</Text>
               <TouchableOpacity onPress={() => setShowTypeModal(false)}>
-                <FontAwesome5 name="times" size={20} color="#6b7280" />
+                <FontAwesome5 name="times" size={20} color={theme.textSecondary} />
               </TouchableOpacity>
             </View>
             <ScrollView>
               {maintenanceTypes.map((type) => (
                 <TouchableOpacity
                   key={type}
-                  style={[styles.modalOption, maintenanceType === type && styles.modalOptionSelected]}
+                  style={[dynamicStyles.modalOption, maintenanceType === type && dynamicStyles.modalOptionSelected]}
                   onPress={() => {
                     setMaintenanceType(type);
                     setShowTypeModal(false);
                   }}
                 >
-                  <Text style={[styles.modalOptionText, maintenanceType === type && styles.modalOptionTextSelected]}>
+                  <Text style={[dynamicStyles.modalOptionText, maintenanceType === type && dynamicStyles.modalOptionTextSelected]}>
                     {type}
                   </Text>
                   {maintenanceType === type && (
@@ -565,307 +926,3 @@ export default function Maintenance() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-  },
-  keyboardAvoidingView: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingBottom: 20,
-  },
-  section: {
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  description: {
-    fontSize: 16,
-    color: '#6b7280',
-    marginBottom: 24,
-  },
-  loadingContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  maintenanceList: {
-    marginBottom: 24,
-    gap: 12,
-  },
-  maintenanceCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  maintenanceHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  maintenanceType: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    flex: 1,
-    marginRight: 8,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  statusPending: {
-    backgroundColor: '#f59e0b',
-  },
-  statusInprogress: {
-    backgroundColor: '#3b82f6',
-  },
-  statusResolved: {
-    backgroundColor: '#10b981',
-  },
-  statusRejected: {
-    backgroundColor: '#ef4444',
-  },
-  maintenanceDescription: {
-    fontSize: 14,
-    color: '#374151',
-    marginBottom: 8,
-    lineHeight: 20,
-  },
-  maintenanceImage: {
-    width: '100%',
-    height: 150,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  maintenanceFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  maintenanceDate: {
-    fontSize: 12,
-    color: '#9ca3af',
-    flex: 1,
-  },
-  editButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#1877F2',
-    borderRadius: 6,
-  },
-  editButtonText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  formHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  cancelEditButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#ef4444',
-    borderRadius: 6,
-  },
-  cancelEditText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  formSection: {
-    marginTop: 24,
-    paddingTop: 24,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-  },
-  formTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  formDescription: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 16,
-  },
-  form: {
-    marginTop: 8,
-  },
-  infoBox: {
-    backgroundColor: '#eff6ff',
-    borderWidth: 1,
-    borderColor: '#3b82f6',
-    borderRadius: 8,
-    padding: 16,
-    marginTop: 24,
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#1e40af',
-    lineHeight: 20,
-    textAlign: 'center',
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  dropdownButton: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  dropdownButtonText: {
-    fontSize: 16,
-    color: '#111827',
-  },
-  dropdownPlaceholder: {
-    color: '#9ca3af',
-  },
-  input: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#111827',
-  },
-  textArea: {
-    minHeight: 120,
-    paddingTop: 12,
-  },
-  imagePickerButton: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderStyle: 'dashed',
-    borderRadius: 8,
-    paddingVertical: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imagePickerText: {
-    fontSize: 16,
-    color: '#6b7280',
-  },
-  imageContainer: {
-    marginTop: 8,
-  },
-  imagePreview: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  removeImageButton: {
-    backgroundColor: '#ef4444',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
-  removeImageText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  submitButton: {
-    backgroundColor: '#1877F2',
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#9ca3af',
-  },
-  submitButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    width: '90%',
-    maxWidth: 400,
-    maxHeight: '70%',
-    paddingBottom: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  modalOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  modalOptionSelected: {
-    backgroundColor: '#eff6ff',
-  },
-  modalOptionText: {
-    fontSize: 16,
-    color: '#111827',
-  },
-  modalOptionTextSelected: {
-    color: '#1877F2',
-    fontWeight: '600',
-  },
-});

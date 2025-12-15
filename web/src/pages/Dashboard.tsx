@@ -38,6 +38,20 @@ interface GenderByYearData {
   female: number;
 }
 
+interface MonthlyActivityData {
+  month: string;
+  complaints: number;
+  maintenance: number;
+  visitors: number;
+}
+
+interface ResolutionTimeData {
+  averageComplaintResolutionDays: number;
+  averageMaintenanceResolutionDays: number;
+  totalResolvedComplaints: number;
+  totalResolvedMaintenance: number;
+}
+
 function Dashboard() {
   const [user, setUser] = useState<any>(null)
   const [stats, setStats] = useState({
@@ -64,11 +78,19 @@ function Dashboard() {
   const [selectedYear, setSelectedYear] = useState<string>('')
   const [pieChartYearFilter, setPieChartYearFilter] = useState<string>('')
   const [barChartYearFilter, setBarChartYearFilter] = useState<string>('')
+  const [monthlyActivityYearFilter, setMonthlyActivityYearFilter] = useState<string>('')
   const [availableYears, setAvailableYears] = useState<number[]>([])
   const [allTenantsCount, setAllTenantsCount] = useState(0)
   const [allHomeownersCount, setAllHomeownersCount] = useState(0)
   const [tenantsByYear, setTenantsByYear] = useState<Map<number, { tenants: number; homeowners: number }>>(new Map())
   const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; data: ResidentGrowthData } | null>(null)
+  const [monthlyActivityData, setMonthlyActivityData] = useState<MonthlyActivityData[]>([])
+  const [resolutionTimeData, setResolutionTimeData] = useState<ResolutionTimeData>({
+    averageComplaintResolutionDays: 0,
+    averageMaintenanceResolutionDays: 0,
+    totalResolvedComplaints: 0,
+    totalResolvedMaintenance: 0,
+  })
   const [showReportModal, setShowReportModal] = useState(false)
   const [reportPage, setReportPage] = useState(1)
   const REPORT_ITEMS_PER_PAGE = 10
@@ -221,6 +243,14 @@ function Dashboard() {
           setSelectedYear(String(currentYear));
         }
       }
+      if (!monthlyActivityYearFilter) {
+        if (yearsSet.size > 0) {
+          const yearsWithData = Array.from(yearsSet).sort((a, b) => b - a);
+          setMonthlyActivityYearFilter(String(yearsWithData[0]));
+        } else {
+          setMonthlyActivityYearFilter(String(currentYear));
+        }
+      }
       
       // Calculate billings stats
       let totalBillings = 0;
@@ -234,10 +264,12 @@ function Dashboard() {
         }
       });
 
-      // Count complaints
+      // Count complaints and calculate resolution times
       let totalComplaints = 0;
       let pendingComplaints = 0;
       let resolvedComplaints = 0;
+      const complaintResolutionTimes: number[] = [];
+      const complaintsByMonth = new Map<string, number>();
       
       complaintsSnapshot.forEach((doc) => {
         const data = doc.data();
@@ -246,13 +278,31 @@ function Dashboard() {
           pendingComplaints++;
         } else if (data.status === 'resolved') {
           resolvedComplaints++;
+          // Calculate resolution time
+          if (data.createdAt && data.updatedAt) {
+            const createdAt = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+            const updatedAt = data.updatedAt.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt);
+            const diffTime = updatedAt.getTime() - createdAt.getTime();
+            const diffDays = diffTime / (1000 * 60 * 60 * 24);
+            if (diffDays > 0) {
+              complaintResolutionTimes.push(diffDays);
+            }
+          }
+        }
+        
+        // Group by month for activity trends
+        if (data.createdAt) {
+          const date = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          complaintsByMonth.set(monthKey, (complaintsByMonth.get(monthKey) || 0) + 1);
         }
       });
 
-      // Count visitors
+      // Count visitors and group by month
       let totalVisitors = 0;
       let pendingVisitors = 0;
       let approvedVisitors = 0;
+      const visitorsByMonth = new Map<string, number>();
       
       visitorsSnapshot.forEach((doc) => {
         const data = doc.data();
@@ -261,6 +311,13 @@ function Dashboard() {
           pendingVisitors++;
         } else if (data.status === 'approved') {
           approvedVisitors++;
+        }
+        
+        // Group by month for activity trends
+        if (data.createdAt) {
+          const date = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          visitorsByMonth.set(monthKey, (visitorsByMonth.get(monthKey) || 0) + 1);
         }
       });
 
@@ -273,10 +330,12 @@ function Dashboard() {
         }
       });
 
-      // Count maintenance requests
+      // Count maintenance requests and calculate resolution times
       let totalMaintenance = 0;
       let pendingMaintenance = 0;
       let resolvedMaintenance = 0;
+      const maintenanceResolutionTimes: number[] = [];
+      const maintenanceByMonth = new Map<string, number>();
       
       maintenanceSnapshot.forEach((doc) => {
         const data = doc.data();
@@ -285,11 +344,65 @@ function Dashboard() {
           pendingMaintenance++;
         } else if (data.status === 'resolved') {
           resolvedMaintenance++;
+          // Calculate resolution time
+          if (data.createdAt && data.updatedAt) {
+            const createdAt = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+            const updatedAt = data.updatedAt.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt);
+            const diffTime = updatedAt.getTime() - createdAt.getTime();
+            const diffDays = diffTime / (1000 * 60 * 60 * 24);
+            if (diffDays > 0) {
+              maintenanceResolutionTimes.push(diffDays);
+            }
+          }
+        }
+        
+        // Group by month for activity trends
+        if (data.createdAt) {
+          const date = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          maintenanceByMonth.set(monthKey, (maintenanceByMonth.get(monthKey) || 0) + 1);
         }
       });
 
       // Calculate paid billings
       let paidBillings = totalBillings - pendingBillings;
+
+      // Calculate average resolution times
+      const avgComplaintResolution = complaintResolutionTimes.length > 0
+        ? complaintResolutionTimes.reduce((sum, days) => sum + days, 0) / complaintResolutionTimes.length
+        : 0;
+      const avgMaintenanceResolution = maintenanceResolutionTimes.length > 0
+        ? maintenanceResolutionTimes.reduce((sum, days) => sum + days, 0) / maintenanceResolutionTimes.length
+        : 0;
+
+      setResolutionTimeData({
+        averageComplaintResolutionDays: avgComplaintResolution,
+        averageMaintenanceResolutionDays: avgMaintenanceResolution,
+        totalResolvedComplaints: complaintResolutionTimes.length,
+        totalResolvedMaintenance: maintenanceResolutionTimes.length,
+      });
+
+      // Prepare monthly activity data
+      const allMonths = new Set([
+        ...complaintsByMonth.keys(),
+        ...maintenanceByMonth.keys(),
+        ...visitorsByMonth.keys(),
+      ]);
+      
+      const monthlyActivity: MonthlyActivityData[] = Array.from(allMonths)
+        .sort()
+        .map(monthKey => {
+          const [year, month] = monthKey.split('-');
+          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          return {
+            month: `${monthNames[parseInt(month) - 1]} ${year}`,
+            complaints: complaintsByMonth.get(monthKey) || 0,
+            maintenance: maintenanceByMonth.get(monthKey) || 0,
+            visitors: visitorsByMonth.get(monthKey) || 0,
+          };
+        });
+
+      setMonthlyActivityData(monthlyActivity);
 
       setStats({
         totalUsers,
@@ -626,6 +739,148 @@ function Dashboard() {
               </div>
             )}
           </div>
+
+          {/* Monthly Activity Trends Chart */}
+          {monthlyActivityData.length > 0 && (
+            <div className="bg-white rounded-lg p-4 md:p-6 border border-gray-200 w-full mb-6 md:mb-8">
+              <h2 className="text-gray-900 mb-4 text-base sm:text-lg font-semibold">Monthly Activity Trends</h2>
+              {loading ? (
+                <div className="w-full h-64 flex items-center justify-center text-gray-400">
+                  <p>Loading...</p>
+                </div>
+              ) : (() => {
+                // Filter by year if selected
+                let filteredData = monthlyActivityData;
+                if (monthlyActivityYearFilter) {
+                  const selectedYear = parseInt(monthlyActivityYearFilter);
+                  filteredData = monthlyActivityData.filter(d => {
+                    const yearFromMonth = parseInt(d.month.split(' ')[1]);
+                    return yearFromMonth === selectedYear;
+                  });
+                } else {
+                  // If no filter, show last 12 months
+                  filteredData = monthlyActivityData.slice(-12);
+                }
+
+                if (filteredData.length === 0) {
+                  return (
+                    <div className="w-full h-64 flex items-center justify-center text-gray-400">
+                      <p>No data available for selected year</p>
+                    </div>
+                  );
+                }
+
+                const maxValue = Math.max(
+                  ...filteredData.map(d => Math.max(d.complaints, d.maintenance, d.visitors)),
+                  1
+                );
+                const minValue = 0;
+                const range = maxValue - minValue || 1;
+                const chartHeight = 300;
+                const chartWidth = 1000;
+                const padding = 80;
+                const innerWidth = chartWidth - (padding * 2);
+                const innerHeight = chartHeight - (padding * 2);
+                const barWidth = innerWidth / (filteredData.length * 3 + filteredData.length - 1);
+                const gap = barWidth * 0.2;
+
+                return (
+                  <div className="w-full h-80 relative overflow-x-auto">
+                    <svg width="100%" height="100%" className="overflow-visible min-w-[600px]" viewBox={`0 0 ${chartWidth} ${chartHeight}`} preserveAspectRatio="xMidYMid meet">
+                      {/* Grid lines */}
+                      {[0, 1, 2, 3, 4].map((i) => {
+                        const y = padding + (i * (innerHeight / 4));
+                        const value = Math.round(minValue + (range / 4) * (4 - i));
+                        return (
+                          <g key={i}>
+                            <line
+                              x1={padding}
+                              y1={y}
+                              x2={chartWidth - padding}
+                              y2={y}
+                              stroke="#e5e7eb"
+                              strokeWidth="1"
+                              strokeDasharray="4 4"
+                            />
+                            <text
+                              x={padding - 10}
+                              y={y}
+                              textAnchor="end"
+                              fill="#6b7280"
+                              fontSize="12"
+                              dominantBaseline="middle"
+                            >
+                              {value}
+                            </text>
+                          </g>
+                        );
+                      })}
+
+                      {/* Bars */}
+                      {filteredData.map((d, i) => {
+                        const x = padding + (i * (barWidth * 3 + gap));
+                        const complaintsHeight = (d.complaints / range) * innerHeight;
+                        const maintenanceHeight = (d.maintenance / range) * innerHeight;
+                        const visitorsHeight = (d.visitors / range) * innerHeight;
+
+                        return (
+                          <g key={i}>
+                            {/* Complaints bar */}
+                            <rect
+                              x={x}
+                              y={padding + innerHeight - complaintsHeight}
+                              width={barWidth}
+                              height={complaintsHeight}
+                              fill="#ef4444"
+                              rx="2"
+                            />
+                            {/* Maintenance bar */}
+                            <rect
+                              x={x + barWidth + gap / 3}
+                              y={padding + innerHeight - maintenanceHeight}
+                              width={barWidth}
+                              height={maintenanceHeight}
+                              fill="#8b5cf6"
+                              rx="2"
+                            />
+                            {/* Visitors bar */}
+                            <rect
+                              x={x + (barWidth + gap / 3) * 2}
+                              y={padding + innerHeight - visitorsHeight}
+                              width={barWidth}
+                              height={visitorsHeight}
+                              fill="#10b981"
+                              rx="2"
+                            />
+                            {/* Month label */}
+                            <text
+                              x={x + barWidth * 1.5 + gap / 3}
+                              y={chartHeight - padding + 20}
+                              textAnchor="middle"
+                              fill="#6b7280"
+                              fontSize="11"
+                            >
+                              {d.month}
+                            </text>
+                          </g>
+                        );
+                      })}
+
+                      {/* Legend */}
+                      <g transform={`translate(${chartWidth - padding - 120}, ${padding - 30})`}>
+                        <rect x="0" y="0" width="12" height="12" fill="#ef4444" rx="2" />
+                        <text x="18" y="10" fill="#374151" fontSize="11">Complaints</text>
+                        <rect x="90" y="0" width="12" height="12" fill="#8b5cf6" rx="2" />
+                        <text x="108" y="10" fill="#374151" fontSize="11">Maintenance</text>
+                        <rect x="200" y="0" width="12" height="12" fill="#10b981" rx="2" />
+                        <text x="218" y="10" fill="#374151" fontSize="11">Visitors</text>
+                      </g>
+                    </svg>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           {/* Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 w-full mb-6 md:mb-8">

@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image, Alert, ActivityIndicator, Animated, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, Timestamp, query, where, onSnapshot, orderBy, updateDoc, doc } from 'firebase/firestore';
@@ -9,6 +9,7 @@ import { getAuthService, db, storage } from '../firebase/config';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import { useNotifications } from '../hooks/useNotifications';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Complaint {
   id: string;
@@ -23,6 +24,7 @@ interface Complaint {
 
 export default function Complaints() {
   const router = useRouter();
+  const { theme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sidebarAnimation = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
   const [subject, setSubject] = useState('');
@@ -104,15 +106,15 @@ export default function Complaints() {
               complaints.push(complaint);
             }
           });
-          // Sort manually
+          // Sort manually by createdAt descending
           complaints.sort((a, b) => {
-            const aDate = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-            const bDate = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
-            return bDate - aDate;
+            const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+            const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+            return bTime - aTime;
           });
           setUserComplaints(complaints);
           setLoadingComplaints(false);
-        }, (error2) => {
+        }, (error2: any) => {
           console.error('Error fetching complaints (fallback):', error2);
           setLoadingComplaints(false);
         });
@@ -136,28 +138,68 @@ export default function Complaints() {
     setSidebarOpen(!sidebarOpen);
   };
 
-  const pickImage = useCallback(async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions to upload images!');
-      return;
-    }
+  const showImageSourcePicker = () => {
+    Alert.alert(
+      'Select Image Source',
+      'Choose an option',
+      [
+        {
+          text: 'Camera',
+          onPress: () => pickImage('camera'),
+        },
+        {
+          text: 'Gallery',
+          onPress: () => pickImage('gallery'),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
-    });
+  const pickImage = async (source: 'camera' | 'gallery') => {
+    try {
+      let result;
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'Camera permission is required to take photos.');
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+        });
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'Gallery permission is required to select images.');
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+        });
+      }
 
-    if (!result.canceled && result.assets[0]) {
-      setImageUri(result.assets[0].uri);
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setImageUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
     }
-  }, []);
+  };
 
   const uploadImageToStorage = useCallback(async (uri: string, path: string): Promise<string | null> => {
     if (!storage) {
-      console.error('Storage is not initialized');
+      console.error('Storage not initialized');
       return null;
     }
 
@@ -355,8 +397,266 @@ export default function Complaints() {
     );
   }, [canSubmitNew, editingComplaint, subject, description, user, db, submitComplaint]);
 
+  const dynamicStyles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    content: {
+      flex: 1,
+    },
+    contentContainer: {
+      paddingBottom: 20,
+    },
+    section: {
+      padding: 20,
+    },
+    title: {
+      fontSize: 24,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 8,
+    },
+    description: {
+      fontSize: 16,
+      color: theme.textSecondary,
+      marginBottom: 24,
+    },
+    loadingContainer: {
+      padding: 40,
+      alignItems: 'center',
+    },
+    emptyContainer: {
+      padding: 20,
+      alignItems: 'center',
+      backgroundColor: theme.cardBackground,
+      borderRadius: 8,
+      marginBottom: 24,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    emptyText: {
+      fontSize: 16,
+      color: theme.textSecondary,
+    },
+    complaintsList: {
+      marginBottom: 24,
+      gap: 12,
+    },
+    complaintCard: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 8,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    complaintHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 8,
+    },
+    complaintSubject: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.text,
+      flex: 1,
+      marginRight: 8,
+    },
+    statusBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 4,
+    },
+    statusText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: '#ffffff',
+    },
+    statusPending: {
+      backgroundColor: '#f59e0b',
+    },
+    statusInprogress: {
+      backgroundColor: '#3b82f6',
+    },
+    statusResolved: {
+      backgroundColor: '#10b981',
+    },
+    complaintDescription: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      marginBottom: 8,
+      lineHeight: 20,
+    },
+    complaintImage: {
+      width: '100%',
+      height: 150,
+      borderRadius: 8,
+      marginBottom: 8,
+    },
+    complaintFooter: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    complaintDate: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      flex: 1,
+    },
+    editButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      backgroundColor: '#1877F2',
+      borderRadius: 6,
+    },
+    editButtonText: {
+      color: '#ffffff',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    formHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    cancelEditButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      backgroundColor: '#ef4444',
+      borderRadius: 6,
+    },
+    cancelEditText: {
+      color: '#ffffff',
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    formSection: {
+      marginTop: 24,
+      paddingTop: 24,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
+    formTitle: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 8,
+    },
+    formDescription: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      marginBottom: 16,
+    },
+    formGroup: {
+      marginBottom: 20,
+    },
+    label: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: theme.text,
+      marginBottom: 8,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: theme.inputBorder,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 16,
+      backgroundColor: theme.inputBackground,
+      color: theme.text,
+    },
+    textArea: {
+      minHeight: 100,
+      textAlignVertical: 'top',
+    },
+    imageContainer: {
+      marginTop: 8,
+    },
+    imagePreview: {
+      width: '100%',
+      height: 200,
+      borderRadius: 8,
+      marginBottom: 8,
+    },
+    imageButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      backgroundColor: theme.cardBackground,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    imageButtonText: {
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: '500',
+      marginLeft: 8,
+    },
+    submitButton: {
+      backgroundColor: '#1877F2',
+      paddingVertical: 14,
+      borderRadius: 8,
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    submitButtonDisabled: {
+      backgroundColor: theme.border,
+      opacity: 0.6,
+    },
+    submitButtonText: {
+      color: '#ffffff',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    infoBox: {
+      backgroundColor: theme.cardBackground,
+      padding: 12,
+      borderRadius: 8,
+      marginBottom: 24,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    infoText: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      lineHeight: 20,
+    },
+    removeImageButton: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      backgroundColor: '#ef4444',
+      borderRadius: 6,
+      alignItems: 'center',
+    },
+    removeImageText: {
+      color: '#ffffff',
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    imagePickerButton: {
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      backgroundColor: theme.cardBackground,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.border,
+      alignItems: 'center',
+    },
+    imagePickerText: {
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+  }), [theme]);
+
   return (
-    <View style={styles.container}>
+    <View style={dynamicStyles.container}>
       <Header 
         onMenuPress={toggleSidebar}
         onNotificationPress={() => router.push('/notifications')}
@@ -367,38 +667,38 @@ export default function Complaints() {
         onClose={toggleSidebar}
         animation={sidebarAnimation}
       />
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        <View style={styles.section}>
+      <ScrollView style={dynamicStyles.content} contentContainerStyle={dynamicStyles.contentContainer}>
+        <View style={dynamicStyles.section}>
           {/* User's Complaints List - Only show if there are active complaints */}
           {!loadingComplaints && userComplaints.length > 0 && (
             <>
-              <Text style={styles.title}>My Complaints</Text>
-              <View style={styles.complaintsList}>
+              <Text style={dynamicStyles.title}>My Complaints</Text>
+              <View style={dynamicStyles.complaintsList}>
                 {userComplaints.map((complaint) => (
-                  <View key={complaint.id} style={styles.complaintCard}>
-                    <View style={styles.complaintHeader}>
-                      <Text style={styles.complaintSubject}>{complaint.subject}</Text>
-                      <View style={[styles.statusBadge, styles[`status${complaint.status.charAt(0).toUpperCase() + complaint.status.slice(1).replace('-', '')}`]]}>
-                        <Text style={styles.statusText}>{complaint.status.toUpperCase()}</Text>
+                  <View key={complaint.id} style={dynamicStyles.complaintCard}>
+                    <View style={dynamicStyles.complaintHeader}>
+                      <Text style={dynamicStyles.complaintSubject}>{complaint.subject}</Text>
+                      <View style={[dynamicStyles.statusBadge, dynamicStyles[`status${complaint.status.charAt(0).toUpperCase() + complaint.status.slice(1).replace('-', '')}`]]}>
+                        <Text style={dynamicStyles.statusText}>{complaint.status.toUpperCase()}</Text>
                       </View>
                     </View>
-                    <Text style={styles.complaintDescription} numberOfLines={3}>
+                    <Text style={dynamicStyles.complaintDescription} numberOfLines={3}>
                       {complaint.description}
                     </Text>
                     {complaint.imageURL && (
-                      <Image source={{ uri: complaint.imageURL }} style={styles.complaintImage} />
+                      <Image source={{ uri: complaint.imageURL }} style={dynamicStyles.complaintImage} />
                     )}
-                    <View style={styles.complaintFooter}>
-                      <Text style={styles.complaintDate}>
+                    <View style={dynamicStyles.complaintFooter}>
+                      <Text style={dynamicStyles.complaintDate}>
                         Submitted: {complaint.createdAt?.toDate ? complaint.createdAt.toDate().toLocaleDateString() : 'N/A'}
                       </Text>
                       {complaint.status === 'pending' && (
                         <TouchableOpacity
-                          style={styles.editButton}
+                          style={dynamicStyles.editButton}
                           onPress={() => handleEdit(complaint)}
                           disabled={editingComplaint !== null}
                         >
-                          <Text style={styles.editButtonText}>Edit</Text>
+                          <Text style={dynamicStyles.editButtonText}>Edit</Text>
                         </TouchableOpacity>
                       )}
                     </View>
@@ -410,48 +710,50 @@ export default function Complaints() {
 
           {/* Loading state */}
           {loadingComplaints && (
-            <View style={styles.loadingContainer}>
+            <View style={dynamicStyles.loadingContainer}>
               <ActivityIndicator size="large" color="#1877F2" />
             </View>
           )}
 
           {/* Submit/Edit Form - Show if user can submit new or is editing */}
           {(canSubmitNew || editingComplaint) && (
-            <View style={styles.formSection}>
-              <View style={styles.formHeader}>
-                <Text style={styles.formTitle}>
+            <View style={dynamicStyles.formSection}>
+              <View style={dynamicStyles.formHeader}>
+                <Text style={dynamicStyles.formTitle}>
                   {editingComplaint ? 'Edit Complaint' : 'Submit a Complaint'}
                 </Text>
                 {editingComplaint && (
                   <TouchableOpacity
-                    style={styles.cancelEditButton}
+                    style={dynamicStyles.cancelEditButton}
                     onPress={handleCancelEdit}
                   >
-                    <Text style={styles.cancelEditText}>Cancel</Text>
+                    <Text style={dynamicStyles.cancelEditText}>Cancel</Text>
                   </TouchableOpacity>
                 )}
               </View>
-              <Text style={styles.formDescription}>
+              <Text style={dynamicStyles.description}>
                 {editingComplaint ? 'Update your complaint details below' : 'Fill out the form below to submit your complaint'}
               </Text>
 
-              <View style={styles.form}>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Subject *</Text>
+              <View>
+                <View style={dynamicStyles.formGroup}>
+                  <Text style={dynamicStyles.label}>Subject</Text>
                   <TextInput
-                    style={styles.input}
+                    style={dynamicStyles.input}
                     placeholder="Enter complaint subject"
+                    placeholderTextColor={theme.placeholderText}
                     value={subject}
                     onChangeText={setSubject}
                     editable={!submitting}
                   />
                 </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Description *</Text>
+                <View style={dynamicStyles.formGroup}>
+                  <Text style={dynamicStyles.label}>Description</Text>
                   <TextInput
-                    style={[styles.input, styles.textArea]}
+                    style={[dynamicStyles.input, dynamicStyles.textArea]}
                     placeholder="Describe your complaint in detail"
+                    placeholderTextColor={theme.placeholderText}
                     value={description}
                     onChangeText={setDescription}
                     multiline
@@ -461,39 +763,39 @@ export default function Complaints() {
                   />
                 </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Image (Optional)</Text>
+                <View style={dynamicStyles.formGroup}>
+                  <Text style={dynamicStyles.label}>Image (Optional)</Text>
                   {imageUri ? (
-                    <View style={styles.imageContainer}>
-                      <Image source={{ uri: imageUri }} style={styles.imagePreview} />
+                    <View style={dynamicStyles.imageContainer}>
+                      <Image source={{ uri: imageUri }} style={dynamicStyles.imagePreview} />
                       <TouchableOpacity
-                        style={styles.removeImageButton}
+                        style={dynamicStyles.removeImageButton}
                         onPress={() => setImageUri(null)}
                         disabled={submitting}
                       >
-                        <Text style={styles.removeImageText}>Remove Image</Text>
+                        <Text style={dynamicStyles.removeImageText}>Remove Image</Text>
                       </TouchableOpacity>
                     </View>
                   ) : (
                     <TouchableOpacity
-                      style={styles.imagePickerButton}
-                      onPress={pickImage}
+                      style={dynamicStyles.imagePickerButton}
+                      onPress={showImageSourcePicker}
                       disabled={submitting}
                     >
-                      <Text style={styles.imagePickerText}>Select Image</Text>
+                      <Text style={dynamicStyles.imagePickerText}>Select Image</Text>
                     </TouchableOpacity>
                   )}
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+                  style={[dynamicStyles.submitButton, submitting && dynamicStyles.submitButtonDisabled]}
                   onPress={handleSubmit}
                   disabled={submitting}
                 >
                   {submitting ? (
                     <ActivityIndicator color="#ffffff" />
                   ) : (
-                    <Text style={styles.submitButtonText}>
+                    <Text style={dynamicStyles.submitButtonText}>
                       {editingComplaint ? 'Update Complaint' : 'Submit Complaint'}
                     </Text>
                   )}
@@ -504,8 +806,8 @@ export default function Complaints() {
 
           {/* Show message if user has an active complaint */}
           {!canSubmitNew && !editingComplaint && (
-            <View style={styles.infoBox}>
-              <Text style={styles.infoText}>
+            <View style={dynamicStyles.infoBox}>
+              <Text style={dynamicStyles.infoText}>
                 You have an active complaint. Please wait for it to be reviewed before submitting a new one. Once your complaint is resolved, you can submit a new one.
               </Text>
             </View>
@@ -515,248 +817,3 @@ export default function Complaints() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingBottom: 20,
-  },
-  section: {
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  description: {
-    fontSize: 16,
-    color: '#6b7280',
-    marginBottom: 24,
-  },
-  loadingContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  emptyContainer: {
-    padding: 20,
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    marginBottom: 24,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#6b7280',
-  },
-  complaintsList: {
-    marginBottom: 24,
-    gap: 12,
-  },
-  complaintCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  complaintHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  complaintSubject: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    flex: 1,
-    marginRight: 8,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  statusPending: {
-    backgroundColor: '#f59e0b',
-  },
-  statusInprogress: {
-    backgroundColor: '#3b82f6',
-  },
-  statusResolved: {
-    backgroundColor: '#10b981',
-  },
-  complaintDescription: {
-    fontSize: 14,
-    color: '#374151',
-    marginBottom: 8,
-    lineHeight: 20,
-  },
-  complaintImage: {
-    width: '100%',
-    height: 150,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  complaintFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  complaintDate: {
-    fontSize: 12,
-    color: '#9ca3af',
-    flex: 1,
-  },
-  editButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#1877F2',
-    borderRadius: 6,
-  },
-  editButtonText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  formHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  cancelEditButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#ef4444',
-    borderRadius: 6,
-  },
-  cancelEditText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  formSection: {
-    marginTop: 24,
-    paddingTop: 24,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-  },
-  formTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  formDescription: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 16,
-  },
-  form: {
-    marginTop: 8,
-  },
-  infoBox: {
-    backgroundColor: '#eff6ff',
-    borderWidth: 1,
-    borderColor: '#3b82f6',
-    borderRadius: 8,
-    padding: 16,
-    marginTop: 24,
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#1e40af',
-    lineHeight: 20,
-    textAlign: 'center',
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#111827',
-  },
-  textArea: {
-    minHeight: 120,
-    paddingTop: 12,
-  },
-  imagePickerButton: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderStyle: 'dashed',
-    borderRadius: 8,
-    paddingVertical: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imagePickerText: {
-    fontSize: 16,
-    color: '#6b7280',
-  },
-  imageContainer: {
-    marginTop: 8,
-  },
-  imagePreview: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  removeImageButton: {
-    backgroundColor: '#ef4444',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
-  removeImageText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  submitButton: {
-    backgroundColor: '#1877F2',
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#9ca3af',
-  },
-  submitButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
-
