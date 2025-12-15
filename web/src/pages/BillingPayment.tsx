@@ -86,6 +86,7 @@ function BillingPayment() {
   const ITEMS_PER_PAGE = 10;
   const [showProofModal, setShowProofModal] = useState(false);
   const [proofBilling, setProofBilling] = useState<Billing | null>(null);
+  const [approveMonthsAdvance, setApproveMonthsAdvance] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [blockFilter, setBlockFilter] = useState('');
   const [streetFilter, setStreetFilter] = useState('');
@@ -215,21 +216,28 @@ function BillingPayment() {
     setProofCurrentPage(1);
   }, [proofStatusFilter, proofTypeFilter, proofSearchQuery, proofFilterDate]);
 
-  const fetchResidents = useCallback(async () => {
-    if (!db) return;
-    
+  // Real-time listener for residents so Water and Electricity screens update live
+  useEffect(() => {
+    if (!user || !db) return;
+
+    console.log('Setting up real-time listener for residents...');
+    let unsubscribe: (() => void) | null = null;
+
     try {
-      setLoadingResidents(true);
-      const querySnapshot = await getDocs(collection(db, 'users'));
+      const q = query(collection(db, 'users'));
+
+      unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
       const residentsData: Resident[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
         // Filter out superadmin accounts - only include residents (but include all resident statuses)
         if (data.role === 'superadmin') {
           return;
         }
         residentsData.push({
-          id: doc.id,
+              id: docSnap.id,
           email: data.email,
           fullName: data.fullName,
           waterBillingDate: data.waterBillingDate,
@@ -244,25 +252,34 @@ function BillingPayment() {
         const emailB = (b.email || '').toLowerCase();
         return emailA.localeCompare(emailB);
       });
+
       setResidents(residentsData);
-    } catch (error) {
-      console.error('Error fetching residents:', error);
-    } finally {
+          setLoadingResidents(false);
+        },
+        (error: any) => {
+          console.error('Error in residents real-time listener:', error);
       setLoadingResidents(false);
     }
-  }, [db]);
+      );
+    } catch (err) {
+      console.error('Error setting up residents listener:', err);
+      setLoadingResidents(false);
+    }
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [user, db]);
 
   useEffect(() => {
     if (user) {
-      console.log('User authenticated, fetching billings...', { userEmail: user.email, dbExists: !!db });
-      if (db) {
-        fetchResidents();
-      } else {
+      console.log('User authenticated, setting up real-time listeners...', { userEmail: user.email, dbExists: !!db });
+      if (!db) {
         console.error('Firestore db is not available');
         alert('Database connection error. Please refresh the page.');
       }
     }
-  }, [user, db, fetchBillings, fetchResidents]);
+  }, [user, db]);
 
   // Real-time listener for billings so all Billing & Payment dropdown screens update live
   useEffect(() => {
@@ -607,16 +624,18 @@ function BillingPayment() {
 
   const resetSendBillForm = useCallback(
     (typeOverride?: 'water' | 'electricity' | '') => {
+      const defaultType: 'water' | 'electricity' | '' = 
+        typeOverride ?? (isWaterView ? 'water' : isElectricView ? 'electricity' : '');
       setSendBillResident(null);
       setSendBillData({
         amount: '',
         billingCycle: '',
         dueDate: new Date().toISOString().split('T')[0],
         description: '',
-        billingType: typeOverride ?? '',
+        billingType: defaultType,
       });
     },
-    []
+    [isWaterView, isElectricView]
   );
 
   const openSendBillFormForBilling = useCallback(
@@ -661,7 +680,7 @@ function BillingPayment() {
     async (e: React.FormEvent) => {
       e.preventDefault();
       if (!sendBillResident || !sendBillData.amount || !sendBillData.dueDate || !sendBillData.billingType) {
-        alert('Please fill in the amount, type, and due date.');
+        alert('Please fill in the amount and due date.');
         return;
       }
       if (!db) return;
@@ -714,16 +733,17 @@ function BillingPayment() {
     [db, sendBillResident, sendBillData, fetchBillings, resetSendBillForm]
   );
 
-  const getNextMonthDateString = (dateStr: string): string => {
+  const getNextMonthDateString = (dateStr: string, months: number = 1): string => {
     const base = new Date(dateStr);
     if (Number.isNaN(base.getTime())) return dateStr;
-    const next = new Date(base.getFullYear(), base.getMonth() + 1, base.getDate());
+    const next = new Date(base.getFullYear(), base.getMonth() + months, base.getDate());
     return next.toISOString().split('T')[0];
   };
 
 
   const openProofModalForBilling = useCallback((billing: Billing) => {
     setProofBilling(billing);
+    setApproveMonthsAdvance(1); // Reset to default 1 month
     setShowProofModal(true);
   }, []);
 
@@ -739,15 +759,15 @@ function BillingPayment() {
           updates.status = 'paid';
           updates.userProofStatus = 'verified';
           if (proofBilling.dueDate) {
-            const nextDateStr = getNextMonthDateString(proofBilling.dueDate);
+            const nextDateStr = getNextMonthDateString(proofBilling.dueDate, approveMonthsAdvance);
             // Update both current billing's dueDate (so UI shows next cycle)
             // and keep nextBillingDate for reference if needed.
             updates.dueDate = nextDateStr;
             updates.nextBillingDate = nextDateStr;
           }
-          // Also update resident's billing date (water/electricity) by +1 month
+          // Also update resident's billing date (water/electricity) by selected months
           if (proofBilling.residentId && proofBilling.dueDate && proofBilling.billingType) {
-            const nextDateStr = getNextMonthDateString(proofBilling.dueDate);
+            const nextDateStr = getNextMonthDateString(proofBilling.dueDate, approveMonthsAdvance);
             const residentRef = doc(db, 'users', proofBilling.residentId);
             const residentUpdates: any = {};
             if (proofBilling.billingType === 'water') {
@@ -809,8 +829,9 @@ function BillingPayment() {
         }
         setShowProofModal(false);
         setProofBilling(null);
+        setApproveMonthsAdvance(1);
         await fetchBillings();
-        alert(action === 'approve' ? 'Proof approved and billing marked as paid.' : 'Proof rejected.');
+        alert(action === 'approve' ? `Proof approved and billing marked as paid. Billing date advanced by ${approveMonthsAdvance} ${approveMonthsAdvance === 1 ? 'month' : 'months'}.` : 'Proof rejected.');
       } catch (error) {
         console.error('Error verifying proof:', error);
         alert('Failed to update billing proof status.');
@@ -818,7 +839,7 @@ function BillingPayment() {
         setLoading(false);
       }
     },
-    [db, proofBilling, fetchBillings]
+    [db, proofBilling, fetchBillings, approveMonthsAdvance]
   );
 
   const handleArchiveProof = useCallback(
@@ -1393,12 +1414,12 @@ function BillingPayment() {
 
                         {/* Desktop table */}
                         <div className="hidden md:block overflow-x-auto w-full">
-                          <table className="w-full border-collapse text-sm">
-                            <thead>
-                              <tr className="bg-gray-50 border-b-2 border-gray-200">
-                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="bg-gray-50 border-b-2 border-gray-200">
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
                                   Resident
-                                </th>
+                              </th>
                                 <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
                                   Email
                                 </th>
@@ -1419,16 +1440,16 @@ function BillingPayment() {
                                 <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
                                   Actions
                                 </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {paginatedResidents.map((resident) => {
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginatedResidents.map((resident) => {
                                 const billingDate = getDateFromResident(
                                   resident,
                                   !!isWaterView
                                 );
-                                const isDue =
-                                  !!billingDate &&
+                              const isDue =
+                                !!billingDate &&
                                   billingDate.setHours(0, 0, 0, 0) <=
                                     new Date().setHours(0, 0, 0, 0);
                                 const billingDateIsFuture =
@@ -1443,16 +1464,16 @@ function BillingPayment() {
                                 );
                                 // Allow sending if: billing date is in future (updated) OR no unsettled billings
                                 const canSendBilling = billingDateIsFuture || !hasUnsettledBilling;
-                                return (
-                                  <tr
-                                    key={resident.id}
-                                    className={`last:border-b-0 border-b border-gray-100 ${
+                              return (
+                              <tr
+                                key={resident.id}
+                                className={`last:border-b-0 border-b border-gray-100 ${
                                       isDue
                                         ? 'bg-red-50 hover:bg-red-100'
                                         : 'hover:bg-gray-50'
-                                    }`}
-                                  >
-                                    <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                }`}
+                              >
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
                                       <div className="flex items-center gap-2">
                                         <span>{resident.fullName || 'N/A'}</span>
                                         {isDue && (
@@ -1461,59 +1482,59 @@ function BillingPayment() {
                                           </span>
                                         )}
                                       </div>
-                                    </td>
-                                    <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
-                                      {resident.email}
-                                    </td>
-                                    <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
-                                      {resident.address?.block || 'N/A'}
-                                    </td>
-                                    <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
-                                      {resident.address?.lot || 'N/A'}
-                                    </td>
-                                    <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
-                                      {resident.address?.street || 'N/A'}
-                                    </td>
-                                    <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
-                                      {formatDate(
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                  {resident.email}
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                  {resident.address?.block || 'N/A'}
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                  {resident.address?.lot || 'N/A'}
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                  {resident.address?.street || 'N/A'}
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                  {formatDate(
                                         (isWaterView
                                           ? resident.waterBillingDate
                                           : resident.electricBillingDate) as any
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-4 border-b border-gray-100 align-middle">
-                                      <button
+                                  )}
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 align-middle">
+                                  <button
                                         className={`border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all ${
                                           !canSendBilling
                                             ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
                                             : 'bg-blue-600 text-white hover:bg-blue-700'
                                         }`}
                                         disabled={!canSendBilling}
-                                        onClick={() => {
+                                    onClick={() => {
                                           if (!canSendBilling) return;
                                           const latestBilling =
                                             latestBillingByResidentId.get(
                                               resident.id
                                             );
-                                          if (latestBilling) {
+                                      if (latestBilling) {
                                             openSendBillFormForBilling(
                                               latestBilling
                                             );
-                                          } else {
+                                      } else {
                                             openSendBillFormForResident(
                                               resident
                                             );
-                                          }
-                                        }}
-                                      >
+                                      }
+                                    }}
+                                  >
                                         {!canSendBilling ? 'Already billed' : 'Send Bill (₱)'}
-                                      </button>
-                                    </td>
-                                  </tr>
+                                  </button>
+                                </td>
+                              </tr>
                                 );
                               })}
-                            </tbody>
-                          </table>
+                          </tbody>
+                        </table>
                         </div>
                         {residentsForTable.length > 0 && (
                           <div className="flex flex-col md:flex-row md:items-center md:justify-between mt-4 gap-3">
@@ -1552,12 +1573,12 @@ function BillingPayment() {
                 <div className="flex flex-col gap-4 mb-4 md:mb-6">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                      <h2 className="m-0 text-gray-900 text-base md:text-lg font-normal">
-                        Proof of Payments
-                      </h2>
-                      <p className="m-0 text-xs text-gray-500">
-                        Review proofs sent by residents and mark billings as paid or reject them.
-                      </p>
+                  <h2 className="m-0 text-gray-900 text-base md:text-lg font-normal">
+                    Proof of Payments
+                  </h2>
+                  <p className="m-0 text-xs text-gray-500">
+                    Review proofs sent by residents and mark billings as paid or reject them.
+                  </p>
                     </div>
                   </div>
 
@@ -1797,7 +1818,7 @@ function BillingPayment() {
 
                         {/* Desktop table */}
                         <div className="hidden md:block overflow-x-auto w-full">
-                          <table className="w-full border-collapse text-sm">
+                        <table className="w-full border-collapse text-sm">
                           <thead>
                             <tr className="bg-gray-50 border-b-2 border-gray-200">
                               <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
@@ -2036,6 +2057,7 @@ function BillingPayment() {
             onClick={() => {
               setShowProofModal(false);
               setProofBilling(null);
+              setApproveMonthsAdvance(1);
             }}
           >
             <div
@@ -2051,6 +2073,7 @@ function BillingPayment() {
                   onClick={() => {
                     setShowProofModal(false);
                     setProofBilling(null);
+                    setApproveMonthsAdvance(1);
                   }}
                 >
                   ✕
@@ -2085,6 +2108,24 @@ function BillingPayment() {
                     )}
                   </div>
                 </div>
+                {proofBilling.userProofStatus === 'pending' && (
+                  <div>
+                    <label className="block mb-2 font-normal text-gray-700 text-xs uppercase tracking-wide">
+                      Advance Billing Date (Months)
+                    </label>
+                    <select
+                      value={approveMonthsAdvance}
+                      onChange={(e) => setApproveMonthsAdvance(Number(e.target.value))}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm transition-all focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent bg-white"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((months) => (
+                        <option key={months} value={months}>
+                          {months} {months === 1 ? 'month' : 'months'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 mt-4 pt-4 border-t border-gray-200">
@@ -2096,7 +2137,7 @@ function BillingPayment() {
                       onClick={() => handleVerifyProof('approve')}
                       disabled={loading}
                     >
-                      {loading ? 'Updating...' : 'Approve & Mark Paid (+1 month)'}
+                      {loading ? 'Updating...' : `Approve & Mark Paid (+${approveMonthsAdvance} ${approveMonthsAdvance === 1 ? 'month' : 'months'})`}
                     </button>
                     <button
                       type="button"
@@ -2114,6 +2155,7 @@ function BillingPayment() {
                     onClick={() => {
                       setShowProofModal(false);
                       setProofBilling(null);
+                      setApproveMonthsAdvance(1);
                     }}
                   >
                     Close
@@ -2213,24 +2255,6 @@ function BillingPayment() {
                     rows={3}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm transition-all resize-y min-h-[80px] focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                   />
-                </div>
-
-                <div className="mb-6">
-                  <label className="block mb-2 font-normal text-gray-700 text-xs uppercase tracking-wide">
-                    Billing Type *
-                  </label>
-                  <select
-                    value={sendBillData.billingType}
-                    onChange={(e) =>
-                      setSendBillData((prev) => ({ ...prev, billingType: e.target.value }))
-                    }
-                    required
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm transition-all focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent bg-white"
-                  >
-                    <option value="">Select type</option>
-                    <option value="water">Water</option>
-                    <option value="electricity">Electricity</option>
-                  </select>
                 </div>
 
                 <div className="flex gap-3 mt-4 pt-4 border-t border-gray-200">

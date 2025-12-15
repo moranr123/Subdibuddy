@@ -252,7 +252,10 @@ export default function BillingAll() {
                           : '—'}
                       </Text>
                     </View>
-                    <View style={styles.statusBadge}>
+                    <View style={[
+                      styles.statusBadge,
+                      billing.status === 'paid' && styles.statusBadgePaid
+                    ]}>
                       <Text style={styles.statusBadgeText}>
                         {(billing.status || 'pending').toUpperCase()}
                       </Text>
@@ -493,6 +496,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
     backgroundColor: '#111827',
+  },
+  statusBadgePaid: {
+    backgroundColor: '#10b981',
   },
   statusBadgeText: {
     color: '#ffffff',

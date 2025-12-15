@@ -1,7 +1,7 @@
 import { useEffect, useState, memo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy, Timestamp, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { auth, db, storage } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
@@ -303,6 +303,48 @@ function Announcement() {
     }
   }, [fetchAnnouncements]);
 
+  const handleArchive = useCallback(async (announcement: Announcement) => {
+    const confirmMessage = `Are you sure you want to archive "${announcement.title}"?`;
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // Get announcement data
+      const announcementDoc = await getDoc(doc(db, 'announcements', announcement.id));
+      if (!announcementDoc.exists()) {
+        alert('Announcement not found');
+        return;
+      }
+
+      const announcementData = announcementDoc.data();
+      
+      // Move to archived announcements collection
+      await addDoc(collection(db, 'archivedAnnouncements'), {
+        ...announcementData,
+        originalId: announcement.id,
+        archivedAt: Timestamp.now(),
+        archivedBy: user?.uid || 'unknown',
+      });
+
+      // Delete from active announcements
+      await deleteDoc(doc(db, 'announcements', announcement.id));
+      
+      await fetchAnnouncements();
+      alert('Announcement archived successfully');
+      
+      // Navigate to archived screen with announcement filter
+      navigate('/archived?filter=announcement');
+    } catch (error) {
+      console.error('Error archiving announcement:', error);
+      alert('Failed to archive announcement');
+    } finally {
+      setLoading(false);
+    }
+  }, [db, user, fetchAnnouncements, navigate]);
+
 
 
   return (
@@ -414,6 +456,15 @@ function Announcement() {
                           )}
                         </svg>
                         <span>{announcement.isActive ? 'Deactivate' : 'Activate'}</span>
+                      </button>
+                      <button
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 transition-colors rounded-md"
+                        onClick={() => handleArchive(announcement)}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                        </svg>
+                        <span>Archive</span>
                       </button>
                       <button
                         className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 transition-colors rounded-md"

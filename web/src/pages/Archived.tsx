@@ -106,28 +106,68 @@ interface ArchivedMaintenance {
   archivedBy: string;
 }
 
+interface ArchivedVisitor {
+  id: string;
+  visitorName: string;
+  visitorEmail?: string;
+  visitorPhone: string;
+  visitorPurpose: string;
+  visitorDate: string;
+  visitorTime: string;
+  residentId: string;
+  residentEmail: string;
+  status: 'pending' | 'approved' | 'rejected';
+  gatePassVerified: boolean;
+  createdAt: any;
+  updatedAt?: any;
+  archivedAt: any;
+  archivedBy: string;
+  originalId?: string;
+}
+
+interface ArchivedAnnouncement {
+  id: string;
+  title: string;
+  content: string;
+  imageURL?: string;
+  isActive: boolean;
+  priority?: 'low' | 'medium' | 'high';
+  createdAt: any;
+  updatedAt?: any;
+  archivedAt: any;
+  archivedBy: string;
+  originalId?: string;
+}
+
 function Archived() {
   const [user, setUser] = useState<any>(null);
   const [searchParams] = useSearchParams();
-  const [activeFilter, setActiveFilter] = useState<FilterType>('complaints');
+  const [activeFilter, setActiveFilter] = useState<FilterType>('announcement');
   const [archivedResidents, setArchivedResidents] = useState<Resident[]>([]);
   const [archivedComplaints, setArchivedComplaints] = useState<ArchivedComplaint[]>([]);
   const [archivedVehicleRegistrations, setArchivedVehicleRegistrations] = useState<ArchivedVehicleRegistration[]>([]);
   const [archivedMaintenance, setArchivedMaintenance] = useState<ArchivedMaintenance[]>([]);
   const [archivedBillings, setArchivedBillings] = useState<ArchivedBilling[]>([]);
+  const [archivedVisitors, setArchivedVisitors] = useState<ArchivedVisitor[]>([]);
+  const [archivedAnnouncements, setArchivedAnnouncements] = useState<ArchivedAnnouncement[]>([]);
   const [filteredArchivedComplaints, setFilteredArchivedComplaints] = useState<ArchivedComplaint[]>([]);
   const [filteredArchivedResidents, setFilteredArchivedResidents] = useState<Resident[]>([]);
   const [filteredArchivedVehicleRegistrations, setFilteredArchivedVehicleRegistrations] = useState<ArchivedVehicleRegistration[]>([]);
   const [filteredArchivedMaintenance, setFilteredArchivedMaintenance] = useState<ArchivedMaintenance[]>([]);
   const [filteredArchivedBillings, setFilteredArchivedBillings] = useState<ArchivedBilling[]>([]);
+  const [filteredArchivedVisitors, setFilteredArchivedVisitors] = useState<ArchivedVisitor[]>([]);
+  const [filteredArchivedAnnouncements, setFilteredArchivedAnnouncements] = useState<ArchivedAnnouncement[]>([]);
   const [vehicleRegistrationUserNames, setVehicleRegistrationUserNames] = useState<Record<string, string>>({});
   const [complaintUserNames, setComplaintUserNames] = useState<Record<string, string>>({});
   const [maintenanceUserNames, setMaintenanceUserNames] = useState<Record<string, string>>({});
+  const [visitorResidentNames, setVisitorResidentNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [loadingComplaints, setLoadingComplaints] = useState(false);
   const [loadingVehicleRegistrations, setLoadingVehicleRegistrations] = useState(false);
   const [loadingMaintenance, setLoadingMaintenance] = useState(false);
   const [loadingBillings, setLoadingBillings] = useState(false);
+  const [loadingVisitors, setLoadingVisitors] = useState(false);
+  const [loadingAnnouncements, setLoadingAnnouncements] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -556,6 +596,132 @@ function Archived() {
     fetchUserNames();
   }, [db, archivedMaintenance]);
 
+  const fetchArchivedVisitors = useCallback(async () => {
+    if (!db) {
+      console.error('Firestore db is not initialized');
+      return;
+    }
+    
+    try {
+      setLoadingVisitors(true);
+      console.log('Fetching archived visitors from Firestore...');
+      
+      let querySnapshot;
+      try {
+        const q = query(collection(db, 'archivedVisitors'), orderBy('archivedAt', 'desc'));
+        querySnapshot = await getDocs(q);
+      } catch (orderByError: any) {
+        console.warn('orderBy archivedAt failed, trying without orderBy:', orderByError);
+        querySnapshot = await getDocs(collection(db, 'archivedVisitors'));
+      }
+      
+      const visitorsData: ArchivedVisitor[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        visitorsData.push({
+          id: doc.id,
+          ...data,
+        } as ArchivedVisitor);
+      });
+      
+      visitorsData.sort((a, b) => {
+        const aDate = a.archivedAt?.toDate ? a.archivedAt.toDate().getTime() : 0;
+        const bDate = b.archivedAt?.toDate ? b.archivedAt.toDate().getTime() : 0;
+        return bDate - aDate;
+      });
+      
+      console.log(`Fetched ${visitorsData.length} archived visitors`);
+      setArchivedVisitors(visitorsData);
+    } catch (error: any) {
+      console.error('Error fetching archived visitors:', error);
+      alert(`Failed to load archived visitors: ${error.message || 'Unknown error'}`);
+    } finally {
+      setLoadingVisitors(false);
+    }
+  }, [db]);
+
+  const fetchArchivedAnnouncements = useCallback(async () => {
+    if (!db) {
+      console.error('Firestore db is not initialized');
+      return;
+    }
+    
+    try {
+      setLoadingAnnouncements(true);
+      console.log('Fetching archived announcements from Firestore...');
+      
+      let querySnapshot;
+      try {
+        const q = query(collection(db, 'archivedAnnouncements'), orderBy('archivedAt', 'desc'));
+        querySnapshot = await getDocs(q);
+      } catch (orderByError: any) {
+        console.warn('orderBy archivedAt failed, trying without orderBy:', orderByError);
+        querySnapshot = await getDocs(collection(db, 'archivedAnnouncements'));
+      }
+      
+      const announcementsData: ArchivedAnnouncement[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        announcementsData.push({
+          id: doc.id,
+          ...data,
+        } as ArchivedAnnouncement);
+      });
+      
+      announcementsData.sort((a, b) => {
+        const aDate = a.archivedAt?.toDate ? a.archivedAt.toDate().getTime() : 0;
+        const bDate = b.archivedAt?.toDate ? b.archivedAt.toDate().getTime() : 0;
+        return bDate - aDate;
+      });
+      
+      console.log(`Fetched ${announcementsData.length} archived announcements`);
+      setArchivedAnnouncements(announcementsData);
+    } catch (error: any) {
+      console.error('Error fetching archived announcements:', error);
+      alert(`Failed to load archived announcements: ${error.message || 'Unknown error'}`);
+    } finally {
+      setLoadingAnnouncements(false);
+    }
+  }, [db]);
+
+  // Fetch resident names for archived visitors
+  useEffect(() => {
+    if (!db || archivedVisitors.length === 0) return;
+
+    const fetchResidentNames = async () => {
+      const residentIds = [...new Set(archivedVisitors.map(v => v.residentId))];
+      const namesMap: Record<string, string> = {};
+
+      for (const residentId of residentIds) {
+        if (visitorResidentNames[residentId]) {
+          namesMap[residentId] = visitorResidentNames[residentId];
+          continue;
+        }
+
+        try {
+          const userDoc = await getDoc(doc(db, 'users', residentId));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            const fullName = userData.fullName || 
+              `${userData.firstName || ''} ${userData.lastName || ''}`.trim() ||
+              userData.email ||
+              'Unknown Resident';
+            namesMap[residentId] = fullName;
+          } else {
+            namesMap[residentId] = archivedVisitors.find(v => v.residentId === residentId)?.residentEmail || 'Unknown Resident';
+          }
+        } catch (error) {
+          console.error(`Error fetching resident ${residentId}:`, error);
+          namesMap[residentId] = archivedVisitors.find(v => v.residentId === residentId)?.residentEmail || 'Unknown Resident';
+        }
+      }
+
+      setVisitorResidentNames(prev => ({ ...prev, ...namesMap }));
+    };
+
+    fetchResidentNames();
+  }, [db, archivedVisitors]);
+
   useEffect(() => {
     if (user && db) {
       if (activeFilter === 'registered-residents') {
@@ -569,6 +735,10 @@ function Archived() {
         fetchArchivedMaintenance();
       } else if (activeFilter === 'billings-payments') {
         fetchArchivedBillings();
+      } else if (activeFilter === 'visitor-pre-registration') {
+        fetchArchivedVisitors();
+      } else if (activeFilter === 'announcement') {
+        fetchArchivedAnnouncements();
       } else {
         // Clear data when switching to a different filter
       setArchivedResidents([]);
@@ -576,9 +746,11 @@ function Archived() {
         setArchivedVehicleRegistrations([]);
         setArchivedMaintenance([]);
         setArchivedBillings([]);
+        setArchivedVisitors([]);
+        setArchivedAnnouncements([]);
     }
     }
-  }, [user, activeFilter, db, fetchArchivedResidents, fetchArchivedComplaints, fetchArchivedVehicleRegistrations, fetchArchivedMaintenance, fetchArchivedBillings]);
+  }, [user, activeFilter, db, fetchArchivedResidents, fetchArchivedComplaints, fetchArchivedVehicleRegistrations, fetchArchivedMaintenance, fetchArchivedBillings, fetchArchivedVisitors, fetchArchivedAnnouncements]);
 
   const handleRestore = useCallback(async (residentId: string) => {
     if (!db) return;
@@ -667,6 +839,50 @@ function Archived() {
     }
   }, [db]);
 
+  const handleRestoreAnnouncement = useCallback(async (announcementId: string) => {
+    if (!db) return;
+    
+    if (!window.confirm('Are you sure you want to restore this announcement? It will be moved back to the announcements screen.')) {
+      return;
+    }
+    
+    setProcessingStatus(announcementId);
+    try {
+      // Get the announcement data from archivedAnnouncements collection
+      const archivedRef = doc(db, 'archivedAnnouncements', announcementId);
+      const archivedDoc = await getDoc(archivedRef);
+      
+      if (!archivedDoc.exists()) {
+        throw new Error('Archived announcement not found');
+      }
+      
+      const announcementData = archivedDoc.data();
+      
+      // Remove archivedAt and archivedBy fields
+      const { archivedAt, archivedBy, originalId, ...restoredData } = announcementData;
+      
+      // Move back to announcements collection
+      await addDoc(collection(db, 'announcements'), {
+        ...restoredData,
+        updatedAt: Timestamp.now(),
+      });
+      
+      // Delete from archivedAnnouncements collection
+      await deleteDoc(archivedRef);
+      
+      // Update local state - remove from archived list
+      setArchivedAnnouncements(prev => prev.filter(a => a.id !== announcementId));
+      setFilteredArchivedAnnouncements(prev => prev.filter(a => a.id !== announcementId));
+      
+      alert('Announcement restored successfully');
+    } catch (error: any) {
+      console.error('Error restoring announcement:', error);
+      alert(`Failed to restore announcement: ${error.message}`);
+    } finally {
+      setProcessingStatus(null);
+    }
+  }, [db]);
+
   const handleRestoreVehicleRegistration = useCallback(async (registrationId: string) => {
     if (!db) return;
     
@@ -705,6 +921,51 @@ function Archived() {
     } catch (error: any) {
       console.error('Error restoring vehicle registration:', error);
       alert(`Failed to restore vehicle registration: ${error.message}`);
+    } finally {
+      setProcessingStatus(null);
+    }
+  }, [db]);
+
+  const handleRestoreVisitor = useCallback(async (visitorId: string) => {
+    if (!db) return;
+    
+    if (!window.confirm('Are you sure you want to restore this visitor pre-registration? It will be moved back to the visitor pre-registration screen.')) {
+      return;
+    }
+    
+    setProcessingStatus(visitorId);
+    try {
+      // Get the visitor data from archivedVisitors collection
+      const archivedRef = doc(db, 'archivedVisitors', visitorId);
+      const archivedDoc = await getDoc(archivedRef);
+      
+      if (!archivedDoc.exists()) {
+        throw new Error('Archived visitor not found');
+      }
+      
+      const visitorData = archivedDoc.data();
+      
+      // Remove archivedAt and archivedBy fields, use originalId if available
+      const { archivedAt, archivedBy, originalId, ...restoredData } = visitorData;
+      
+      // Move back to visitors collection (use originalId if available, otherwise use current id)
+      const targetId = originalId || visitorId;
+      await setDoc(doc(db, 'visitors', targetId), {
+        ...restoredData,
+        updatedAt: Timestamp.now(),
+      });
+      
+      // Delete from archivedVisitors collection
+      await deleteDoc(archivedRef);
+      
+      // Update local state - remove from archived list
+      setArchivedVisitors(prev => prev.filter(v => v.id !== visitorId));
+      setFilteredArchivedVisitors(prev => prev.filter(v => v.id !== visitorId));
+      
+      alert('Visitor pre-registration restored successfully');
+    } catch (error: any) {
+      console.error('Error restoring visitor:', error);
+      alert(`Failed to restore visitor: ${error.message}`);
     } finally {
       setProcessingStatus(null);
     }
@@ -824,6 +1085,87 @@ function Archived() {
 
     setFilteredArchivedComplaints(filtered);
   }, [filterDate, searchQuery, complaintUserNames]);
+
+  const applyDateFilterAnnouncements = useCallback((announcementsList: ArchivedAnnouncement[]) => {
+    let filtered = [...announcementsList];
+
+    // Apply date filter
+    if (filterDate) {
+      const filterDateObj = new Date(filterDate);
+      filterDateObj.setHours(0, 0, 0, 0);
+      const nextDay = new Date(filterDateObj);
+      nextDay.setDate(nextDay.getDate() + 1);
+
+      filtered = filtered.filter((announcement) => {
+        const archivedDate = announcement.archivedAt?.toDate 
+          ? announcement.archivedAt.toDate()
+          : announcement.archivedAt 
+          ? new Date(announcement.archivedAt)
+          : null;
+        
+        if (!archivedDate) return false;
+        
+        archivedDate.setHours(0, 0, 0, 0);
+        return archivedDate >= filterDateObj && archivedDate < nextDay;
+      });
+    }
+
+    // Apply search query filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((announcement) => {
+        return (
+          announcement.title?.toLowerCase().includes(query) ||
+          announcement.content?.toLowerCase().includes(query)
+        );
+      });
+    }
+
+    setFilteredArchivedAnnouncements(filtered);
+  }, [filterDate, searchQuery]);
+
+  const applyDateFilterVisitors = useCallback((visitorsList: ArchivedVisitor[]) => {
+    let filtered = visitorsList;
+
+    // Apply date filter
+    if (filterDate) {
+      const selectedDate = new Date(filterDate);
+      const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+
+      filtered = filtered.filter((visitor) => {
+        const visitorDate = visitor.archivedAt?.toDate 
+          ? visitor.archivedAt.toDate() 
+          : visitor.archivedAt 
+          ? new Date(visitor.archivedAt) 
+          : null;
+        
+        if (!visitorDate) return false;
+
+        const visitorDateOnly = new Date(visitorDate.getFullYear(), visitorDate.getMonth(), visitorDate.getDate());
+        
+        return visitorDateOnly.getTime() === selectedDateOnly.getTime();
+      });
+    }
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((visitor) => {
+        const residentName = visitorResidentNames[visitor.residentId] || visitor.residentEmail || '';
+        const visitorName = visitor.visitorName || '';
+        const visitorPurpose = visitor.visitorPurpose || '';
+        
+        return (
+          residentName.toLowerCase().includes(query) ||
+          visitorName.toLowerCase().includes(query) ||
+          visitorPurpose.toLowerCase().includes(query) ||
+          visitor.visitorPhone?.toLowerCase().includes(query)
+        );
+      });
+    }
+
+    setFilteredArchivedVisitors(filtered);
+  }, [filterDate, searchQuery, visitorResidentNames]);
 
   const applyDateFilterResidents = useCallback((residentsList: Resident[]) => {
     let filtered = residentsList;
@@ -998,8 +1340,10 @@ function Archived() {
         );
       }
       setFilteredArchivedBillings(filtered);
+    } else if (activeFilter === 'visitor-pre-registration') {
+      applyDateFilterVisitors(archivedVisitors);
     }
-  }, [archivedComplaints, archivedResidents, archivedVehicleRegistrations, archivedMaintenance, archivedBillings, filterDate, searchQuery, activeFilter, applyDateFilterComplaints, applyDateFilterResidents, applyDateFilterVehicleRegistrations, applyDateFilterMaintenance]);
+  }, [archivedComplaints, archivedResidents, archivedVehicleRegistrations, archivedMaintenance, archivedBillings, archivedVisitors, filterDate, searchQuery, activeFilter, applyDateFilterComplaints, applyDateFilterResidents, applyDateFilterVehicleRegistrations, applyDateFilterMaintenance, applyDateFilterVisitors]);
 
   const handleDateFilter = useCallback(() => {
     setShowDateFilter(!showDateFilter);
@@ -1103,6 +1447,9 @@ function Archived() {
                       )}
                       {activeFilter === 'billings-payments' && (
                         <>Showing {filteredArchivedBillings.length} of {archivedBillings.length} archived billings</>
+                      )}
+                      {activeFilter === 'visitor-pre-registration' && (
+                        <>Showing {filteredArchivedVisitors.length} of {archivedVisitors.length} archived visitor pre-registrations</>
                       )}
                     </div>
                   )}
@@ -1656,7 +2003,114 @@ function Archived() {
                     )}
                   </>
                 )}
-                {activeFilter !== 'registered-residents' && activeFilter !== 'complaints' && activeFilter !== 'vehicle-registration' && activeFilter !== 'maintenance' && activeFilter !== 'billings-payments' && (
+                {activeFilter === 'announcement' && (
+                  <>
+                    {loadingAnnouncements && archivedAnnouncements.length === 0 ? (
+                      <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading archived announcements...</div>
+                    ) : (filterDate || searchQuery ? filteredArchivedAnnouncements : archivedAnnouncements).length === 0 ? (
+                      <div className="text-center py-20 px-5 text-gray-600">
+                        <p className="text-base font-normal text-gray-600">
+                          No archived announcements found.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Desktop table */}
+                        <div className="hidden md:block overflow-x-auto">
+                          <table className="w-full border-collapse text-sm">
+                            <thead>
+                              <tr className="bg-gray-50 border-b-2 border-gray-200">
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Title</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Content</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Created</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Archived At</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(filterDate || searchQuery ? filteredArchivedAnnouncements : archivedAnnouncements).map((announcement) => (
+                                <tr key={announcement.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                  <td className="px-4 py-3 text-gray-700 font-medium">{announcement.title}</td>
+                                  <td className="px-4 py-3 text-gray-700 max-w-md">
+                                    <div className="truncate" title={announcement.content}>
+                                      {announcement.content}
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-700">
+                                    <span className={`px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide inline-block ${
+                                      announcement.isActive 
+                                        ? 'bg-green-100 text-green-800' 
+                                        : 'bg-gray-100 text-gray-600'
+                                    }`}>
+                                      {announcement.isActive ? 'Active' : 'Inactive'}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-700">{formatDate(announcement.createdAt)}</td>
+                                  <td className="px-4 py-3 text-gray-700">{formatDate(announcement.archivedAt)}</td>
+                                  <td className="px-4 py-3 text-gray-700">
+                                    <button
+                                      className="bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      onClick={() => handleRestoreAnnouncement(announcement.id)}
+                                      disabled={processingStatus === announcement.id}
+                                    >
+                                      {processingStatus === announcement.id ? 'Restoring...' : 'Restore'}
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Mobile cards */}
+                        <div className="md:hidden space-y-4">
+                          {(filterDate || searchQuery ? filteredArchivedAnnouncements : archivedAnnouncements).map((announcement) => (
+                            <div key={announcement.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                              <div className="flex justify-between items-start mb-3">
+                                <div className="flex-1">
+                                  <h3 className="font-semibold text-gray-900 text-sm mb-1">{announcement.title}</h3>
+                                  <p className="text-xs text-gray-500 mb-2">{formatDate(announcement.createdAt)}</p>
+                                </div>
+                                <span className={`px-2 py-1 rounded text-[9px] font-medium ${
+                                  announcement.isActive 
+                                    ? 'bg-green-100 text-green-700' 
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                  {announcement.isActive ? 'Active' : 'Inactive'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-700 mb-3 line-clamp-3">{announcement.content}</p>
+                              {announcement.imageURL && (
+                                <div className="mb-3">
+                                  <img 
+                                    src={announcement.imageURL} 
+                                    alt={announcement.title}
+                                    className="w-full h-auto rounded-lg border border-gray-200 object-cover max-h-48"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                    }}
+                                  />
+                                </div>
+                              )}
+                              <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+                                <span className="text-xs text-gray-500">Archived: {formatDate(announcement.archivedAt)}</span>
+                                <button
+                                  className="bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => handleRestoreAnnouncement(announcement.id)}
+                                  disabled={processingStatus === announcement.id}
+                                >
+                                  {processingStatus === announcement.id ? 'Restoring...' : 'Restore'}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+                {activeFilter !== 'registered-residents' && activeFilter !== 'complaints' && activeFilter !== 'vehicle-registration' && activeFilter !== 'maintenance' && activeFilter !== 'billings-payments' && activeFilter !== 'visitor-pre-registration' && activeFilter !== 'announcement' && (
                   <div className="text-center py-20 px-5 text-gray-600">
                     <p className="text-base font-normal text-gray-600">
                       Archived {filters.find(f => f.id === activeFilter)?.label} items will appear here
@@ -1791,6 +2245,143 @@ function Archived() {
                               </div>
                             </div>
                           ))}
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+                {activeFilter === 'visitor-pre-registration' && (
+                  <>
+                    {loadingVisitors && archivedVisitors.length === 0 ? (
+                      <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading archived visitor pre-registrations...</div>
+                    ) : (filterDate || searchQuery ? filteredArchivedVisitors : archivedVisitors).length === 0 ? (
+                      <div className="text-center py-20 px-5 text-gray-600">
+                        <p className="text-base font-normal text-gray-600">
+                          No archived visitor pre-registrations found.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Mobile Card View */}
+                        <div className="md:hidden space-y-4">
+                          {(filterDate || searchQuery ? filteredArchivedVisitors : archivedVisitors).map((visitor) => (
+                            <div key={visitor.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                              <div className="flex justify-between items-start mb-3">
+                                <div className="flex-1">
+                                  <h3 className="font-semibold text-gray-900 text-sm mb-1">{visitor.visitorName}</h3>
+                                  <p className="text-xs text-gray-500 mb-2">{formatDate(visitor.createdAt)}</p>
+                                </div>
+                                <span
+                                  className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block flex-shrink-0"
+                                  style={{
+                                    backgroundColor:
+                                      visitor.status === 'approved'
+                                        ? '#4CAF50'
+                                        : visitor.status === 'rejected'
+                                        ? '#ef4444'
+                                        : '#FFA500',
+                                  }}
+                                >
+                                  {visitor.status.toUpperCase()}
+                                </span>
+                              </div>
+                              
+                              <div className="space-y-2 mb-3">
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">Resident: </span>
+                                  <span className="text-xs text-gray-900">{visitorResidentNames[visitor.residentId] || visitor.residentEmail || 'Unknown Resident'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">Purpose: </span>
+                                  <span className="text-xs text-gray-900">{visitor.visitorPurpose}</span>
+                                </div>
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">Date: </span>
+                                  <span className="text-xs text-gray-900">{visitor.visitorDate}</span>
+                                </div>
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">Time: </span>
+                                  <span className="text-xs text-gray-900">{visitor.visitorTime}</span>
+                                </div>
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">Phone: </span>
+                                  <span className="text-xs text-gray-900">{visitor.visitorPhone}</span>
+                                </div>
+                                <div>
+                                  <span className="text-xs font-medium text-gray-600">Archived: </span>
+                                  <span className="text-xs text-gray-900">{formatDate(visitor.archivedAt)}</span>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-2 pt-3 border-t border-gray-200">
+                                <button
+                                  className="flex-1 px-3 py-1.5 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => handleRestoreVisitor(visitor.id)}
+                                  disabled={processingStatus === visitor.id}
+                                >
+                                  {processingStatus === visitor.id ? 'Restoring...' : 'Restore'}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <div className="hidden md:block overflow-x-auto w-full">
+                          <table className="w-full border-collapse text-sm">
+                            <thead>
+                              <tr className="bg-gray-50 border-b-2 border-gray-200">
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Visitor Name</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Resident</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Purpose</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Date</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Time</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Phone</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Archived At</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(filterDate || searchQuery ? filteredArchivedVisitors : archivedVisitors).map((visitor) => (
+                                <tr key={visitor.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{visitor.visitorName}</td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
+                                    {visitorResidentNames[visitor.residentId] || visitor.residentEmail || 'Unknown Resident'}
+                                  </td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{visitor.visitorPurpose}</td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{visitor.visitorDate}</td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{visitor.visitorTime}</td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{visitor.visitorPhone}</td>
+                                  <td className="px-4 py-4 border-b border-gray-100 align-top">
+                                    <span
+                                      className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block"
+                                      style={{
+                                        backgroundColor:
+                                          visitor.status === 'approved'
+                                            ? '#4CAF50'
+                                            : visitor.status === 'rejected'
+                                            ? '#ef4444'
+                                            : '#FFA500',
+                                      }}
+                                    >
+                                      {visitor.status.toUpperCase()}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(visitor.archivedAt)}</td>
+                                  <td className="px-4 py-4 border-b border-gray-100 align-top">
+                                    <button
+                                      className="bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      onClick={() => handleRestoreVisitor(visitor.id)}
+                                      disabled={processingStatus === visitor.id}
+                                    >
+                                      {processingStatus === visitor.id ? 'Restoring...' : 'Restore'}
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
                       </>
                     )}

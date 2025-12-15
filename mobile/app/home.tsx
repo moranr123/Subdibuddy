@@ -1,12 +1,14 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Dimensions, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Dimensions, Image, ActivityIndicator, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, orderBy, onSnapshot, where, doc, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, where, doc, getDoc, Timestamp } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db, getAuthService } from '../firebase/config';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import { useNotifications } from '../hooks/useNotifications';
+import { MaterialIcons } from '@expo/vector-icons';
 
 interface Announcement {
   id: string;
@@ -29,6 +31,12 @@ export default function Home() {
   const [waterNextDate, setWaterNextDate] = useState<Date | null>(null);
   const [electricNextDate, setElectricNextDate] = useState<Date | null>(null);
   const [loadingBillingDates, setLoadingBillingDates] = useState(false);
+  const [pendingComplaints, setPendingComplaints] = useState(0);
+  const [pendingMaintenance, setPendingMaintenance] = useState(0);
+  const [pendingVehicles, setPendingVehicles] = useState(0);
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [userName, setUserName] = useState<string>('');
 
   const toggleSidebar = () => {
     const toValue = sidebarOpen ? -Dimensions.get('window').width : 0;
@@ -97,6 +105,10 @@ export default function Home() {
         }
         const data: any = snap.data();
 
+        // Set user name for welcome modal
+        const name = data.firstName || data.fullName || data.email || 'User';
+        setUserName(name);
+
         const parseDate = (raw: any): Date | null => {
           if (!raw) return null;
           try {
@@ -119,6 +131,21 @@ export default function Home() {
 
         setWaterNextDate(parseDate(data.waterBillingDate));
         setElectricNextDate(parseDate(data.electricBillingDate));
+
+        // Check if user just logged in (within last 30 seconds)
+        const lastLoginTime = await AsyncStorage.getItem('lastLoginTime');
+        if (lastLoginTime) {
+          const loginTime = parseInt(lastLoginTime);
+          const now = Date.now();
+          const timeSinceLogin = now - loginTime;
+          
+          // Show welcome modal if login was within last 30 seconds
+          if (timeSinceLogin < 30000) {
+            setShowWelcomeModal(true);
+            // Clear the login time after showing modal
+            await AsyncStorage.removeItem('lastLoginTime');
+          }
+        }
       } catch (err) {
         console.error('Error loading billing dates for home:', err);
       } finally {
@@ -128,6 +155,66 @@ export default function Home() {
 
     return () => unsubscribe();
   }, []);
+
+  // Load user stats (pending complaints, maintenance, vehicles)
+  useEffect(() => {
+    if (!db || !user) {
+      setPendingComplaints(0);
+      setPendingMaintenance(0);
+      setPendingVehicles(0);
+      setLoadingStats(false);
+      return;
+    }
+
+    setLoadingStats(true);
+
+    // Fetch pending complaints
+    const complaintsQuery = query(
+      collection(db, 'complaints'),
+      where('userId', '==', user.uid),
+      where('status', 'in', ['pending', 'in-progress'])
+    );
+
+    const complaintsUnsubscribe = onSnapshot(complaintsQuery, (snapshot) => {
+      setPendingComplaints(snapshot.size);
+    }, (error) => {
+      console.error('Error fetching complaints:', error);
+    });
+
+    // Fetch pending maintenance
+    const maintenanceQuery = query(
+      collection(db, 'maintenance'),
+      where('userId', '==', user.uid),
+      where('status', 'in', ['pending', 'in-progress'])
+    );
+
+    const maintenanceUnsubscribe = onSnapshot(maintenanceQuery, (snapshot) => {
+      setPendingMaintenance(snapshot.size);
+    }, (error) => {
+      console.error('Error fetching maintenance:', error);
+    });
+
+    // Fetch pending vehicle registrations
+    const vehiclesQuery = query(
+      collection(db, 'vehicleRegistrations'),
+      where('userId', '==', user.uid),
+      where('status', '==', 'pending')
+    );
+
+    const vehiclesUnsubscribe = onSnapshot(vehiclesQuery, (snapshot) => {
+      setPendingVehicles(snapshot.size);
+      setLoadingStats(false);
+    }, (error) => {
+      console.error('Error fetching vehicles:', error);
+      setLoadingStats(false);
+    });
+
+    return () => {
+      complaintsUnsubscribe();
+      maintenanceUnsubscribe();
+      vehiclesUnsubscribe();
+    };
+  }, [user, db]);
 
   const formatDate = useCallback((timestamp: any) => {
     if (!timestamp) return 'Unknown date';
@@ -165,39 +252,59 @@ export default function Home() {
         animation={sidebarAnimation}
       />
       <ScrollView style={styles.content}>
-        <View style={styles.billingSection}>
-          <Text style={styles.sectionTitle}>Next Billing Dates</Text>
-          <View style={styles.billingCard}>
-            {loadingBillingDates ? (
-              <View style={styles.billingRow}>
-                <ActivityIndicator size="small" color="#111827" />
-                <Text style={styles.billingLoadingText}>Loading billing dates...</Text>
-              </View>
-            ) : (
-              <>
-                <View style={styles.billingRow}>
-                  <View style={styles.billingLabelGroup}>
-                    <Text style={styles.billingLabel}>Water</Text>
-                    <Text style={styles.billingSubLabel}>Next billing date</Text>
+        {/* Status Summary */}
+        {(pendingComplaints > 0 || pendingMaintenance > 0 || pendingVehicles > 0) && (
+          <View style={styles.statusSection}>
+            <Text style={styles.sectionTitle}>Pending Items</Text>
+            <View style={styles.statusCard}>
+              {pendingComplaints > 0 && (
+                <TouchableOpacity
+                  style={styles.statusItem}
+                  onPress={() => router.push('/complaints')}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.statusItemLeft}>
+                    <MaterialIcons name="report-problem" size={20} color="#ef4444" />
+                    <Text style={styles.statusItemLabel}>Complaints</Text>
                   </View>
-                  <Text style={styles.billingValue}>
-                    {formatBillingDate(waterNextDate)}
-                  </Text>
-                </View>
-                <View style={styles.billingDivider} />
-                <View style={styles.billingRow}>
-                  <View style={styles.billingLabelGroup}>
-                    <Text style={styles.billingLabel}>Electricity</Text>
-                    <Text style={styles.billingSubLabel}>Next billing date</Text>
+                  <View style={styles.statusBadge}>
+                    <Text style={styles.statusBadgeText}>{pendingComplaints}</Text>
                   </View>
-                  <Text style={styles.billingValue}>
-                    {formatBillingDate(electricNextDate)}
-                  </Text>
-                </View>
-              </>
-            )}
+                </TouchableOpacity>
+              )}
+              {pendingMaintenance > 0 && (
+                <TouchableOpacity
+                  style={styles.statusItem}
+                  onPress={() => router.push('/maintenance')}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.statusItemLeft}>
+                    <MaterialIcons name="build" size={20} color="#8b5cf6" />
+                    <Text style={styles.statusItemLabel}>Maintenance</Text>
+                  </View>
+                  <View style={styles.statusBadge}>
+                    <Text style={styles.statusBadgeText}>{pendingMaintenance}</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+              {pendingVehicles > 0 && (
+                <TouchableOpacity
+                  style={styles.statusItem}
+                  onPress={() => router.push('/vehicle-registration')}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.statusItemLeft}>
+                    <MaterialIcons name="directions-car" size={20} color="#3b82f6" />
+                    <Text style={styles.statusItemLabel}>Vehicle Registration</Text>
+                  </View>
+                  <View style={styles.statusBadge}>
+                    <Text style={styles.statusBadgeText}>{pendingVehicles}</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
-        </View>
+        )}
 
         <View style={styles.announcementsSection}>
           <View style={styles.sectionHeader}>
@@ -260,7 +367,83 @@ export default function Home() {
             </ScrollView>
           )}
         </View>
+
+        <View style={styles.billingSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Next Billing Dates</Text>
+            <TouchableOpacity 
+              onPress={() => router.push('/billing')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.seeAllButton}>Go to Billing</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.billingCard}>
+            {loadingBillingDates ? (
+              <View style={styles.billingRow}>
+                <ActivityIndicator size="small" color="#111827" />
+                <Text style={styles.billingLoadingText}>Loading billing dates...</Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.billingRow}>
+                  <View style={styles.billingLabelGroup}>
+                    <Text style={styles.billingLabel}>Water</Text>
+                    <Text style={styles.billingSubLabel}>Next billing date</Text>
+                  </View>
+                  <Text style={styles.billingValue}>
+                    {formatBillingDate(waterNextDate)}
+                  </Text>
+                </View>
+                <View style={styles.billingDivider} />
+                <View style={styles.billingRow}>
+                  <View style={styles.billingLabelGroup}>
+                    <Text style={styles.billingLabel}>Electricity</Text>
+                    <Text style={styles.billingSubLabel}>Next billing date</Text>
+                  </View>
+                  <Text style={styles.billingValue}>
+                    {formatBillingDate(electricNextDate)}
+                  </Text>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
       </ScrollView>
+
+      {/* Welcome Modal */}
+      <Modal
+        visible={showWelcomeModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowWelcomeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Image 
+                source={require('../assets/logo.png')} 
+                style={styles.modalLogo}
+                resizeMode="contain"
+              />
+            </View>
+            <Text style={styles.modalTitle}>Welcome back!</Text>
+            <Text style={styles.modalMessage}>
+              {userName ? `Hello, ${userName}!` : 'Hello!'}
+            </Text>
+            <Text style={styles.modalSubtext}>
+              We're glad to have you back. Stay updated with the latest announcements and manage your community activities.
+            </Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setShowWelcomeModal(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.modalButtonText}>Get Started</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -291,7 +474,6 @@ const styles = StyleSheet.create({
   },
   billingSection: {
     padding: 20,
-    paddingBottom: 0,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -426,6 +608,114 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 8,
     marginTop: 4,
+  },
+  statusSection: {
+    padding: 20,
+    paddingTop: 0,
+  },
+  statusCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginTop: 12,
+    overflow: 'hidden',
+  },
+  statusItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  statusItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  statusItemLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#111827',
+  },
+  statusBadge: {
+    backgroundColor: '#ef4444',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  modalHeader: {
+    marginBottom: 16,
+  },
+  modalLogo: {
+    width: 120,
+    height: 60,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1877F2',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalSubtext: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  modalButton: {
+    backgroundColor: '#1877F2',
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+    width: '100%',
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

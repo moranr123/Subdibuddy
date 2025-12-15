@@ -32,24 +32,42 @@ interface ResidentGrowthData {
   count: number;
 }
 
+interface GenderByYearData {
+  year: number;
+  male: number;
+  female: number;
+}
+
 function Dashboard() {
   const [user, setUser] = useState<any>(null)
   const [stats, setStats] = useState({
     totalUsers: 0,
+    tenantsCount: 0,
+    homeownersCount: 0,
     totalBillings: 0,
     pendingBillings: 0,
+    paidBillings: 0,
     totalComplaints: 0,
     pendingComplaints: 0,
+    resolvedComplaints: 0,
     totalVisitors: 0,
     pendingVisitors: 0,
+    approvedVisitors: 0,
     totalVehicles: 0,
     totalMaintenance: 0,
     pendingMaintenance: 0,
+    resolvedMaintenance: 0,
   })
   const [loading, setLoading] = useState(false)
   const [residentGrowthData, setResidentGrowthData] = useState<ResidentGrowthData[]>([])
+  const [genderByYearData, setGenderByYearData] = useState<GenderByYearData[]>([])
   const [selectedYear, setSelectedYear] = useState<string>('')
+  const [pieChartYearFilter, setPieChartYearFilter] = useState<string>('')
+  const [barChartYearFilter, setBarChartYearFilter] = useState<string>('')
   const [availableYears, setAvailableYears] = useState<number[]>([])
+  const [allTenantsCount, setAllTenantsCount] = useState(0)
+  const [allHomeownersCount, setAllHomeownersCount] = useState(0)
+  const [tenantsByYear, setTenantsByYear] = useState<Map<number, { tenants: number; homeowners: number }>>(new Map())
   const [showReportModal, setShowReportModal] = useState(false)
   const [reportPage, setReportPage] = useState(1)
   const REPORT_ITEMS_PER_PAGE = 10
@@ -97,8 +115,12 @@ function Dashboard() {
 
       // Count users (excluding superadmins and archived residents - only count active residents)
       let totalUsers = 0;
+      let tenantsCount = 0;
+      let homeownersCount = 0;
       const residentDates: Date[] = [];
       const yearsSet = new Set<number>();
+      const genderByYearMap = new Map<number, { male: number; female: number }>();
+      const tenantsByYearMap = new Map<number, { tenants: number; homeowners: number }>();
       
       usersSnapshot.forEach((doc) => {
         const data = doc.data();
@@ -106,22 +128,97 @@ function Dashboard() {
         if (data.role !== 'superadmin' && data.status !== 'archived' && data.status === 'approved') {
           totalUsers++;
           
-          // Track creation date for growth chart
+          // Determine if tenant or homeowner
+          const isTenant = data.residentType === 'tenant' || data.isTenant === true;
+          if (isTenant) {
+            tenantsCount++;
+          } else {
+            homeownersCount++;
+          }
+          
+          // Track creation date for growth chart and gender by year
           if (data.createdAt) {
             const date = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+            const year = date.getFullYear();
             residentDates.push(date);
-            yearsSet.add(date.getFullYear());
+            yearsSet.add(year);
+            
+            // Track gender by year
+            if (data.sex) {
+              if (!genderByYearMap.has(year)) {
+                genderByYearMap.set(year, { male: 0, female: 0 });
+              }
+              const yearData = genderByYearMap.get(year)!;
+              if (data.sex === 'male') {
+                yearData.male++;
+              } else if (data.sex === 'female') {
+                yearData.female++;
+              }
+            }
+            
+            // Track tenants/homeowners by year
+            if (!tenantsByYearMap.has(year)) {
+              tenantsByYearMap.set(year, { tenants: 0, homeowners: 0 });
+            }
+            const tenantYearData = tenantsByYearMap.get(year)!;
+            if (isTenant) {
+              tenantYearData.tenants++;
+            } else {
+              tenantYearData.homeowners++;
+            }
           }
         }
       });
-
-      // Set available years
-      const years = Array.from(yearsSet).sort((a, b) => b - a);
-      setAvailableYears(years);
       
-      // Set default year to current year or most recent year
-      if (!selectedYear && years.length > 0) {
-        setSelectedYear(String(years[0]));
+      // Convert gender by year map to array and sort by year
+      const genderByYearArray: GenderByYearData[] = Array.from(genderByYearMap.entries())
+        .map(([year, counts]) => ({
+          year,
+          male: counts.male,
+          female: counts.female,
+        }))
+        .sort((a, b) => a.year - b.year);
+      
+      setGenderByYearData(genderByYearArray);
+      setAllTenantsCount(tenantsCount);
+      setAllHomeownersCount(homeownersCount);
+      setTenantsByYear(tenantsByYearMap);
+      
+      // Generate full range of years (from 2020 to current year)
+      const currentYear = new Date().getFullYear();
+      const startYear = 2020;
+      const allYears: number[] = [];
+      for (let year = currentYear; year >= startYear; year--) {
+        allYears.push(year);
+      }
+      setAvailableYears(allYears);
+      
+      // Set default chart year filters to current year or most recent year with data
+      if (!pieChartYearFilter) {
+        if (yearsSet.size > 0) {
+          const yearsWithData = Array.from(yearsSet).sort((a, b) => b - a);
+          setPieChartYearFilter(String(yearsWithData[0]));
+        } else {
+          setPieChartYearFilter(String(currentYear));
+        }
+      }
+      if (!barChartYearFilter) {
+        if (yearsSet.size > 0) {
+          const yearsWithData = Array.from(yearsSet).sort((a, b) => b - a);
+          setBarChartYearFilter(String(yearsWithData[0]));
+        } else {
+          setBarChartYearFilter(String(currentYear));
+        }
+      }
+      
+      // Set default year to current year or most recent year with data
+      if (!selectedYear) {
+        if (yearsSet.size > 0) {
+          const yearsWithData = Array.from(yearsSet).sort((a, b) => b - a);
+          setSelectedYear(String(yearsWithData[0]));
+        } else {
+          setSelectedYear(String(currentYear));
+        }
       }
       
       // Calculate billings stats
@@ -139,24 +236,30 @@ function Dashboard() {
       // Count complaints
       let totalComplaints = 0;
       let pendingComplaints = 0;
+      let resolvedComplaints = 0;
       
       complaintsSnapshot.forEach((doc) => {
         const data = doc.data();
         totalComplaints++;
         if (data.status === 'pending') {
           pendingComplaints++;
+        } else if (data.status === 'resolved') {
+          resolvedComplaints++;
         }
       });
 
       // Count visitors
       let totalVisitors = 0;
       let pendingVisitors = 0;
+      let approvedVisitors = 0;
       
       visitorsSnapshot.forEach((doc) => {
         const data = doc.data();
         totalVisitors++;
         if (data.status === 'pending') {
           pendingVisitors++;
+        } else if (data.status === 'approved') {
+          approvedVisitors++;
         }
       });
 
@@ -172,26 +275,38 @@ function Dashboard() {
       // Count maintenance requests
       let totalMaintenance = 0;
       let pendingMaintenance = 0;
+      let resolvedMaintenance = 0;
       
       maintenanceSnapshot.forEach((doc) => {
         const data = doc.data();
         totalMaintenance++;
         if (data.status === 'pending') {
           pendingMaintenance++;
+        } else if (data.status === 'resolved') {
+          resolvedMaintenance++;
         }
       });
 
+      // Calculate paid billings
+      let paidBillings = totalBillings - pendingBillings;
+
       setStats({
         totalUsers,
+        tenantsCount,
+        homeownersCount,
         totalBillings,
         pendingBillings,
+        paidBillings,
         totalComplaints,
         pendingComplaints,
+        resolvedComplaints,
         totalVisitors,
         pendingVisitors,
+        approvedVisitors,
         totalVehicles,
         totalMaintenance,
         pendingMaintenance,
+        resolvedMaintenance,
       });
       } catch (error) {
       console.error('Error fetching analytics:', error)
@@ -460,6 +575,297 @@ function Dashboard() {
                 <p>No data available for selected year</p>
               </div>
             )}
+          </div>
+
+          {/* Charts Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 w-full mb-6 md:mb-8">
+            {/* Pie Chart - Tenants vs Homeowners */}
+            <div className="bg-white rounded-lg p-4 md:p-6 border border-gray-200">
+              <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <h2 className="text-gray-900 mb-1 sm:mb-2 text-base sm:text-lg font-semibold">Residents Distribution</h2>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <label htmlFor="pieYearFilter" className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">Year:</label>
+                  <select
+                    id="pieYearFilter"
+                    value={pieChartYearFilter}
+                    onChange={(e) => setPieChartYearFilter(e.target.value)}
+                    className="border border-gray-300 rounded-md px-2 sm:px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All Years</option>
+                    {availableYears.map((year) => (
+                      <option key={year} value={String(year)}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {loading ? (
+                <div className="w-full h-64 flex items-center justify-center text-gray-400">
+                  <p>Loading...</p>
+                </div>
+              ) : stats.totalUsers > 0 ? (() => {
+                // Filter by year if selected
+                let homeownersCount = stats.homeownersCount;
+                let tenantsCount = stats.tenantsCount;
+                
+                if (pieChartYearFilter) {
+                  const yearData = tenantsByYear.get(parseInt(pieChartYearFilter));
+                  if (yearData) {
+                    homeownersCount = yearData.homeowners;
+                    tenantsCount = yearData.tenants;
+                  } else {
+                    homeownersCount = 0;
+                    tenantsCount = 0;
+                  }
+                }
+                
+                const pieData = [
+                  { label: 'Homeowners', value: homeownersCount, color: '#10b981' },
+                  { label: 'Tenants', value: tenantsCount, color: '#3b82f6' },
+                ].filter(d => d.value > 0);
+                
+                if (pieData.length === 0) {
+                  return (
+                    <div className="w-full h-64 flex items-center justify-center text-gray-400">
+                      <p>No data available for selected year</p>
+                    </div>
+                  );
+                }
+                
+                const total = pieData.reduce((sum, d) => sum + d.value, 0);
+                let currentAngle = -90;
+                const radius = 80;
+                const centerX = 120;
+                const centerY = 120;
+                
+                return (
+                  <div className="flex flex-col sm:flex-row items-center gap-6">
+                    <svg width="240" height="240" viewBox="0 0 240 240" className="flex-shrink-0">
+                      {pieData.map((segment, index) => {
+                        const percentage = (segment.value / total) * 100;
+                        const angle = (segment.value / total) * 360;
+                        const startAngle = currentAngle;
+                        const endAngle = currentAngle + angle;
+                        
+                        const x1 = centerX + radius * Math.cos((startAngle * Math.PI) / 180);
+                        const y1 = centerY + radius * Math.sin((startAngle * Math.PI) / 180);
+                        const x2 = centerX + radius * Math.cos((endAngle * Math.PI) / 180);
+                        const y2 = centerY + radius * Math.sin((endAngle * Math.PI) / 180);
+                        
+                        const largeArc = angle > 180 ? 1 : 0;
+                        
+                        const pathData = [
+                          `M ${centerX} ${centerY}`,
+                          `L ${x1} ${y1}`,
+                          `A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`,
+                          'Z'
+                        ].join(' ');
+                        
+                        currentAngle += angle;
+                        
+                        return (
+                          <path
+                            key={index}
+                            d={pathData}
+                            fill={segment.color}
+                            stroke="#ffffff"
+                            strokeWidth="2"
+                          />
+                        );
+                      })}
+                    </svg>
+                    <div className="flex-1 space-y-3">
+                      {pieData.map((segment, index) => (
+                        <div key={index} className="flex items-center gap-3">
+                          <div className="w-4 h-4 rounded" style={{ backgroundColor: segment.color }}></div>
+                          <div className="flex-1">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-700">{segment.label}</span>
+                              <span className="text-sm font-semibold text-gray-900">{segment.value}</span>
+                            </div>
+                            <div className="text-xs text-gray-500">{((segment.value / total) * 100).toFixed(1)}%</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })() : (
+                <div className="w-full h-64 flex items-center justify-center text-gray-400">
+                  <p>No residents data available</p>
+                </div>
+              )}
+            </div>
+
+            {/* Bar Graph - Males vs Females by Year */}
+            <div className="bg-white rounded-lg p-4 md:p-6 border border-gray-200">
+              <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <h2 className="text-gray-900 mb-1 sm:mb-2 text-base sm:text-lg font-semibold">Gender Distribution by Year</h2>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <label htmlFor="barYearFilter" className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">Filter Year:</label>
+                  <select
+                    id="barYearFilter"
+                    value={barChartYearFilter}
+                    onChange={(e) => setBarChartYearFilter(e.target.value)}
+                    className="border border-gray-300 rounded-md px-2 sm:px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All Years</option>
+                    {availableYears.map((year) => (
+                      <option key={year} value={String(year)}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {loading ? (
+                <div className="w-full h-64 flex items-center justify-center text-gray-400">
+                  <p>Loading...</p>
+                </div>
+              ) : genderByYearData.length > 0 ? (() => {
+                // Filter data by selected year
+                let filteredData = genderByYearData;
+                if (barChartYearFilter) {
+                  filteredData = genderByYearData.filter(d => d.year === parseInt(barChartYearFilter));
+                }
+                
+                if (filteredData.length === 0) {
+                  return (
+                    <div className="w-full h-64 flex items-center justify-center text-gray-400">
+                      <p>No data available for selected year</p>
+                    </div>
+                  );
+                }
+                
+                const maxValue = Math.max(...filteredData.flatMap(d => [d.male, d.female]), 1);
+                const barWidth = 30;
+                const maxBarHeight = 180;
+                const spacing = 15;
+                const groupSpacing = 40;
+                const chartWidth = filteredData.length * (barWidth * 2 + spacing + groupSpacing) + spacing;
+                
+                return (
+                  <div className="w-full overflow-x-auto">
+                    <svg width="100%" height="280" viewBox={`0 0 ${chartWidth} 280`} className="overflow-visible">
+                      {/* Grid lines */}
+                      {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => {
+                        const y = 20 + (maxBarHeight * (1 - ratio));
+                        const value = Math.round(maxValue * ratio);
+                        return (
+                          <g key={i}>
+                            <line
+                              x1={spacing}
+                              y1={y}
+                              x2={chartWidth - spacing}
+                              y2={y}
+                              stroke="#e5e7eb"
+                              strokeWidth="1"
+                              strokeDasharray="4 4"
+                            />
+                            <text
+                              x={spacing - 5}
+                              y={y}
+                              textAnchor="end"
+                              fill="#6b7280"
+                              fontSize="11"
+                              dominantBaseline="middle"
+                            >
+                              {value}
+                            </text>
+                          </g>
+                        );
+                      })}
+                      
+                      {/* Bars */}
+                      {filteredData.map((yearData, index) => {
+                        const groupX = spacing + index * (barWidth * 2 + spacing + groupSpacing);
+                        const maleX = groupX;
+                        const femaleX = groupX + barWidth + spacing;
+                        
+                        const maleHeight = (yearData.male / maxValue) * maxBarHeight;
+                        const femaleHeight = (yearData.female / maxValue) * maxBarHeight;
+                        
+                        const maleY = 20 + maxBarHeight - maleHeight;
+                        const femaleY = 20 + maxBarHeight - femaleHeight;
+                        
+                        return (
+                          <g key={yearData.year}>
+                            {/* Male bar */}
+                            <rect
+                              x={maleX}
+                              y={maleY}
+                              width={barWidth}
+                              height={maleHeight}
+                              fill="#3b82f6"
+                              rx="4"
+                            />
+                            {yearData.male > 0 && (
+                              <text
+                                x={maleX + barWidth / 2}
+                                y={maleY - 5}
+                                textAnchor="middle"
+                                fill="#374151"
+                                fontSize="11"
+                                fontWeight="600"
+                              >
+                                {yearData.male}
+                              </text>
+                            )}
+                            
+                            {/* Female bar */}
+                            <rect
+                              x={femaleX}
+                              y={femaleY}
+                              width={barWidth}
+                              height={femaleHeight}
+                              fill="#ec4899"
+                              rx="4"
+                            />
+                            {yearData.female > 0 && (
+                              <text
+                                x={femaleX + barWidth / 2}
+                                y={femaleY - 5}
+                                textAnchor="middle"
+                                fill="#374151"
+                                fontSize="11"
+                                fontWeight="600"
+                              >
+                                {yearData.female}
+                              </text>
+                            )}
+                            
+                            {/* Year label */}
+                            <text
+                              x={groupX + barWidth + spacing / 2}
+                              y={240}
+                              textAnchor="middle"
+                              fill="#6b7280"
+                              fontSize="12"
+                              fontWeight="500"
+                            >
+                              {yearData.year}
+                            </text>
+                          </g>
+                        );
+                      })}
+                      
+                      {/* Legend */}
+                      <g transform={`translate(${spacing}, 260)`}>
+                        <rect x="0" y="0" width="12" height="12" fill="#3b82f6" rx="2" />
+                        <text x="18" y="10" fill="#374151" fontSize="12" dominantBaseline="middle">Male</text>
+                        <rect x="70" y="0" width="12" height="12" fill="#ec4899" rx="2" />
+                        <text x="88" y="10" fill="#374151" fontSize="12" dominantBaseline="middle">Female</text>
+                      </g>
+                    </svg>
+                  </div>
+                );
+              })() : (
+                <div className="w-full h-64 flex items-center justify-center text-gray-400">
+                  <p>No gender data available</p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Generate Report Modal */}

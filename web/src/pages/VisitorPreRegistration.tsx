@@ -279,8 +279,8 @@ function VisitorPreRegistration() {
       
       alert('Visitor registration archived successfully');
       
-      // Navigate to archived screen with visitors filter
-      navigate('/archived?filter=visitors');
+      // Navigate to archived screen with visitor-pre-registration filter
+      navigate('/archived?filter=visitor-pre-registration');
     } catch (error) {
       console.error('Error archiving visitor registration:', error);
       alert('Failed to archive visitor registration');

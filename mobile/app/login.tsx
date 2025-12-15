@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import { useRouter } from 'expo-router';
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAuthService, db } from '../firebase/config';
 
 const { width } = Dimensions.get('window');
@@ -88,6 +89,9 @@ export default function Login() {
         }
       }
 
+      // Store login timestamp to show welcome modal
+      await AsyncStorage.setItem('lastLoginTime', Date.now().toString());
+      
       router.replace('/home');
     } catch (error: any) {
       let errorMessage = 'An error occurred during login';
