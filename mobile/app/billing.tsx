@@ -389,17 +389,18 @@ export default function Billing() {
                   ? summary.nextDueDate.toLocaleDateString()
                   : 'No upcoming due'}
               </Text>
-              {billings.length > 3 && (
-                <TouchableOpacity
-                  style={styles.summarySeeAllButton}
-                  onPress={() => router.push('/billing-all')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.summarySeeAllText}>See all billings</Text>
-                </TouchableOpacity>
-              )}
             </View>
           </View>
+        )}
+
+        {billings.length > 0 && (
+          <TouchableOpacity
+            style={styles.seeAllButton}
+            onPress={() => router.push('/billing-all')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.seeAllButtonText}>See all billings</Text>
+          </TouchableOpacity>
         )}
 
         {loading ? (
@@ -941,5 +942,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#111827',
+  },
+  seeAllButton: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  seeAllButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2563eb',
   },
 });

@@ -96,6 +96,8 @@ function BillingPayment() {
   const [proofTypeFilter, setProofTypeFilter] = useState<'all' | 'water' | 'electricity'>('all');
   const [proofSearchQuery, setProofSearchQuery] = useState('');
   const [proofFilterDate, setProofFilterDate] = useState('');
+  const [proofCurrentPage, setProofCurrentPage] = useState(1);
+  const PROOF_ITEMS_PER_PAGE = 10;
   const blockOptions = useMemo(() => {
     const set = new Set<string>();
     residents.forEach((r) => {
@@ -208,6 +210,10 @@ function BillingPayment() {
   useEffect(() => {
     setCurrentPage(1);
   }, [billings.length]);
+
+  useEffect(() => {
+    setProofCurrentPage(1);
+  }, [proofStatusFilter, proofTypeFilter, proofSearchQuery, proofFilterDate]);
 
   const fetchResidents = useCallback(async () => {
     if (!db) return;
@@ -715,6 +721,7 @@ function BillingPayment() {
     return next.toISOString().split('T')[0];
   };
 
+
   const openProofModalForBilling = useCallback((billing: Billing) => {
     setProofBilling(billing);
     setShowProofModal(true);
@@ -732,7 +739,11 @@ function BillingPayment() {
           updates.status = 'paid';
           updates.userProofStatus = 'verified';
           if (proofBilling.dueDate) {
-            updates.nextBillingDate = getNextMonthDateString(proofBilling.dueDate);
+            const nextDateStr = getNextMonthDateString(proofBilling.dueDate);
+            // Update both current billing's dueDate (so UI shows next cycle)
+            // and keep nextBillingDate for reference if needed.
+            updates.dueDate = nextDateStr;
+            updates.nextBillingDate = nextDateStr;
           }
           // Also update resident's billing date (water/electricity) by +1 month
           if (proofBilling.residentId && proofBilling.dueDate && proofBilling.billingType) {
@@ -1297,12 +1308,18 @@ function BillingPayment() {
                               !!billingDate &&
                               billingDate.setHours(0, 0, 0, 0) <=
                                 new Date().setHours(0, 0, 0, 0);
+                            const billingDateIsFuture =
+                              !!billingDate &&
+                              billingDate.setHours(0, 0, 0, 0) >
+                                new Date().setHours(0, 0, 0, 0);
                             const hasUnsettledBilling = billings.some(
                               (b) =>
                                 b.residentId === resident.id &&
                                 b.billingType === (isWaterView ? 'water' : 'electricity') &&
                                 b.status !== 'paid'
                             );
+                            // Allow sending if: billing date is in future (updated) OR no unsettled billings
+                            const canSendBilling = billingDateIsFuture || !hasUnsettledBilling;
                             return (
                               <div
                                 key={resident.id}
@@ -1351,13 +1368,13 @@ function BillingPayment() {
                                 </div>
                                 <button
                                   className={`w-full border-none px-3 py-2 rounded text-xs font-medium cursor-pointer transition-all ${
-                                    hasUnsettledBilling
+                                    !canSendBilling
                                       ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
                                       : 'bg-blue-600 text-white hover:bg-blue-700'
                                   }`}
-                                  disabled={hasUnsettledBilling}
+                                  disabled={!canSendBilling}
                                   onClick={() => {
-                                    if (hasUnsettledBilling) return;
+                                    if (!canSendBilling) return;
                                     const latestBilling =
                                       latestBillingByResidentId.get(resident.id);
                                     if (latestBilling) {
@@ -1367,7 +1384,7 @@ function BillingPayment() {
                                     }
                                   }}
                                 >
-                                  {hasUnsettledBilling ? 'Already billed' : 'Send Bill (₱)'}
+                                  {!canSendBilling ? 'Already billed' : 'Send Bill (₱)'}
                                 </button>
                               </div>
                             );
@@ -1414,12 +1431,18 @@ function BillingPayment() {
                                   !!billingDate &&
                                   billingDate.setHours(0, 0, 0, 0) <=
                                     new Date().setHours(0, 0, 0, 0);
+                                const billingDateIsFuture =
+                                  !!billingDate &&
+                                  billingDate.setHours(0, 0, 0, 0) >
+                                    new Date().setHours(0, 0, 0, 0);
                                 const hasUnsettledBilling = billings.some(
                                   (b) =>
                                     b.residentId === resident.id &&
                                     b.billingType === (isWaterView ? 'water' : 'electricity') &&
                                     b.status !== 'paid'
                                 );
+                                // Allow sending if: billing date is in future (updated) OR no unsettled billings
+                                const canSendBilling = billingDateIsFuture || !hasUnsettledBilling;
                                 return (
                                   <tr
                                     key={resident.id}
@@ -1461,13 +1484,13 @@ function BillingPayment() {
                                     <td className="px-4 py-4 border-b border-gray-100 align-middle">
                                       <button
                                         className={`border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all ${
-                                          hasUnsettledBilling
+                                          !canSendBilling
                                             ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
                                             : 'bg-blue-600 text-white hover:bg-blue-700'
                                         }`}
-                                        disabled={hasUnsettledBilling}
+                                        disabled={!canSendBilling}
                                         onClick={() => {
-                                          if (hasUnsettledBilling) return;
+                                          if (!canSendBilling) return;
                                           const latestBilling =
                                             latestBillingByResidentId.get(
                                               resident.id
@@ -1483,7 +1506,7 @@ function BillingPayment() {
                                           }
                                         }}
                                       >
-                                        {hasUnsettledBilling ? 'Already billed' : 'Send Bill (₱)'}
+                                        {!canSendBilling ? 'Already billed' : 'Send Bill (₱)'}
                                       </button>
                                     </td>
                                   </tr>
@@ -1551,7 +1574,7 @@ function BillingPayment() {
                       />
                     </div>
                     <div className="flex flex-col gap-1 md:w-[180px]">
-                      <label className="text-xs text-gray-600">Submitted/Due Date</label>
+                      <label className="text-xs text-gray-600">Submitted Date</label>
                       <input
                         type="date"
                         value={proofFilterDate}
@@ -1651,18 +1674,19 @@ function BillingPayment() {
                       }
 
                       if (proofFilterDate) {
-                        const raw = (b.userProofSubmittedAt as any) || b.dueDate;
-                        if (!raw) {
+                        // Check submitted date only
+                        const submittedRaw = b.userProofSubmittedAt as any;
+                        if (!submittedRaw) {
                           matchesDate = false;
                         } else {
                           let date: Date | null = null;
                           try {
-                            if (raw.toDate && typeof raw.toDate === 'function') {
-                              date = raw.toDate();
-                            } else if (typeof raw.seconds === 'number') {
-                              date = new Date(raw.seconds * 1000);
+                            if (submittedRaw.toDate && typeof submittedRaw.toDate === 'function') {
+                              date = submittedRaw.toDate();
+                            } else if (typeof submittedRaw.seconds === 'number') {
+                              date = new Date(submittedRaw.seconds * 1000);
                             } else {
-                              date = new Date(raw);
+                              date = new Date(submittedRaw);
                             }
                           } catch {
                             date = null;
@@ -1689,11 +1713,17 @@ function BillingPayment() {
                       );
                     }
 
+                    // Pagination logic
+                    const totalPages = Math.max(1, Math.ceil(filteredProofs.length / PROOF_ITEMS_PER_PAGE));
+                    const safePage = Math.min(proofCurrentPage, totalPages);
+                    const startIndex = (safePage - 1) * PROOF_ITEMS_PER_PAGE;
+                    const paginatedProofs = filteredProofs.slice(startIndex, startIndex + PROOF_ITEMS_PER_PAGE);
+
                     return (
                       <div className="w-full">
                         {/* Mobile cards */}
                         <div className="flex flex-col gap-3 md:hidden">
-                          {filteredProofs.map((billing) => (
+                          {paginatedProofs.map((billing) => (
                             <div
                               key={billing.id}
                               className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm"
@@ -1733,10 +1763,6 @@ function BillingPayment() {
                                 <p>
                                   <span className="font-medium">Amount:</span>{' '}
                                   {formatCurrency(billing.amount)}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Due:</span>{' '}
-                                  {formatDate(billing.dueDate)}
                                 </p>
                                 <p>
                                   <span className="font-medium">Submitted:</span>{' '}
@@ -1787,9 +1813,6 @@ function BillingPayment() {
                                 Amount
                               </th>
                               <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
-                                Due Date
-                              </th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
                                 Submitted
                               </th>
                               <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
@@ -1801,7 +1824,7 @@ function BillingPayment() {
                             </tr>
                           </thead>
                           <tbody>
-                            {filteredProofs.map((billing) => (
+                            {paginatedProofs.map((billing) => (
                               <tr
                                 key={billing.id}
                                 className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100"
@@ -1828,9 +1851,6 @@ function BillingPayment() {
                                   {formatCurrency(billing.amount)}
                                 </td>
                                 <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
-                                  {formatDate(billing.dueDate)}
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
                                   {billing.userProofSubmittedAt
                                     ? formatDate(
                                         (billing.userProofSubmittedAt as any).toDate
@@ -1840,8 +1860,13 @@ function BillingPayment() {
                                     : '—'}
                                 </td>
                                 <td className="px-4 py-4 border-b border-gray-100 align-middle">
-                                  <span className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide inline-block
-                                    bg-gray-100 text-gray-700">
+                                  <span
+                                    className={`px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide inline-block ${
+                                      billing.userProofStatus === 'verified'
+                                        ? 'bg-green-100 text-green-800'
+                                        : 'bg-gray-100 text-gray-700'
+                                    }`}
+                                  >
                                     {(billing.userProofStatus || 'none').toUpperCase()}
                                   </span>
                                 </td>
@@ -1870,6 +1895,29 @@ function BillingPayment() {
                           </tbody>
                         </table>
                         </div>
+                        {filteredProofs.length > 0 && (
+                          <div className="flex items-center justify-between mt-4 gap-3">
+                            <span className="text-xs text-gray-600">
+                              Page {safePage} of {totalPages}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={() => setProofCurrentPage((p) => Math.max(1, p - 1))}
+                                disabled={safePage === 1}
+                              >
+                                Previous
+                              </button>
+                              <button
+                                className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={() => setProofCurrentPage((p) => Math.min(totalPages, p + 1))}
+                                disabled={safePage === totalPages}
+                              >
+                                Next
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })()
@@ -2015,9 +2063,6 @@ function BillingPayment() {
                 </p>
                 <p>
                   <span className="font-semibold">Amount:</span> {formatCurrency(proofBilling.amount)}
-                </p>
-                <p>
-                  <span className="font-semibold">Due Date:</span> {formatDate(proofBilling.dueDate)}
                 </p>
               </div>
 
