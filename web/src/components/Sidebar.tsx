@@ -32,6 +32,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [residentManagementOpen, setResidentManagementOpen] = useState(false);
   const [vehicleRegistrationOpen, setVehicleRegistrationOpen] = useState(false);
   const [visitorPreRegistrationOpen, setVisitorPreRegistrationOpen] = useState(false);
+  const [billingOpen, setBillingOpen] = useState(false);
   const [pendingComplaintsCount, setPendingComplaintsCount] = useState(0);
   const [pendingVehicleRegistrationsCount, setPendingVehicleRegistrationsCount] = useState(0);
   const [pendingMaintenanceCount, setPendingMaintenanceCount] = useState(0);
@@ -458,6 +459,75 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                       >
                         <span className="material-symbols-outlined text-lg">verified_user</span>
                         <span className="text-xs">Registered</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            if (item.path === '/billing-payment') {
+              const isActive = location.pathname.startsWith('/billing-payment');
+              return (
+                <div
+                  key={item.path}
+                  className="relative"
+                  onMouseEnter={() => {
+                    setBillingOpen(true);
+                  }}
+                  onMouseLeave={() => {
+                    setBillingOpen(false);
+                  }}
+                >
+                  <button
+                    className={`flex items-center gap-3 px-4 py-2.5 mx-2 border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
+                      isActive
+                        ? 'bg-[#1877F2] text-white font-semibold'
+                        : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-xl">
+                      {item.icon}
+                    </span>
+                    <span className="font-normal text-sm flex-1">
+                      {item.label}
+                    </span>
+                    <span className={`material-symbols-outlined text-sm transition-transform ${billingOpen ? 'rotate-90' : ''}`}>chevron_right</span>
+                  </button>
+                  {billingOpen && (
+                    <div className="ml-4 mt-1 space-y-1">
+                      <button
+                        className={`flex items-center gap-3 px-4 py-2 w-full border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left ${
+                          location.pathname === '/billing-payment/water'
+                            ? 'bg-[#1877F2] text-white font-semibold'
+                            : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
+                        }`}
+                        onClick={() => {
+                          handleNavigation('/billing-payment/water');
+                          setBillingOpen(false);
+                          if (window.innerWidth < 1024) {
+                            onClose();
+                          }
+                        }}
+                      >
+                        <span className="material-symbols-outlined text-lg">water_drop</span>
+                        <span className="text-xs flex-1 text-left">Water</span>
+                      </button>
+                      <button
+                        className={`flex items-center gap-3 px-4 py-2 w-full border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left ${
+                          location.pathname === '/billing-payment/electricity'
+                            ? 'bg-[#1877F2] text-white font-semibold'
+                            : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
+                        }`}
+                        onClick={() => {
+                          handleNavigation('/billing-payment/electricity');
+                          setBillingOpen(false);
+                          if (window.innerWidth < 1024) {
+                            onClose();
+                          }
+                        }}
+                      >
+                        <span className="material-symbols-outlined text-lg">bolt</span>
+                        <span className="text-xs flex-1 text-left">Electricity</span>
                       </button>
                     </div>
                   )}

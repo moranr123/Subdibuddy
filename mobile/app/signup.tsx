@@ -2699,7 +2699,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: Math.max(12, width * 0.05),
-    alignItems: 'center',
+    alignItems: 'stretch',
     paddingBottom: Math.max(20, height * 0.03),
   },
   card: {
@@ -2709,8 +2709,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
     width: '100%',
-    maxWidth: Math.min(width * 0.95, 500),
-    minWidth: Math.min(width * 0.9, 320),
   },
   stepContent: {
     width: '100%',

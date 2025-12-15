@@ -28,6 +28,8 @@ function App() {
       <Route path="/resident-management/applications" element={<ResidentManagement />} />
       <Route path="/resident-management/registered" element={<ResidentManagement />} />
       <Route path="/billing-payment" element={<BillingPayment />} />
+      <Route path="/billing-payment/water" element={<BillingPayment />} />
+      <Route path="/billing-payment/electricity" element={<BillingPayment />} />
       <Route path="/maintenance" element={<Maintenance />} />
       <Route path="/vehicle-registration" element={<VehicleRegistration />} />
       <Route path="/vehicle-registration/applications" element={<VehicleRegistration />} />

@@ -1075,37 +1075,84 @@ function ResidentManagement() {
                   </div>
                 </div>
 
-                {selectedResident.idFront && (
+                {(selectedResident.idFront ||
+                  selectedResident.idBack ||
+                  selectedResident.billingProof ||
+                  (selectedResident.documents && Object.keys(selectedResident.documents).length > 0)) && (
                   <div className="mb-4">
-                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-2 block">ID Front</label>
-                    <img src={selectedResident.idFront} alt="ID Front" className="max-w-full h-auto rounded border border-gray-200" />
-                  </div>
-                )}
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-2 block">Images</label>
+                    <div className="flex flex-wrap gap-3">
+                      {selectedResident.idFront && (
+                        <button
+                          type="button"
+                          className="bg-transparent border-none p-0 cursor-pointer text-left"
+                          onClick={() => window.open(selectedResident.idFront, '_blank')}
+                        >
+                          <div className="w-24 h-24 rounded border border-gray-200 overflow-hidden">
+                            <img
+                              src={selectedResident.idFront}
+                              alt="ID Front"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <span className="block mt-1 text-[11px] text-gray-600">ID Front</span>
+                        </button>
+                      )}
 
-                {selectedResident.idBack && (
-                  <div className="mb-4">
-                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-2 block">ID Back</label>
-                    <img src={selectedResident.idBack} alt="ID Back" className="max-w-full h-auto rounded border border-gray-200" />
-                  </div>
-                )}
+                      {selectedResident.idBack && (
+                        <button
+                          type="button"
+                          className="bg-transparent border-none p-0 cursor-pointer text-left"
+                          onClick={() => window.open(selectedResident.idBack, '_blank')}
+                        >
+                          <div className="w-24 h-24 rounded border border-gray-200 overflow-hidden">
+                            <img
+                              src={selectedResident.idBack}
+                              alt="ID Back"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <span className="block mt-1 text-[11px] text-gray-600">ID Back</span>
+                        </button>
+                      )}
 
-                {selectedResident.billingProof && (
-                  <div className="mb-4">
-                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-2 block">Billing Proof</label>
-                    <img src={selectedResident.billingProof} alt="Billing Proof" className="max-w-full h-auto rounded border border-gray-200" />
-                  </div>
-                )}
+                      {selectedResident.billingProof && (
+                        <button
+                          type="button"
+                          className="bg-transparent border-none p-0 cursor-pointer text-left"
+                          onClick={() => window.open(selectedResident.billingProof as string, '_blank')}
+                        >
+                          <div className="w-24 h-24 rounded border border-gray-200 overflow-hidden">
+                            <img
+                              src={selectedResident.billingProof as string}
+                              alt="Billing Proof"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <span className="block mt-1 text-[11px] text-gray-600">Billing Proof</span>
+                        </button>
+                      )}
 
-                {selectedResident.documents && Object.keys(selectedResident.documents).length > 0 && (
-                  <div className="mb-4">
-                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-2 block">Documents</label>
-                    <div className="grid grid-cols-2 gap-4">
-                      {Object.entries(selectedResident.documents).map(([key, url]) => (
-                        <div key={key}>
-                          <label className="text-xs text-gray-600 mb-1 block">{key.replace('doc', 'Document ')}</label>
-                          <img src={url} alt={key} className="max-w-full h-auto rounded border border-gray-200" />
-                        </div>
-                      ))}
+                      {selectedResident.documents &&
+                        Object.entries(selectedResident.documents).map(([key, url]) => (
+                          <button
+                            key={key}
+                            type="button"
+                            className="bg-transparent border-none p-0 cursor-pointer text-left"
+                            onClick={() => window.open(url, '_blank')}
+                          >
+                            <div className="w-24 h-24 rounded border border-gray-200 overflow-hidden">
+                              <img
+                                src={url}
+                                alt={key}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            <span className="block mt-1 text-[11px] text-gray-600">
+                              {key.replace('doc', 'Document ')}
+                            </span>
+                          </button>
+                        ))}
                     </div>
                   </div>
                 )}

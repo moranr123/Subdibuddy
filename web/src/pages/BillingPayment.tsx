@@ -1,5 +1,5 @@
 import { useEffect, useState, memo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, query, orderBy, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
@@ -19,6 +19,13 @@ interface Resident {
   id: string;
   email: string;
   fullName?: string;
+  waterBillingDate?: any;
+  electricBillingDate?: any;
+  address?: {
+    block?: string;
+    lot?: string;
+    street?: string;
+  };
 }
 
 interface Billing {
@@ -62,6 +69,10 @@ function BillingPayment() {
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const isWaterView = location.pathname === '/billing-payment/water';
+  const isElectricView = location.pathname === '/billing-payment/electricity';
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -174,6 +185,9 @@ function BillingPayment() {
           id: doc.id,
           email: data.email,
           fullName: data.fullName,
+          waterBillingDate: data.waterBillingDate,
+          electricBillingDate: data.electricBillingDate,
+          address: data.address,
         } as Resident);
       });
       
@@ -339,232 +353,349 @@ function BillingPayment() {
   return (
     <Layout>
       <div className="min-h-screen bg-gray-50 w-full">
-        <Header title="Billing & Payment" />
+        <Header
+          title={
+            isWaterView
+              ? 'Water Billing Dates'
+              : isElectricView
+              ? 'Electricity Billing Dates'
+              : 'Billing & Payment'
+          }
+        />
 
         <main className="w-full max-w-full m-0 p-4 md:p-6 lg:p-10 box-border">
           <div className="flex flex-col gap-4 md:gap-6 w-full max-w-full">
-            <div className="w-full bg-white rounded-xl p-4 md:p-6 lg:p-8 border border-gray-100 shadow-sm">
-              <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
-                <h2 className="m-0 text-gray-900 text-lg font-normal">Billing Management</h2>
-                <div className="flex gap-2">
-                  <button 
-                    className="bg-gray-900 text-white border-none px-4 py-2 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                    onClick={() => setShowForm(true)}
-                  >
-                    New Due
-                  </button>
-                  <button 
-                    className="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    onClick={fetchBillings} 
-                    disabled={loading}
-                  >
-                    {loading ? 'Loading...' : 'Refresh'}
-                  </button>
+            {!isWaterView && !isElectricView && (
+              <div className="w-full bg-white rounded-xl p-4 md:p-6 lg:p-8 border border-gray-100 shadow-sm">
+                <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
+                  <h2 className="m-0 text-gray-900 text-lg font-normal">Billing Management</h2>
+                  <div className="flex gap-2">
+                    <button 
+                      className="bg-gray-900 text-white border-none px-4 py-2 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => setShowForm(true)}
+                    >
+                      New Due
+                    </button>
+                    <button 
+                      className="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-md text-sm font-normal cursor-pointer transition-all hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={fetchBillings} 
+                      disabled={loading}
+                    >
+                      {loading ? 'Loading...' : 'Refresh'}
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              {showForm && (
-                <div className="bg-gray-900 rounded-2xl p-4 md:p-6 lg:p-8 border border-gray-800 shadow-lg mb-6 md:mb-8">
-                  <h3 className="mt-0 mb-6 text-white text-xl font-normal tracking-tight">Post New Due</h3>
-                  <form onSubmit={handleSubmitBilling}>
-                    <div className="mb-6">
-                      <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
-                        Select Resident *
-                      </label>
-                      {loadingResidents ? (
-                        <div className="p-3 text-gray-300 text-sm">Loading residents...</div>
-                      ) : (
-                        <select
-                          value={formData.residentId}
-                          onChange={(e) => setFormData({ ...formData, residentId: e.target.value })}
+                {showForm && (
+                  <div className="bg-gray-900 rounded-2xl p-4 md:p-6 lg:p-8 border border-gray-800 shadow-lg mb-6 md:mb-8">
+                    <h3 className="mt-0 mb-6 text-white text-xl font-normal tracking-tight">Post New Due</h3>
+                    <form onSubmit={handleSubmitBilling}>
+                      <div className="mb-6">
+                        <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
+                          Select Resident *
+                        </label>
+                        {loadingResidents ? (
+                          <div className="p-3 text-gray-300 text-sm">Loading residents...</div>
+                        ) : (
+                          <select
+                            value={formData.residentId}
+                            onChange={(e) => setFormData({ ...formData, residentId: e.target.value })}
+                            required
+                            className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
+                          >
+                            <option value="">-- Select a resident --</option>
+                            {residents.map((resident) => (
+                              <option key={resident.id} value={resident.id}>
+                                {resident.fullName ? `${resident.fullName} (${resident.email})` : resident.email}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="mb-6">
+                          <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
+                            Billing Cycle *
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.billingCycle}
+                            onChange={(e) => setFormData({ ...formData, billingCycle: e.target.value })}
+                            placeholder="e.g., January 2024"
+                            required
+                            className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
+                          />
+                        </div>
+
+                        <div className="mb-6">
+                          <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
+                            Due Date *
+                          </label>
+                          <input
+                            type="date"
+                            value={formData.dueDate}
+                            onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                            required
+                            className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="mb-6">
+                          <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
+                            Amount *
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={formData.amount}
+                            onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                            placeholder="0.00"
+                            required
+                            className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mb-6">
+                        <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
+                          Description *
+                        </label>
+                        <textarea
+                          value={formData.description}
+                          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                          placeholder="Billing description..."
+                          rows={3}
                           required
-                          className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
+                          className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white resize-y min-h-[80px] box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
+                        />
+                      </div>
+
+                      <div className="flex gap-3 mt-8 pt-6 border-t border-gray-600">
+                        <button 
+                          type="submit" 
+                          className="bg-primary text-white border-none px-5 py-2.5 rounded-md text-sm font-medium cursor-pointer transition-all shadow-md shadow-primary/20 hover:bg-primary-dark hover:shadow-lg hover:shadow-primary/30 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                          disabled={loading}
                         >
-                          <option value="">-- Select a resident --</option>
-                          {residents.map((resident) => (
-                            <option key={resident.id} value={resident.id}>
-                              {resident.fullName ? `${resident.fullName} (${resident.email})` : resident.email}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-6">
-                      <div className="mb-6">
-                        <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
-                          Billing Cycle *
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.billingCycle}
-                          onChange={(e) => setFormData({ ...formData, billingCycle: e.target.value })}
-                          placeholder="e.g., January 2024"
-                          required
-                          className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
-                        />
+                          {loading ? 'Posting...' : 'Post Due'}
+                        </button>
+                        <button
+                          type="button"
+                          className="bg-gray-800 text-white border border-gray-600 px-5 py-2.5 rounded-md text-sm font-medium cursor-pointer transition-all hover:border-gray-500 hover:bg-gray-700"
+                          onClick={() => {
+                            setShowForm(false);
+                            setFormData({ residentId: '', billingCycle: '', dueDate: '', amount: '', description: '' });
+                          }}
+                        >
+                          Cancel
+                        </button>
                       </div>
+                    </form>
+                  </div>
+                )}
 
-                      <div className="mb-6">
-                        <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
-                          Due Date *
-                        </label>
-                        <input
-                          type="date"
-                          value={formData.dueDate}
-                          onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                          required
-                          className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
-                        />
-                      </div>
-                    </div>
+                {loading && billings.length === 0 ? (
+                  <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading billings...</div>
+                ) : billings.length === 0 ? (
+                  <div className="text-center py-20 px-5 text-gray-600">
+                    <p className="text-base font-normal text-gray-600">No billings found.</p>
+                  </div>
+                ) : (
+                  (() => {
+                    const totalPages = Math.max(1, Math.ceil(billings.length / ITEMS_PER_PAGE));
+                    const safePage = Math.min(currentPage, totalPages);
+                    const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
+                    const paginated = billings.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-                    <div className="grid grid-cols-2 gap-6">
-                      <div className="mb-6">
-                        <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
-                          Amount *
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={formData.amount}
-                          onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                          placeholder="0.00"
-                          required
-                          className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mb-6">
-                      <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
-                        Description *
-                      </label>
-                      <textarea
-                        value={formData.description}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        placeholder="Billing description..."
-                        rows={3}
-                        required
-                        className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white resize-y min-h-[80px] box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
-                      />
-                    </div>
-
-                    <div className="flex gap-3 mt-8 pt-6 border-t border-gray-600">
-                      <button 
-                        type="submit" 
-                        className="bg-primary text-white border-none px-5 py-2.5 rounded-md text-sm font-medium cursor-pointer transition-all shadow-md shadow-primary/20 hover:bg-primary-dark hover:shadow-lg hover:shadow-primary/30 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                        disabled={loading}
-                      >
-                        {loading ? 'Posting...' : 'Post Due'}
-                      </button>
-                      <button
-                        type="button"
-                        className="bg-gray-800 text-white border border-gray-600 px-5 py-2.5 rounded-md text-sm font-medium cursor-pointer transition-all hover:border-gray-500 hover:bg-gray-700"
-                        onClick={() => {
-                          setShowForm(false);
-                          setFormData({ residentId: '', billingCycle: '', dueDate: '', amount: '', description: '' });
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
-
-              {loading && billings.length === 0 ? (
-                <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading billings...</div>
-              ) : billings.length === 0 ? (
-                <div className="text-center py-20 px-5 text-gray-600">
-                  <p className="text-base font-normal text-gray-600">No billings found.</p>
-                </div>
-              ) : (
-                (() => {
-                  const totalPages = Math.max(1, Math.ceil(billings.length / ITEMS_PER_PAGE));
-                  const safePage = Math.min(currentPage, totalPages);
-                  const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
-                  const paginated = billings.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-
-                  return (
-                <div className="overflow-x-auto w-full">
-                  <table className="w-full border-collapse text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 border-b-2 border-gray-200">
-                        <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Date</th>
-                        <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Resident</th>
-                        <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Billing Cycle</th>
-                        <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Due Date</th>
-                        <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Amount</th>
-                        <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Paid</th>
-                        <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Balance</th>
-                        <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
-                        <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginated.map((billing) => (
-                        <tr key={billing.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
-                          <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
-                            {formatDate(billing.createdAt?.toDate ? billing.createdAt.toDate().toISOString() : '')}
-                          </td>
-                          <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{billing.residentEmail}</td>
-                          <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{billing.billingCycle}</td>
-                          <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{formatDate(billing.dueDate)}</td>
-                          <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{formatCurrency(billing.amount)}</td>
-                          <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{formatCurrency(billing.totalPaid || 0)}</td>
-                          <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{formatCurrency(billing.balance || billing.amount)}</td>
-                          <td className="px-4 py-4 border-b border-gray-100 align-middle">
-                            <span
-                              className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block"
-                              style={{ backgroundColor: getStatusColor(billing.status) }}
-                            >
-                              {billing.status.toUpperCase()}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4 border-b border-gray-100 align-middle">
-                            <button
-                              className="bg-green-500 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-[#45a049]"
-                              onClick={() => {
-                                setSelectedBilling(billing);
-                                setShowPaymentForm(true);
-                              }}
-                            >
-                              Record Payment
-                            </button>
-                          </td>
+                    return (
+                  <div className="overflow-x-auto w-full">
+                    <table className="w-full border-collapse text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 border-b-2 border-gray-200">
+                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Date</th>
+                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Resident</th>
+                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Billing Cycle</th>
+                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Due Date</th>
+                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Amount</th>
+                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Paid</th>
+                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Balance</th>
+                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
+                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {billings.length > 0 && (
-                    <div className="flex items-center justify-between mt-4 gap-3">
-                      <span className="text-xs text-gray-600">
-                        Page {safePage} of {totalPages}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                          disabled={safePage === 1}
-                        >
-                          Previous
-                        </button>
-                        <button
-                          className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                          disabled={safePage === totalPages}
-                        >
-                          Next
-                        </button>
+                      </thead>
+                      <tbody>
+                        {paginated.map((billing) => (
+                          <tr key={billing.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
+                            <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                              {formatDate(billing.createdAt?.toDate ? billing.createdAt.toDate().toISOString() : '')}
+                            </td>
+                            <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{billing.residentEmail}</td>
+                            <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{billing.billingCycle}</td>
+                            <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{formatDate(billing.dueDate)}</td>
+                            <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{formatCurrency(billing.amount)}</td>
+                            <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{formatCurrency(billing.totalPaid || 0)}</td>
+                            <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{formatCurrency(billing.balance || billing.amount)}</td>
+                            <td className="px-4 py-4 border-b border-gray-100 align-middle">
+                              <span
+                                className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block"
+                                style={{ backgroundColor: getStatusColor(billing.status) }}
+                              >
+                                {billing.status.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 border-b border-gray-100 align-middle">
+                              <button
+                                className="bg-green-500 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-[#45a049]"
+                                onClick={() => {
+                                  setSelectedBilling(billing);
+                                  setShowPaymentForm(true);
+                                }}
+                              >
+                                Record Payment
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {billings.length > 0 && (
+                      <div className="flex items-center justify-between mt-4 gap-3">
+                        <span className="text-xs text-gray-600">
+                          Page {safePage} of {totalPages}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                            disabled={safePage === 1}
+                          >
+                            Previous
+                          </button>
+                          <button
+                            className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                            disabled={safePage === totalPages}
+                          >
+                            Next
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                    );
+                  })()
+                )}
+              </div>
+            )}
+
+            {(isWaterView || isElectricView) && (
+              <div className="w-full bg-white rounded-xl p-4 md:p-6 lg:p-8 border border-gray-100 shadow-sm">
+                <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
+                  <h2 className="m-0 text-gray-900 text-lg font-normal">
+                    {isWaterView ? 'Water Billing Dates' : 'Electricity Billing Dates'}
+                  </h2>
                 </div>
-                  );
-                })()
-              )}
-            </div>
+
+                {loadingResidents && residents.length === 0 ? (
+                  <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading residents...</div>
+                ) : residents.length === 0 ? (
+                  <div className="text-center py-20 px-5 text-gray-600">
+                    <p className="text-base font-normal text-gray-600">No residents found.</p>
+                  </div>
+                ) : (
+                  (() => {
+                    const residentsWithDate = residents.filter((resident) =>
+                      isWaterView ? resident.waterBillingDate : resident.electricBillingDate
+                    );
+
+                    if (residentsWithDate.length === 0) {
+                      return (
+                        <div className="text-center py-20 px-5 text-gray-600">
+                          <p className="text-base font-normal text-gray-600">
+                            No {isWaterView ? 'water' : 'electricity'} billing dates recorded yet.
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    const totalPages = Math.max(1, Math.ceil(residentsWithDate.length / ITEMS_PER_PAGE));
+                    const safePage = Math.min(currentPage, totalPages);
+                    const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
+                    const paginatedResidents = residentsWithDate.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+                    return (
+                      <div className="overflow-x-auto w-full">
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="bg-gray-50 border-b-2 border-gray-200">
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Resident</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Email</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Block</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Lot</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Street</th>
+                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
+                                {isWaterView ? 'Water Billing Date' : 'Electricity Billing Date'}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginatedResidents.map((resident) => (
+                              <tr key={resident.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                  {resident.fullName || 'N/A'}
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                  {resident.email}
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                  {resident.address?.block || 'N/A'}
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                  {resident.address?.lot || 'N/A'}
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                  {resident.address?.street || 'N/A'}
+                                </td>
+                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                  {formatDate(
+                                    (isWaterView ? resident.waterBillingDate : resident.electricBillingDate) as any
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {residentsWithDate.length > 0 && (
+                          <div className="flex items-center justify-between mt-4 gap-3">
+                            <span className="text-xs text-gray-600">
+                              Page {safePage} of {totalPages}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                                disabled={safePage === 1}
+                              >
+                                Previous
+                              </button>
+                              <button
+                                className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                                disabled={safePage === totalPages}
+                              >
+                                Next
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()
+                )}
+              </div>
+            )}
           </div>
         </main>
 
