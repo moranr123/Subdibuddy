@@ -89,9 +89,13 @@ function BillingPayment() {
   const [searchTerm, setSearchTerm] = useState('');
   const [blockFilter, setBlockFilter] = useState('');
   const [streetFilter, setStreetFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'withDate' | 'withoutDate'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'due' | 'dueSoon' | 'overdue'>('all');
   const [billingMonth, setBillingMonth] = useState('');
   const [billingYear, setBillingYear] = useState('');
+  const [proofStatusFilter, setProofStatusFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all');
+  const [proofTypeFilter, setProofTypeFilter] = useState<'all' | 'water' | 'electricity'>('all');
+  const [proofSearchQuery, setProofSearchQuery] = useState('');
+  const [proofFilterDate, setProofFilterDate] = useState('');
   const blockOptions = useMemo(() => {
     const set = new Set<string>();
     residents.forEach((r) => {
@@ -485,10 +489,25 @@ function BillingPayment() {
 
     return residents.filter((resident) => {
       const date = getDateFromResident(resident, !!isWaterView);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-      // Status filter (with / without date)
-      if (statusFilter === 'withDate' && !date) return false;
-      if (statusFilter === 'withoutDate' && date) return false;
+      // Status filter based on billing risk (due / due in 7 days / overdue)
+      if (statusFilter !== 'all') {
+        if (!date) return false;
+        const d = new Date(date.getTime());
+        d.setHours(0, 0, 0, 0);
+        const diffMs = d.getTime() - today.getTime();
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        if (statusFilter === 'overdue') {
+          if (!(d < today)) return false;
+        } else if (statusFilter === 'dueSoon') {
+          if (!(diffDays >= 0 && diffDays <= 7)) return false;
+        } else if (statusFilter === 'due') {
+          if (!(d.getTime() === today.getTime())) return false;
+        }
+      }
 
       // Month / Year filter
       if (date && (billingMonth || billingYear)) {
@@ -496,9 +515,7 @@ function BillingPayment() {
         const y = String(date.getFullYear());
         if (billingMonth && m !== billingMonth) return false;
         if (billingYear && y !== billingYear) return false;
-      } else if (!date && (billingMonth || billingYear) && statusFilter !== 'withoutDate') {
-        // If filtering by month/year and this resident has no date,
-        // only keep it when explicitly looking for "without date"
+      } else if (!date && (billingMonth || billingYear)) {
         return false;
       }
 
@@ -772,6 +789,7 @@ function BillingPayment() {
             message,
             status: statusLabel,
             recipientType: 'user',
+            recipientUserId: proofBilling.residentId || null,
             isRead: false,
             createdAt: Timestamp.now(),
           });
@@ -1192,14 +1210,15 @@ function BillingPayment() {
                       <select
                         value={statusFilter}
                         onChange={(e) => {
-                          setStatusFilter(e.target.value as 'all' | 'withDate' | 'withoutDate');
+                          setStatusFilter(e.target.value as 'all' | 'due' | 'dueSoon' | 'overdue');
                           setCurrentPage(1);
                         }}
                         className="border border-gray-300 rounded-md px-2 py-2 text-sm"
                       >
                         <option value="all">All</option>
-                        <option value="withDate">With billing date</option>
-                        <option value="withoutDate">Without billing date</option>
+                        <option value="due">Due today</option>
+                        <option value="dueSoon">Due in 7 days</option>
+                        <option value="overdue">Overdue</option>
                       </select>
                     </div>
                     <div className="flex flex-col gap-1 md:w-[160px]">
@@ -1269,97 +1288,213 @@ function BillingPayment() {
                     const paginatedResidents = residentsForTable.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
                     return (
-                      <div className="overflow-x-auto w-full">
-                        <table className="w-full border-collapse text-sm">
-                          <thead>
-                            <tr className="bg-gray-50 border-b-2 border-gray-200">
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Resident</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Email</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Block</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Lot</th>
-                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Street</th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
-                                {isWaterView ? 'Water Billing Date' : 'Electricity Billing Date'}
-                              </th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {paginatedResidents.map((resident) => {
-                              const billingDate = getDateFromResident(resident, !!isWaterView);
-                              const isDue =
-                                !!billingDate &&
-                                billingDate.setHours(0, 0, 0, 0) <= new Date().setHours(0, 0, 0, 0);
-                              return (
-                              <tr
+                      <div className="w-full">
+                        {/* Mobile cards */}
+                        <div className="flex flex-col gap-3 md:hidden">
+                          {paginatedResidents.map((resident) => {
+                            const billingDate = getDateFromResident(resident, !!isWaterView);
+                            const isDue =
+                              !!billingDate &&
+                              billingDate.setHours(0, 0, 0, 0) <=
+                                new Date().setHours(0, 0, 0, 0);
+                            const hasUnsettledBilling = billings.some(
+                              (b) =>
+                                b.residentId === resident.id &&
+                                b.billingType === (isWaterView ? 'water' : 'electricity') &&
+                                b.status !== 'paid'
+                            );
+                            return (
+                              <div
                                 key={resident.id}
-                                className={`last:border-b-0 border-b border-gray-100 ${
-                                  isDue ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-gray-50'
+                                className={`border border-gray-200 rounded-lg p-4 bg-white shadow-sm ${
+                                  isDue ? 'border-red-300 bg-red-50/50' : ''
                                 }`}
                               >
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
-                                  <div className="flex items-center gap-2">
-                                    <span>{resident.fullName || 'N/A'}</span>
-                                    {isDue && (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-700 uppercase tracking-wide">
-                                        Due
-                                      </span>
-                                    )}
+                                <div className="flex items-center justify-between mb-2">
+                                  <div>
+                                    <p className="text-sm font-semibold text-gray-900">
+                                      {resident.fullName || 'N/A'}
+                                    </p>
+                                    <p className="text-xs text-gray-500">
+                                      {resident.email}
+                                    </p>
                                   </div>
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
-                                  {resident.email}
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
-                                  {resident.address?.block || 'N/A'}
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
-                                  {resident.address?.lot || 'N/A'}
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
-                                  {resident.address?.street || 'N/A'}
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
-                                  {formatDate(
-                                    (isWaterView ? resident.waterBillingDate : resident.electricBillingDate) as any
+                                  {isDue && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-700 uppercase tracking-wide">
+                                      Due
+                                    </span>
                                   )}
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 align-middle">
-                                  <button
-                                    className="bg-blue-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-blue-700"
-                                    onClick={() => {
-                                      const latestBilling = latestBillingByResidentId.get(resident.id);
-                                      if (latestBilling) {
-                                        openSendBillFormForBilling(latestBilling);
-                                      } else {
-                                        openSendBillFormForResident(resident);
-                                      }
-                                    }}
-                                  >
-                                    Send Bill (₱)
-                                  </button>
-                                </td>
+                                </div>
+                                <div className="text-xs text-gray-600 space-y-0.5 mb-3">
+                                  <p>
+                                    <span className="font-medium">Block:</span>{' '}
+                                    {resident.address?.block || 'N/A'}
+                                  </p>
+                                  <p>
+                                    <span className="font-medium">Lot:</span>{' '}
+                                    {resident.address?.lot || 'N/A'}
+                                  </p>
+                                  <p>
+                                    <span className="font-medium">Street:</span>{' '}
+                                    {resident.address?.street || 'N/A'}
+                                  </p>
+                                  <p>
+                                    <span className="font-medium">
+                                      {isWaterView ? 'Water' : 'Electricity'} Billing Date:
+                                    </span>{' '}
+                                    {formatDate(
+                                      (isWaterView
+                                        ? resident.waterBillingDate
+                                        : resident.electricBillingDate) as any
+                                    )}
+                                  </p>
+                                </div>
+                                <button
+                                  className={`w-full border-none px-3 py-2 rounded text-xs font-medium cursor-pointer transition-all ${
+                                    hasUnsettledBilling
+                                      ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                                  }`}
+                                  disabled={hasUnsettledBilling}
+                                  onClick={() => {
+                                    if (hasUnsettledBilling) return;
+                                    const latestBilling =
+                                      latestBillingByResidentId.get(resident.id);
+                                    if (latestBilling) {
+                                      openSendBillFormForBilling(latestBilling);
+                                    } else {
+                                      openSendBillFormForResident(resident);
+                                    }
+                                  }}
+                                >
+                                  {hasUnsettledBilling ? 'Already billed' : 'Send Bill (₱)'}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Desktop table */}
+                        <div className="hidden md:block overflow-x-auto w-full">
+                          <table className="w-full border-collapse text-sm">
+                            <thead>
+                              <tr className="bg-gray-50 border-b-2 border-gray-200">
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
+                                  Resident
+                                </th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
+                                  Email
+                                </th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
+                                  Block
+                                </th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
+                                  Lot
+                                </th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
+                                  Street
+                                </th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
+                                  {isWaterView
+                                    ? 'Water Billing Date'
+                                    : 'Electricity Billing Date'}
+                                </th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
+                                  Actions
+                                </th>
                               </tr>
-                            )})}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody>
+                              {paginatedResidents.map((resident) => {
+                                const billingDate = getDateFromResident(
+                                  resident,
+                                  !!isWaterView
+                                );
+                                const isDue =
+                                  !!billingDate &&
+                                  billingDate.setHours(0, 0, 0, 0) <=
+                                    new Date().setHours(0, 0, 0, 0);
+                                const hasUnsettledBilling = billings.some(
+                                  (b) =>
+                                    b.residentId === resident.id &&
+                                    b.billingType === (isWaterView ? 'water' : 'electricity') &&
+                                    b.status !== 'paid'
+                                );
+                                return (
+                                  <tr
+                                    key={resident.id}
+                                    className={`last:border-b-0 border-b border-gray-100 ${
+                                      isDue
+                                        ? 'bg-red-50 hover:bg-red-100'
+                                        : 'hover:bg-gray-50'
+                                    }`}
+                                  >
+                                    <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                      <div className="flex items-center gap-2">
+                                        <span>{resident.fullName || 'N/A'}</span>
+                                        {isDue && (
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-700 uppercase tracking-wide">
+                                            Due
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                      {resident.email}
+                                    </td>
+                                    <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                      {resident.address?.block || 'N/A'}
+                                    </td>
+                                    <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                      {resident.address?.lot || 'N/A'}
+                                    </td>
+                                    <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                      {resident.address?.street || 'N/A'}
+                                    </td>
+                                    <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
+                                      {formatDate(
+                                        (isWaterView
+                                          ? resident.waterBillingDate
+                                          : resident.electricBillingDate) as any
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-4 border-b border-gray-100 align-middle">
+                                      <button
+                                        className={`border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all ${
+                                          hasUnsettledBilling
+                                            ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                                            : 'bg-blue-600 text-white hover:bg-blue-700'
+                                        }`}
+                                        disabled={hasUnsettledBilling}
+                                        onClick={() => {
+                                          if (hasUnsettledBilling) return;
+                                          const latestBilling =
+                                            latestBillingByResidentId.get(
+                                              resident.id
+                                            );
+                                          if (latestBilling) {
+                                            openSendBillFormForBilling(
+                                              latestBilling
+                                            );
+                                          } else {
+                                            openSendBillFormForResident(
+                                              resident
+                                            );
+                                          }
+                                        }}
+                                      >
+                                        {hasUnsettledBilling ? 'Already billed' : 'Send Bill (₱)'}
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                         {residentsForTable.length > 0 && (
                           <div className="flex flex-col md:flex-row md:items-center md:justify-between mt-4 gap-3">
-                            <div className="text-xs text-gray-700 space-y-1">
-                              <div>
-                                <span className="font-semibold">Total residents in view:</span>{' '}
-                                {summaryForUtility.total}
-                              </div>
-                              <div>
-                                <span className="font-semibold">With billing date:</span>{' '}
-                                {summaryForUtility.withDate}
-                              </div>
-                              <div>
-                                <span className="font-semibold">Without billing date:</span>{' '}
-                                {summaryForUtility.withoutDate}
-                              </div>
-                            </div>
-                            <div className="flex items-center justify-between md:justify-end gap-2">
+                            <div className="flex items-center justify-between md:justify-end gap-2 w-full">
                               <span className="text-xs text-gray-600">
                                 Page {safePage} of {totalPages}
                               </span>
@@ -1391,17 +1526,93 @@ function BillingPayment() {
 
             {isProofsView && (
               <div className="w-full bg-white rounded-xl p-4 md:p-6 lg:p-8 border border-gray-100 shadow-sm">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 md:mb-6">
-                  <h2 className="m-0 text-gray-900 text-base md:text-lg font-normal">
-                    Proof of Payments
-                  </h2>
-                  <p className="m-0 text-xs text-gray-500">
-                    Review proofs sent by residents and mark billings as paid or reject them.
-                  </p>
+                <div className="flex flex-col gap-4 mb-4 md:mb-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                      <h2 className="m-0 text-gray-900 text-base md:text-lg font-normal">
+                        Proof of Payments
+                      </h2>
+                      <p className="m-0 text-xs text-gray-500">
+                        Review proofs sent by residents and mark billings as paid or reject them.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Filters for proofs */}
+                  <div className="flex flex-col md:flex-row gap-3 md:items-end">
+                    <div className="flex flex-col gap-1 md:w-[220px]">
+                      <label className="text-xs text-gray-600">Search</label>
+                      <input
+                        type="text"
+                        placeholder="Search resident, cycle, or type..."
+                        value={proofSearchQuery}
+                        onChange={(e) => setProofSearchQuery(e.target.value)}
+                        className="border border-gray-300 rounded-md px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1 md:w-[180px]">
+                      <label className="text-xs text-gray-600">Submitted/Due Date</label>
+                      <input
+                        type="date"
+                        value={proofFilterDate}
+                        onChange={(e) => setProofFilterDate(e.target.value)}
+                        className="border border-gray-300 rounded-md px-2 py-2 text-sm"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1 md:w-[180px]">
+                      <label className="text-xs text-gray-600">Proof Status</label>
+                      <select
+                        value={proofStatusFilter}
+                        onChange={(e) =>
+                          setProofStatusFilter(
+                            e.target.value as 'all' | 'pending' | 'verified' | 'rejected'
+                          )
+                        }
+                        className="border border-gray-300 rounded-md px-2 py-2 text-sm"
+                      >
+                        <option value="all">All</option>
+                        <option value="pending">Pending</option>
+                        <option value="verified">Verified</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1 md:w-[180px]">
+                      <label className="text-xs text-gray-600">Billing Type</label>
+                      <select
+                        value={proofTypeFilter}
+                        onChange={(e) =>
+                          setProofTypeFilter(
+                            e.target.value as 'all' | 'water' | 'electricity'
+                          )
+                        }
+                        className="border border-gray-300 rounded-md px-2 py-2 text-sm"
+                      >
+                        <option value="all">All</option>
+                        <option value="water">Water</option>
+                        <option value="electricity">Electricity</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-row gap-2">
+                      <button
+                        type="button"
+                        className="px-4 py-2 text-xs bg-gray-100 border border-gray-200 rounded-md hover:bg-gray-200"
+                        onClick={() => {
+                          setProofSearchQuery('');
+                          setProofFilterDate('');
+                          setProofStatusFilter('all');
+                          setProofTypeFilter('all');
+                        }}
+                      >
+                        Clear Filters
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 {loading && billings.length === 0 ? (
-                  <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading proofs...</div>
+                  <div className="text-center py-[60px] px-5 text-gray-600 text-sm">
+                    Loading proofs...
+                  </div>
                 ) : (
                   (() => {
                     const proofs = billings.filter(
@@ -1409,18 +1620,158 @@ function BillingPayment() {
                         !b.archived &&
                         (b.userProofImageUrl || b.userProofDetails || b.userProofStatus)
                     );
-                    if (proofs.length === 0) {
+
+                    const filteredProofs = proofs.filter((b) => {
+                      let matchesStatus = true;
+                      let matchesType = true;
+                      let matchesSearch = true;
+                      let matchesDate = true;
+
+                      if (proofStatusFilter !== 'all') {
+                        matchesStatus = (b.userProofStatus || 'none') === proofStatusFilter;
+                      }
+
+                      if (proofTypeFilter !== 'all') {
+                        matchesType = b.billingType === proofTypeFilter;
+                      }
+
+                      if (proofSearchQuery.trim()) {
+                        const q = proofSearchQuery.toLowerCase().trim();
+                        const residentEmail = (b.residentEmail || '').toLowerCase();
+                        const billingCycle = (b.billingCycle || '').toLowerCase();
+                        const billingTypeLabel = b.billingType
+                          ? b.billingType === 'water'
+                            ? 'water'
+                            : 'electricity'
+                          : '';
+                        matchesSearch =
+                          residentEmail.includes(q) ||
+                          billingCycle.includes(q) ||
+                          billingTypeLabel.includes(q);
+                      }
+
+                      if (proofFilterDate) {
+                        const raw = (b.userProofSubmittedAt as any) || b.dueDate;
+                        if (!raw) {
+                          matchesDate = false;
+                        } else {
+                          let date: Date | null = null;
+                          try {
+                            if (raw.toDate && typeof raw.toDate === 'function') {
+                              date = raw.toDate();
+                            } else if (typeof raw.seconds === 'number') {
+                              date = new Date(raw.seconds * 1000);
+                            } else {
+                              date = new Date(raw);
+                            }
+                          } catch {
+                            date = null;
+                          }
+                          if (!date || Number.isNaN(date.getTime())) {
+                            matchesDate = false;
+                          } else {
+                            const iso = date.toISOString().split('T')[0];
+                            matchesDate = iso === proofFilterDate;
+                          }
+                        }
+                      }
+
+                      return matchesStatus && matchesType && matchesSearch && matchesDate;
+                    });
+
+                    if (filteredProofs.length === 0) {
                       return (
                         <div className="text-center py-20 px-5 text-gray-600">
                           <p className="text-base font-normal text-gray-600">
-                            No proofs of payment submitted yet.
+                            No proofs of payment match the current filters.
                           </p>
                         </div>
                       );
                     }
+
                     return (
-                      <div className="overflow-x-auto w-full">
-                        <table className="w-full border-collapse text-sm">
+                      <div className="w-full">
+                        {/* Mobile cards */}
+                        <div className="flex flex-col gap-3 md:hidden">
+                          {filteredProofs.map((billing) => (
+                            <div
+                              key={billing.id}
+                              className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm"
+                            >
+                              <div className="flex items-start justify-between gap-2 mb-2">
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-900">
+                                    {(() => {
+                                      const resident = residents.find(
+                                        (r) =>
+                                          r.id === billing.residentId ||
+                                          r.email === billing.residentEmail
+                                      );
+                                      return (
+                                        resident?.fullName ||
+                                        billing.residentEmail ||
+                                        'N/A'
+                                      );
+                                    })()}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {billing.billingCycle}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {billing.billingType
+                                      ? billing.billingType === 'water'
+                                        ? 'Water'
+                                        : 'Electricity'
+                                      : '—'}
+                                  </p>
+                                </div>
+                                <span className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide inline-block bg-gray-100 text-gray-700">
+                                  {(billing.userProofStatus || 'none').toUpperCase()}
+                                </span>
+                              </div>
+                              <div className="text-xs text-gray-600 space-y-0.5 mb-3">
+                                <p>
+                                  <span className="font-medium">Amount:</span>{' '}
+                                  {formatCurrency(billing.amount)}
+                                </p>
+                                <p>
+                                  <span className="font-medium">Due:</span>{' '}
+                                  {formatDate(billing.dueDate)}
+                                </p>
+                                <p>
+                                  <span className="font-medium">Submitted:</span>{' '}
+                                  {billing.userProofSubmittedAt
+                                    ? formatDate(
+                                        (billing.userProofSubmittedAt as any).toDate
+                                          ? (billing.userProofSubmittedAt as any).toDate()
+                                          : billing.userProofSubmittedAt
+                                      )
+                                    : '—'}
+                                </p>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  className="flex-1 bg-yellow-500 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-yellow-600"
+                                  onClick={() => openProofModalForBilling(billing)}
+                                >
+                                  {billing.userProofStatus === 'pending'
+                                    ? 'Review Proof'
+                                    : 'View Proof'}
+                                </button>
+                                <button
+                                  className="px-3 py-1.5 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors whitespace-nowrap"
+                                  onClick={() => handleArchiveProof(billing)}
+                                >
+                                  Archive
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Desktop table */}
+                        <div className="hidden md:block overflow-x-auto w-full">
+                          <table className="w-full border-collapse text-sm">
                           <thead>
                             <tr className="bg-gray-50 border-b-2 border-gray-200">
                               <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
@@ -1450,7 +1801,7 @@ function BillingPayment() {
                             </tr>
                           </thead>
                           <tbody>
-                            {proofs.map((billing) => (
+                            {filteredProofs.map((billing) => (
                               <tr
                                 key={billing.id}
                                 className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100"
@@ -1497,7 +1848,11 @@ function BillingPayment() {
                                 <td className="px-4 py-4 border-b border-gray-100 align-middle">
                                   <div className="flex gap-2">
                                     <button
-                                      className="bg-yellow-500 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-yellow-600"
+                                      className={
+                                        billing.userProofStatus === 'pending'
+                                          ? 'bg-yellow-500 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-yellow-600'
+                                          : 'bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-blue-100'
+                                      }
                                       onClick={() => openProofModalForBilling(billing)}
                                     >
                                       {billing.userProofStatus === 'pending' ? 'Review Proof' : 'View Proof'}
@@ -1514,6 +1869,7 @@ function BillingPayment() {
                             ))}
                           </tbody>
                         </table>
+                        </div>
                       </div>
                     );
                   })()

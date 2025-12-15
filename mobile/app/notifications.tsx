@@ -24,7 +24,15 @@ export default function Notifications() {
   const insets = useSafeAreaInsets();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filteredNotifications, setFilteredNotifications] = useState<Notification[]>([]);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'complaint' | 'vehicle_registration' | 'maintenance' | 'announcement' | 'visitor_registration'>('all');
+  const [activeFilter, setActiveFilter] = useState<
+    | 'all'
+    | 'complaint'
+    | 'vehicle_registration'
+    | 'maintenance'
+    | 'announcement'
+    | 'visitor_registration'
+    | 'billing'
+  >('all');
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
 
@@ -163,6 +171,8 @@ export default function Notifications() {
       return { name: 'bullhorn', color: '#10b981' };
     } else if (type === 'visitor_registration' || type === 'visitor_registration_status') {
       return { name: 'user-plus', color: '#ec4899' };
+    } else if (type === 'billing' || type === 'billing_proof_status' || type === 'billing_proof') {
+      return { name: 'dollar-sign', color: '#10b981' };
     } else {
       return { name: 'bell', color: '#6b7280' };
     }
@@ -198,6 +208,14 @@ export default function Notifications() {
       setFilteredNotifications(
         notifications.filter(n => 
           n.type === 'visitor_registration' || n.type === 'visitor_registration_status'
+        )
+      );
+    } else if (activeFilter === 'billing') {
+      setFilteredNotifications(
+        notifications.filter((n) =>
+          n.type === 'billing' ||
+          n.type === 'billing_proof' ||
+          n.type === 'billing_proof_status'
         )
       );
     }
@@ -314,6 +332,21 @@ export default function Notifications() {
                 activeFilter === 'announcement' && styles.filterButtonTextActive
               ]}>
                 Announcements
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                activeFilter === 'billing' && styles.filterButtonActive
+              ]}
+              onPress={() => setActiveFilter('billing')}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                activeFilter === 'billing' && styles.filterButtonTextActive
+              ]}>
+                Billing & Payments
               </Text>
             </TouchableOpacity>
             <TouchableOpacity

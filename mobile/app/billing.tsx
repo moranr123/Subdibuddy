@@ -8,6 +8,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import { getAuthService, db, storage } from '../firebase/config';
+import { useNotifications } from '../hooks/useNotifications';
 
 interface Payment {
   amount: number;
@@ -39,12 +40,16 @@ export default function Billing() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sidebarAnimation = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
 
+  const { unreadCount } = useNotifications();
+
   const [user, setUser] = useState<any>(null);
   const [billings, setBillings] = useState<Billing[]>([]);
   const [loading, setLoading] = useState(true);
   const [proofModalVisible, setProofModalVisible] = useState(false);
   const [selectedBilling, setSelectedBilling] = useState<Billing | null>(null);
   const [proofImage, setProofImage] = useState<string | null>(null);
+  const [viewProofModalVisible, setViewProofModalVisible] = useState(false);
+  const [viewProofBilling, setViewProofBilling] = useState<Billing | null>(null);
 
   const toggleSidebar = () => {
     const toValue = sidebarOpen ? -Dimensions.get('window').width : 0;
@@ -144,6 +149,114 @@ export default function Billing() {
     </View>
   );
 
+  const getRiskChip = (billing: Billing) => {
+    if (billing.status === 'paid') {
+      return (
+        <View style={[styles.riskChip, styles.riskChipSafe]}>
+          <Text style={styles.riskChipText}>Paid</Text>
+        </View>
+      );
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let dueDate: Date | null = null;
+    try {
+      const raw = (billing as any).dueDate;
+      if (raw?.toDate && typeof raw.toDate === 'function') {
+        dueDate = raw.toDate();
+      } else {
+        dueDate = new Date(billing.dueDate);
+      }
+      if (Number.isNaN(dueDate.getTime())) {
+        dueDate = null;
+      } else {
+        dueDate.setHours(0, 0, 0, 0);
+      }
+    } catch {
+      dueDate = null;
+    }
+
+    if (!dueDate) return null;
+
+    if (billing.status === 'overdue' || dueDate < today) {
+      return (
+        <View style={[styles.riskChip, styles.riskChipOverdue]}>
+          <Text style={styles.riskChipText}>Overdue</Text>
+        </View>
+      );
+    }
+
+    const diffMs = dueDate.getTime() - today.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays >= 0 && diffDays <= 7) {
+      return (
+        <View style={[styles.riskChip, styles.riskChipSoon]}>
+          <Text style={styles.riskChipText}>Due soon</Text>
+        </View>
+      );
+    }
+
+    return null;
+  };
+
+  const summary = (() => {
+    if (!billings || billings.length === 0) {
+      return {
+        totalOutstanding: 0,
+        overdueCount: 0,
+        nextDueDate: null as Date | null,
+      };
+    }
+
+    let totalOutstanding = 0;
+    let overdueCount = 0;
+    let nextDueDate: Date | null = null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    billings.forEach((b) => {
+      const isPaid = b.status === 'paid';
+      const balance =
+        typeof b.balance === 'number'
+          ? b.balance
+          : (b.amount || 0) - (b.totalPaid || 0);
+      if (!isPaid && balance > 0) {
+        totalOutstanding += balance;
+      }
+
+      let dueDate: Date | null = null;
+      try {
+        const raw = (b as any).dueDate;
+        if (raw?.toDate && typeof raw.toDate === 'function') {
+          dueDate = raw.toDate();
+        } else {
+          dueDate = new Date(b.dueDate);
+        }
+        if (Number.isNaN(dueDate.getTime())) {
+          dueDate = null;
+        } else {
+          dueDate.setHours(0, 0, 0, 0);
+        }
+      } catch {
+        dueDate = null;
+      }
+
+      if (dueDate && !isPaid && dueDate < today) {
+        overdueCount += 1;
+      }
+
+      if (dueDate && !isPaid && dueDate >= today) {
+        if (!nextDueDate || dueDate.getTime() < nextDueDate.getTime()) {
+          nextDueDate = dueDate;
+        }
+      }
+    });
+
+    return { totalOutstanding, overdueCount, nextDueDate };
+  })();
+
   const openProofModal = useCallback((billing: Billing) => {
     setSelectedBilling(billing);
     setProofImage(null);
@@ -225,9 +338,26 @@ export default function Billing() {
     }
   }, [db, selectedBilling, proofImage]);
 
+  const openViewProofModal = useCallback((billing: Billing) => {
+    setViewProofBilling(billing);
+    setViewProofModalVisible(true);
+  }, []);
+
+  const unpaidBillings = billings.filter((billing) => {
+    const balance =
+      typeof billing.balance === 'number'
+        ? billing.balance
+        : (billing.amount || 0) - (billing.totalPaid || 0);
+    return billing.status !== 'paid' && balance > 0;
+  });
+
   return (
     <View style={styles.container}>
-      <Header onMenuPress={toggleSidebar} />
+      <Header
+        onMenuPress={toggleSidebar}
+        onNotificationPress={() => router.push('/notifications')}
+        notificationCount={unreadCount}
+      />
       <Sidebar isOpen={sidebarOpen} onClose={toggleSidebar} animation={sidebarAnimation} />
       <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 24 }}>
         <View style={styles.section}>
@@ -235,18 +365,55 @@ export default function Billing() {
           <Text style={styles.description}>Your bills and payment history.</Text>
         </View>
 
+        {billings.length > 0 && (
+          <View style={styles.summaryCard}>
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryMain}>
+                <Text style={styles.summaryLabel}>Total outstanding</Text>
+                <Text style={styles.summaryValue}>
+                  {formatCurrency(summary.totalOutstanding)}
+                </Text>
+              </View>
+              <View style={styles.summaryBadgeGroup}>
+                <View style={[styles.summaryPill, styles.summaryPillOverdue]}>
+                  <Text style={styles.summaryPillLabel}>
+                    {summary.overdueCount} overdue
+                  </Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.summaryMetaRow}>
+              <Text style={styles.summaryMetaText}>
+                Next due:{' '}
+                {summary.nextDueDate
+                  ? summary.nextDueDate.toLocaleDateString()
+                  : 'No upcoming due'}
+              </Text>
+              {billings.length > 3 && (
+                <TouchableOpacity
+                  style={styles.summarySeeAllButton}
+                  onPress={() => router.push('/billing-all')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.summarySeeAllText}>See all billings</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
+
         {loading ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator size="small" color="#111827" />
             <Text style={styles.loadingText}>Loading your billings...</Text>
           </View>
-        ) : billings.length === 0 ? (
+        ) : unpaidBillings.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>No billings yet.</Text>
+            <Text style={styles.emptyText}>No outstanding billings.</Text>
           </View>
         ) : (
           <View style={styles.list}>
-            {billings.map((billing) => (
+            {unpaidBillings.slice(0, 3).map((billing) => (
               <View
                 key={billing.id}
                 style={[
@@ -272,7 +439,10 @@ export default function Billing() {
                       </View>
                     )}
                   </View>
-                  {renderStatus(billing)}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {renderStatus(billing)}
+                    {getRiskChip(billing)}
+                  </View>
                 </View>
                 <Text style={styles.amount}>{formatCurrency(billing.amount)}</Text>
                 <Text style={styles.rowText}>Due: {formatDate(billing.dueDate)}</Text>
@@ -302,6 +472,15 @@ export default function Billing() {
                     <Text style={styles.proofButtonText}>Send Proof of Payment</Text>
                   </TouchableOpacity>
                 ) : null}
+
+                {(billing.userProofImageUrl || billing.userProofDetails) && (
+                  <TouchableOpacity
+                    style={styles.viewProofButton}
+                    onPress={() => openViewProofModal(billing)}
+                  >
+                    <Text style={styles.viewProofButtonText}>View receipt / proof</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
           </View>
@@ -361,6 +540,66 @@ export default function Billing() {
                 onPress={handleSubmitProof}
               >
                 <Text style={styles.modalSubmitText}>Submit Proof</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={viewProofModalVisible && !!viewProofBilling}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          setViewProofModalVisible(false);
+          setViewProofBilling(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Billing Receipt / Proof</Text>
+              {viewProofBilling && (
+                <Text style={styles.modalSubtitle}>
+                  {viewProofBilling.billingCycle || 'Billing'} ·{' '}
+                  {formatCurrency(viewProofBilling.amount)}
+                </Text>
+              )}
+            </View>
+
+            <View style={styles.modalBody}>
+              {viewProofBilling?.userProofImageUrl ? (
+                <Image
+                  source={{ uri: viewProofBilling.userProofImageUrl }}
+                  style={styles.proofPreview}
+                />
+              ) : viewProofBilling?.userProofDetails ? (
+                <Text style={styles.modalHint}>{viewProofBilling.userProofDetails}</Text>
+              ) : (
+                <Text style={styles.modalHint}>
+                  No proof image or details available.
+                </Text>
+              )}
+
+              {viewProofBilling && (
+                <Text style={[styles.rowText, { marginTop: 10 }]}>
+                  Status:{' '}
+                  {viewProofBilling.userProofStatus
+                    ? viewProofBilling.userProofStatus.toUpperCase()
+                    : 'N/A'}
+                </Text>
+              )}
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSubmit]}
+                onPress={() => {
+                  setViewProofModalVisible(false);
+                  setViewProofBilling(null);
+                }}
+              >
+                <Text style={styles.modalSubmitText}>Close</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -602,5 +841,105 @@ const styles = StyleSheet.create({
   modalHint: {
     color: '#6b7280',
     fontSize: 13,
+  },
+  riskChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  riskChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  riskChipOverdue: {
+    backgroundColor: '#fee2e2',
+  },
+  riskChipSoon: {
+    backgroundColor: '#fef3c7',
+  },
+  riskChipSafe: {
+    backgroundColor: '#dcfce7',
+  },
+  summaryCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: '#1f2937',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  summaryMain: {
+    flex: 1,
+  },
+  summaryLabel: {
+    color: '#9ca3af',
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  summaryValue: {
+    color: '#f9fafb',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  summaryBadgeGroup: {
+    marginLeft: 8,
+    alignItems: 'flex-end',
+  },
+  summaryPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  summaryPillOverdue: {
+    backgroundColor: '#fef3c7',
+  },
+  summaryPillLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#92400e',
+  },
+  summaryMetaRow: {
+    marginTop: 10,
+  },
+  summaryMetaText: {
+    color: '#d1d5db',
+    fontSize: 12,
+  },
+  summarySeeAllButton: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: '#4b5563',
+  },
+  summarySeeAllText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#e5e7eb',
+  },
+  viewProofButton: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#f9fafb',
+  },
+  viewProofButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#111827',
   },
 });
