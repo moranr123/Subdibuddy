@@ -32,6 +32,8 @@ function Complaints() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [userNames, setUserNames] = useState<Record<string, string>>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -53,6 +55,10 @@ function Complaints() {
 
     return () => unsubscribe();
   }, [navigate]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, filterDate, complaints.length, filteredComplaints.length]);
 
   useEffect(() => {
     if (!user || !db) {
@@ -465,10 +471,18 @@ function Complaints() {
                   <p className="text-base font-normal text-gray-600">No complaints found.</p>
                 </div>
               ) : (
+                (() => {
+                  const displayed = (statusFilter !== 'all' || filterDate || searchQuery) ? filteredComplaints : complaints;
+                  const totalPages = Math.max(1, Math.ceil(displayed.length / ITEMS_PER_PAGE));
+                  const safePage = Math.min(currentPage, totalPages);
+                  const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
+                  const paginated = displayed.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+                  return (
                 <>
                   {/* Mobile Card View */}
                   <div className="md:hidden space-y-4">
-                    {(statusFilter !== 'all' || filterDate || searchQuery ? filteredComplaints : complaints).map((complaint) => (
+                    {paginated.map((complaint) => (
                       <div key={complaint.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                         <div className="flex justify-between items-start mb-3">
                           <div className="flex-1">
@@ -542,7 +556,7 @@ function Complaints() {
                       </tr>
                     </thead>
                     <tbody>
-                        {(statusFilter !== 'all' || filterDate || searchQuery ? filteredComplaints : complaints).map((complaint) => (
+                    {paginated.map((complaint) => (
                         <tr key={complaint.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
                           <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(complaint.createdAt)}</td>
                             <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
@@ -594,8 +608,33 @@ function Complaints() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                  </div>
+                  {displayed.length > 0 && (
+                    <div className="flex items-center justify-between mt-4 gap-3">
+                      <span className="text-xs text-gray-600">
+                        Page {safePage} of {totalPages}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                          disabled={safePage === 1}
+                        >
+                          Previous
+                        </button>
+                        <button
+                          className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                          disabled={safePage === totalPages}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </>
+                  );
+                })()
               )}
             </div>
           </div>

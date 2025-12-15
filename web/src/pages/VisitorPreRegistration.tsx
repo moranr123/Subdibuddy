@@ -32,6 +32,8 @@ function VisitorPreRegistration() {
   const [filterDate, setFilterDate] = useState<string>('');
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [residentNames, setResidentNames] = useState<Record<string, string>>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -359,6 +361,15 @@ function VisitorPreRegistration() {
     return matchesStatus && matchesDate && matchesSearch;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredVisitors.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
+  const paginatedVisitors = filteredVisitors.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterStatus, filterDate, activeView, visitors.length]);
+
   return (
     <Layout>
       <div className="min-h-screen bg-gray-50 w-full">
@@ -437,7 +448,7 @@ function VisitorPreRegistration() {
                 <>
                   {/* Mobile Card View */}
                   <div className="md:hidden space-y-4">
-                    {filteredVisitors.map((visitor) => (
+                    {paginatedVisitors.map((visitor) => (
                       <div key={visitor.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                         <div className="flex justify-between items-start mb-3">
                           <div className="flex-1">
@@ -529,7 +540,7 @@ function VisitorPreRegistration() {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredVisitors.map((visitor) => (
+                        {paginatedVisitors.map((visitor) => (
                           <tr key={visitor.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
                             <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(visitor.createdAt)}</td>
                             <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{visitor.visitorName}</td>
@@ -602,6 +613,29 @@ function VisitorPreRegistration() {
                       </tbody>
                     </table>
                   </div>
+                  {filteredVisitors.length > 0 && (
+                    <div className="flex items-center justify-between mt-4 gap-3">
+                      <span className="text-xs text-gray-600">
+                        Page {safePage} of {totalPages}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                          disabled={safePage === 1}
+                        >
+                          Previous
+                        </button>
+                        <button
+                          className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                          disabled={safePage === totalPages}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>

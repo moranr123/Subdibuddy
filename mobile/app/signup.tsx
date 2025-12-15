@@ -62,9 +62,12 @@ export default function Signup() {
   const [residentType, setResidentType] = useState<'tenant' | 'homeowner' | null>(null);
   const [tenantRelation, setTenantRelation] = useState('');
   const [showRelationPicker, setShowRelationPicker] = useState(false);
-  const [billingDate, setBillingDate] = useState<Date | null>(null);
+  const [waterBillingDate, setWaterBillingDate] = useState<Date | null>(null);
+  const [electricBillingDate, setElectricBillingDate] = useState<Date | null>(null);
+  const [activeBillingType, setActiveBillingType] = useState<'water' | 'electricity' | null>(null);
   const [showBillingDatePicker, setShowBillingDatePicker] = useState(false);
   const [tempBillingDate, setTempBillingDate] = useState<Date>(new Date());
+  const [billingProofImage, setBillingProofImage] = useState<string | null>(null);
   const [idImages, setIdImages] = useState<IDImages>({ front: null, back: null });
   const [documentImages, setDocumentImages] = useState<DocumentImages>({});
   
@@ -107,9 +110,14 @@ export default function Signup() {
   }, [tempDate, handleDateChange]);
 
   const handleBillingDateChange = useCallback((selectedDate: Date) => {
-    setBillingDate(selectedDate);
+    if (activeBillingType === 'water') {
+      setWaterBillingDate(selectedDate);
+    } else if (activeBillingType === 'electricity') {
+      setElectricBillingDate(selectedDate);
+    }
     setShowBillingDatePicker(false);
-  }, []);
+    setActiveBillingType(null);
+  }, [activeBillingType]);
 
   const handleBillingDatePickerConfirm = useCallback(() => {
     handleBillingDateChange(tempBillingDate);
@@ -675,6 +683,70 @@ export default function Signup() {
     );
   }, [pickDocument]);
 
+  const pickBillingProof = useCallback(async (source: 'camera' | 'gallery') => {
+    try {
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Please grant camera permissions to take a photo');
+          return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets[0]) {
+          setBillingProofImage(result.assets[0].uri);
+        }
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Please grant camera roll permissions to upload billing proof');
+          return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets[0]) {
+          setBillingProofImage(result.assets[0].uri);
+        }
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to pick billing proof. Please try again.');
+    }
+  }, []);
+
+  const showBillingProofSourcePicker = useCallback(() => {
+    Alert.alert(
+      'Select Image Source',
+      'Upload a photo of your latest water/electric bill',
+      [
+        {
+          text: 'Camera',
+          onPress: () => pickBillingProof('camera'),
+        },
+        {
+          text: 'Gallery',
+          onPress: () => pickBillingProof('gallery'),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true }
+    );
+  }, [pickBillingProof]);
+
   // Address options
   const blockOptions = ['Block 1', 'Block 2', 'Block 3', 'Block 4', 'Block 5', 'Block 6', 'Block 7', 'Block 8', 'Block 9', 'Block 10'];
   const lotOptions = ['Lot 1', 'Lot 2', 'Lot 3', 'Lot 4', 'Lot 5', 'Lot 6', 'Lot 7', 'Lot 8', 'Lot 9', 'Lot 10'];
@@ -829,8 +901,16 @@ export default function Signup() {
           newErrors.tenantRelation = 'Please select your relation to the homeowner';
           isValid = false;
         }
-        if (!billingDate) {
-          newErrors.billingDate = 'Please select your billing date';
+        if (!waterBillingDate) {
+          newErrors.waterBillingDate = 'Please select your water billing date';
+          isValid = false;
+        }
+        if (!electricBillingDate) {
+          newErrors.electricBillingDate = 'Please select your electricity billing date';
+          isValid = false;
+        }
+        if (!billingProofImage) {
+          newErrors.billingProof = 'Please upload a billing proof image';
           isValid = false;
         }
         if (!idImages.front) {
@@ -856,7 +936,7 @@ export default function Signup() {
 
     setErrors(newErrors);
     return isValid;
-  }, [emailOrPhone, isEmail, password, confirmPassword, firstName, middleName, lastName, birthdate, sex, block, lot, street, location, residentType, tenantRelation, billingDate, idImages, acceptedTerms, calculateAge]);
+  }, [emailOrPhone, isEmail, password, confirmPassword, firstName, middleName, lastName, birthdate, sex, block, lot, street, location, residentType, tenantRelation, waterBillingDate, electricBillingDate, billingProofImage, idImages, acceptedTerms, calculateAge]);
 
   const handleNext = useCallback(() => {
     if (validateStep(currentStep)) {
@@ -938,6 +1018,7 @@ export default function Signup() {
       // Upload images to Firebase Storage (using pendingUserId instead of user.uid)
       let idFrontURL: string | null = null;
       let idBackURL: string | null = null;
+      let billingProofURL: string | null = null;
       const documentURLs: Record<string, string> = {};
 
       if (idImages.front) {
@@ -951,6 +1032,13 @@ export default function Signup() {
         idBackURL = await uploadImageToStorage(idImages.back, `pendingUsers/${pendingUserId}/id-back.jpg`);
         if (!idBackURL) {
           throw new Error('Failed to upload ID back image');
+        }
+      }
+
+      if (billingProofImage) {
+        billingProofURL = await uploadImageToStorage(billingProofImage, `pendingUsers/${pendingUserId}/billing-proof.jpg`);
+        if (!billingProofURL) {
+          throw new Error('Failed to upload billing proof image');
         }
       }
 
@@ -989,7 +1077,9 @@ export default function Signup() {
         isTenant: residentType === 'tenant',
         residentType: residentType,
         tenantRelation: residentType === 'tenant' ? tenantRelation : null,
-        billingDate: billingDate ? Timestamp.fromDate(billingDate) : null,
+        waterBillingDate: waterBillingDate ? Timestamp.fromDate(waterBillingDate) : null,
+        electricBillingDate: electricBillingDate ? Timestamp.fromDate(electricBillingDate) : null,
+        billingProof: billingProofURL,
         idFront: idFrontURL,
         idBack: idBackURL,
         documents: documentURLs,
@@ -1026,7 +1116,7 @@ export default function Signup() {
     }
   }, [
     emailOrPhone, isEmail, password, firstName, middleName, lastName, birthdate, age, sex,
-    block, lot, street, residentType, tenantRelation, billingDate, idImages, documentImages, validateStep, setError, uploadImageToStorage, formatDate
+    block, lot, street, residentType, tenantRelation, waterBillingDate, electricBillingDate, billingProofImage, idImages, documentImages, validateStep, setError, uploadImageToStorage, formatDate
   ]);
 
   // Progress bar
@@ -1447,22 +1537,78 @@ export default function Signup() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Billing Date *</Text>
+              <Text style={styles.label}>Billing Dates *</Text>
+              <Text style={styles.subLabel}>Provide separate billing dates for each utility</Text>
+
+              <Text style={styles.subLabel}>Water</Text>
               <TouchableOpacity
-                style={[styles.datePickerButton, errors.billingDate && styles.inputError]}
+                style={[styles.datePickerButton, errors.waterBillingDate && styles.inputError]}
                 onPress={() => {
-                  setTempBillingDate(billingDate || new Date());
+                  setActiveBillingType('water');
+                  setTempBillingDate(waterBillingDate || new Date());
                   setShowBillingDatePicker(true);
-                  clearError('billingDate');
+                  clearError('waterBillingDate');
                 }}
                 disabled={loading}
               >
-                <Text style={[styles.datePickerText, !billingDate && styles.datePickerPlaceholder]}>
-                  {billingDate ? formatDate(billingDate) : 'Select your billing date'}
+                <Text style={[styles.datePickerText, !waterBillingDate && styles.datePickerPlaceholder]}>
+                  {waterBillingDate ? formatDate(waterBillingDate) : 'Select water billing date'}
                 </Text>
               </TouchableOpacity>
-              {errors.billingDate && (
-                <Text style={styles.errorText}>{errors.billingDate}</Text>
+              {errors.waterBillingDate && (
+                <Text style={styles.errorText}>{errors.waterBillingDate}</Text>
+              )}
+
+              <Text style={[styles.subLabel, { marginTop: 12 }]}>Electricity</Text>
+              <TouchableOpacity
+                style={[styles.datePickerButton, errors.electricBillingDate && styles.inputError]}
+                onPress={() => {
+                  setActiveBillingType('electricity');
+                  setTempBillingDate(electricBillingDate || new Date());
+                  setShowBillingDatePicker(true);
+                  clearError('electricBillingDate');
+                }}
+                disabled={loading}
+              >
+                <Text style={[styles.datePickerText, !electricBillingDate && styles.datePickerPlaceholder]}>
+                  {electricBillingDate ? formatDate(electricBillingDate) : 'Select electricity billing date'}
+                </Text>
+              </TouchableOpacity>
+              {errors.electricBillingDate && (
+                <Text style={styles.errorText}>{errors.electricBillingDate}</Text>
+              )}
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Billing Proof *</Text>
+              <Text style={styles.subLabel}>Upload a recent water or electric bill to verify dates</Text>
+              {billingProofImage ? (
+                <View style={styles.documentImageContainer}>
+                  <Image source={{ uri: billingProofImage }} style={styles.documentImage} />
+                  <TouchableOpacity
+                    style={styles.removeDocumentButton}
+                    onPress={() => {
+                      setBillingProofImage(null);
+                    }}
+                    disabled={loading}
+                  >
+                    <Text style={styles.removeDocumentText}>Replace</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.documentUploadButton, errors.billingProof && styles.idUploadButtonError]}
+                  onPress={() => {
+                    showBillingProofSourcePicker();
+                    clearError('billingProof');
+                  }}
+                  disabled={loading}
+                >
+                  <Text style={styles.documentUploadText}>Upload Billing Proof</Text>
+                </TouchableOpacity>
+              )}
+              {errors.billingProof && (
+                <Text style={styles.errorText}>{errors.billingProof}</Text>
               )}
             </View>
 
@@ -1666,10 +1812,24 @@ export default function Signup() {
                 </View>
               )}
               <View style={styles.reviewSection}>
-                <Text style={styles.reviewLabel}>Billing Date:</Text>
+                <Text style={styles.reviewLabel}>Water Billing Date:</Text>
                 <Text style={styles.reviewValue}>
-                  {billingDate ? formatDate(billingDate) : 'N/A'}
+                  {waterBillingDate ? formatDate(waterBillingDate) : 'N/A'}
                 </Text>
+              </View>
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Electricity Billing Date:</Text>
+                <Text style={styles.reviewValue}>
+                  {electricBillingDate ? formatDate(electricBillingDate) : 'N/A'}
+                </Text>
+              </View>
+              <View style={styles.reviewSection}>
+                <Text style={styles.reviewLabel}>Billing Proof:</Text>
+                {billingProofImage ? (
+                  <Image source={{ uri: billingProofImage }} style={styles.reviewImage} />
+                ) : (
+                  <Text style={styles.reviewValue}>Not uploaded</Text>
+                )}
               </View>
 
               <Text style={styles.reviewSectionTitle}>ID Verification</Text>
@@ -1933,17 +2093,28 @@ export default function Signup() {
         visible={showBillingDatePicker}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setShowBillingDatePicker(false)}
+        onRequestClose={() => {
+          setShowBillingDatePicker(false);
+          setActiveBillingType(null);
+        }}
       >
         <TouchableOpacity 
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => setShowBillingDatePicker(false)}
+          onPress={() => {
+            setShowBillingDatePicker(false);
+            setActiveBillingType(null);
+          }}
         >
           <View style={styles.datePickerModalContent} onStartShouldSetResponder={() => true}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Billing Date</Text>
-              <TouchableOpacity onPress={() => setShowBillingDatePicker(false)}>
+              <Text style={styles.modalTitle}>
+                {activeBillingType === 'water' ? 'Select Water Billing Date' : activeBillingType === 'electricity' ? 'Select Electricity Billing Date' : 'Select Billing Date'}
+              </Text>
+              <TouchableOpacity onPress={() => {
+                setShowBillingDatePicker(false);
+                setActiveBillingType(null);
+              }}>
                 <Text style={styles.modalCloseText}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -2038,7 +2209,10 @@ export default function Signup() {
             <View style={styles.datePickerFooter}>
               <TouchableOpacity
                 style={styles.datePickerCancelButton}
-                onPress={() => setShowBillingDatePicker(false)}
+                onPress={() => {
+                  setShowBillingDatePicker(false);
+                  setActiveBillingType(null);
+                }}
               >
                 <Text style={styles.datePickerCancelText}>Cancel</Text>
               </TouchableOpacity>

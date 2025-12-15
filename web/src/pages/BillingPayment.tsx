@@ -59,6 +59,8 @@ function BillingPayment() {
     paymentMethod: 'cash',
     referenceNumber: '',
   });
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -146,6 +148,10 @@ function BillingPayment() {
       setLoading(false);
     }
   }, [db]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [billings.length]);
 
   const fetchResidents = useCallback(async () => {
     if (!db) return;
@@ -474,6 +480,13 @@ function BillingPayment() {
                   <p className="text-base font-normal text-gray-600">No billings found.</p>
                 </div>
               ) : (
+                (() => {
+                  const totalPages = Math.max(1, Math.ceil(billings.length / ITEMS_PER_PAGE));
+                  const safePage = Math.min(currentPage, totalPages);
+                  const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
+                  const paginated = billings.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+                  return (
                 <div className="overflow-x-auto w-full">
                   <table className="w-full border-collapse text-sm">
                     <thead>
@@ -490,7 +503,7 @@ function BillingPayment() {
                       </tr>
                     </thead>
                     <tbody>
-                      {billings.map((billing) => (
+                      {paginated.map((billing) => (
                         <tr key={billing.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
                           <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
                             {formatDate(billing.createdAt?.toDate ? billing.createdAt.toDate().toISOString() : '')}
@@ -524,7 +537,32 @@ function BillingPayment() {
                       ))}
                     </tbody>
                   </table>
+                  {billings.length > 0 && (
+                    <div className="flex items-center justify-between mt-4 gap-3">
+                      <span className="text-xs text-gray-600">
+                        Page {safePage} of {totalPages}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                          disabled={safePage === 1}
+                        >
+                          Previous
+                        </button>
+                        <button
+                          className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                          disabled={safePage === totalPages}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
+                  );
+                })()
               )}
             </div>
           </div>

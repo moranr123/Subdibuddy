@@ -32,6 +32,8 @@ function Maintenance() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [userNames, setUserNames] = useState<Record<string, string>>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -51,6 +53,10 @@ function Maintenance() {
 
     return () => unsubscribe();
   }, [navigate]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, filterDate, maintenanceRequests.length, filteredMaintenance.length]);
 
   useEffect(() => {
     if (!user || !db) {
@@ -444,10 +450,18 @@ function Maintenance() {
                   <p className="text-base font-normal text-gray-600">No maintenance requests found.</p>
                 </div>
               ) : (
+                (() => {
+                  const displayed = (statusFilter !== 'all' || filterDate || searchQuery) ? filteredMaintenance : maintenanceRequests;
+                  const totalPages = Math.max(1, Math.ceil(displayed.length / ITEMS_PER_PAGE));
+                  const safePage = Math.min(currentPage, totalPages);
+                  const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
+                  const paginated = displayed.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+                  return (
                 <>
                   {/* Mobile Card View */}
                   <div className="md:hidden space-y-4">
-                    {(statusFilter !== 'all' || filterDate || searchQuery ? filteredMaintenance : maintenanceRequests).map((maintenance) => (
+                    {paginated.map((maintenance) => (
                       <div key={maintenance.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                         <div className="flex justify-between items-start mb-3">
                           <div className="flex-1">
@@ -521,7 +535,7 @@ function Maintenance() {
                         </tr>
                       </thead>
                       <tbody>
-                        {(statusFilter !== 'all' || filterDate || searchQuery ? filteredMaintenance : maintenanceRequests).map((maintenance) => (
+                    {paginated.map((maintenance) => (
                           <tr key={maintenance.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
                             <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">{formatDate(maintenance.createdAt)}</td>
                             <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-top">
@@ -574,7 +588,32 @@ function Maintenance() {
                       </tbody>
                     </table>
                   </div>
+                  {displayed.length > 0 && (
+                    <div className="flex items-center justify-between mt-4 gap-3">
+                      <span className="text-xs text-gray-600">
+                        Page {safePage} of {totalPages}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                          disabled={safePage === 1}
+                        >
+                          Previous
+                        </button>
+                        <button
+                          className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                          disabled={safePage === totalPages}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </>
+                  );
+                })()
               )}
             </div>
           </div>

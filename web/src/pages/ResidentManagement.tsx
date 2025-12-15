@@ -33,6 +33,9 @@ interface Resident {
   idFront?: string;
   idBack?: string;
   documents?: Record<string, string>;
+  waterBillingDate?: any;
+  electricBillingDate?: any;
+  billingProof?: string;
   location?: UserLocation;
   status?: 'pending' | 'approved' | 'rejected' | 'deactivated' | 'archived';
   createdAt?: any;
@@ -50,6 +53,8 @@ function ResidentManagement() {
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isApproving, setIsApproving] = useState(false); // Flag to prevent redirect during approval
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -222,6 +227,10 @@ function ResidentManagement() {
       fetchResidents();
     }
   }, [user, db, activeView, fetchResidents]);
+  
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, activeView, residents.length]);
   
   // Redirect to applications if on base route
   useEffect(() => {
@@ -619,6 +628,11 @@ function ResidentManagement() {
                   });
                 }
 
+                const totalPages = Math.max(1, Math.ceil(filteredResidents.length / ITEMS_PER_PAGE));
+                const safePage = Math.min(currentPage, totalPages);
+                const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
+                const paginatedResidents = filteredResidents.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
                 return (
                   <>
                     {loading && residents.length === 0 ? (
@@ -640,7 +654,7 @@ function ResidentManagement() {
                 <>
                   {/* Mobile Card View */}
                   <div className="md:hidden space-y-4">
-                    {filteredResidents.map((resident) => (
+                    {paginatedResidents.map((resident) => (
                       <div key={resident.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                         <div className="flex justify-between items-start mb-3">
                           <div className="flex-1">
@@ -733,7 +747,7 @@ function ResidentManagement() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredResidents.map((resident) => (
+                      {paginatedResidents.map((resident) => (
                         <tr key={resident.id} className="hover:bg-gray-50 last:border-b-0 border-b border-gray-100">
                           <td className="px-4 py-4 border-b border-gray-100 text-gray-600">{resident.fullName || 'N/A'}</td>
                           <td className="px-4 py-4 border-b border-gray-100 text-gray-600">
@@ -803,6 +817,29 @@ function ResidentManagement() {
                           </tbody>
                         </table>
                       </div>
+                      {filteredResidents.length > 0 && (
+                        <div className="flex items-center justify-between mt-4 gap-3">
+                          <span className="text-xs text-gray-600">
+                            Page {safePage} of {totalPages}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                              disabled={safePage === 1}
+                            >
+                              Previous
+                            </button>
+                            <button
+                              className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                              disabled={safePage === totalPages}
+                            >
+                              Next
+                            </button>
+                          </div>
+                        </div>
+                      )}
                 </>
                     )}
                   </>
@@ -927,6 +964,14 @@ function ResidentManagement() {
                     </div>
                   )}
                   <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Water Billing Date</label>
+                    <p className="text-gray-900">{formatDate(selectedResident.waterBillingDate)}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Electricity Billing Date</label>
+                    <p className="text-gray-900">{formatDate(selectedResident.electricBillingDate)}</p>
+                  </div>
+                  <div>
                     <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Created At</label>
                     <p className="text-gray-900">{formatDate(selectedResident.createdAt)}</p>
                   </div>
@@ -943,6 +988,13 @@ function ResidentManagement() {
                   <div className="mb-4">
                     <label className="text-xs text-gray-500 uppercase tracking-wide mb-2 block">ID Back</label>
                     <img src={selectedResident.idBack} alt="ID Back" className="max-w-full h-auto rounded border border-gray-200" />
+                  </div>
+                )}
+
+                {selectedResident.billingProof && (
+                  <div className="mb-4">
+                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-2 block">Billing Proof</label>
+                    <img src={selectedResident.billingProof} alt="Billing Proof" className="max-w-full h-auto rounded border border-gray-200" />
                   </div>
                 )}
 

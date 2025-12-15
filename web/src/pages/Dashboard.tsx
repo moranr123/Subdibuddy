@@ -51,6 +51,8 @@ function Dashboard() {
   const [selectedYear, setSelectedYear] = useState<string>('')
   const [availableYears, setAvailableYears] = useState<number[]>([])
   const [showReportModal, setShowReportModal] = useState(false)
+  const [reportPage, setReportPage] = useState(1)
+  const REPORT_ITEMS_PER_PAGE = 10
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -72,6 +74,10 @@ function Dashboard() {
 
     return () => unsubscribe()
   }, [navigate])
+
+  useEffect(() => {
+    setReportPage(1)
+  }, [showReportModal, stats])
 
   const fetchAnalytics = useCallback(async () => {
     if (!db) return;
@@ -475,76 +481,73 @@ function Dashboard() {
                       Generated on: {new Date().toLocaleString()}
                     </p>
                   </div>
-                  <div className="overflow-x-auto -mx-4 sm:mx-0">
-                    <table className="w-full border-collapse text-xs sm:text-sm min-w-[600px]">
-                      <thead>
-                        <tr className="bg-gray-50 border-b-2 border-gray-200">
-                          <th className="px-4 py-3 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Category</th>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Total</th>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Pending</th>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="hover:bg-gray-50 border-b border-gray-100">
-                          <td className="px-4 py-3 text-gray-700 font-medium">Total Residents</td>
-                          <td className="px-4 py-3 text-gray-900">{stats.totalUsers}</td>
-                          <td className="px-4 py-3 text-gray-600">-</td>
-                          <td className="px-4 py-3">
-                            <span className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">Active</span>
-                          </td>
-                        </tr>
-                        <tr className="hover:bg-gray-50 border-b border-gray-100">
-                          <td className="px-4 py-3 text-gray-700 font-medium">Total Billings</td>
-                          <td className="px-4 py-3 text-gray-900">{stats.totalBillings}</td>
-                          <td className="px-4 py-3 text-gray-900">{stats.pendingBillings}</td>
-                          <td className="px-4 py-3">
-                            <span className="px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                              {stats.pendingBillings > 0 ? 'Pending' : 'All Paid'}
-                            </span>
-                          </td>
-                        </tr>
-                        <tr className="hover:bg-gray-50 border-b border-gray-100">
-                          <td className="px-4 py-3 text-gray-700 font-medium">Complaints</td>
-                          <td className="px-4 py-3 text-gray-900">{stats.totalComplaints}</td>
-                          <td className="px-4 py-3 text-gray-900">{stats.pendingComplaints}</td>
-                          <td className="px-4 py-3">
-                            <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
-                              {stats.pendingComplaints > 0 ? 'Pending' : 'Resolved'}
-                            </span>
-                          </td>
-                        </tr>
-                        <tr className="hover:bg-gray-50 border-b border-gray-100">
-                          <td className="px-4 py-3 text-gray-700 font-medium">Visitors</td>
-                          <td className="px-4 py-3 text-gray-900">{stats.totalVisitors}</td>
-                          <td className="px-4 py-3 text-gray-900">{stats.pendingVisitors}</td>
-                          <td className="px-4 py-3">
-                            <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                              {stats.pendingVisitors > 0 ? 'Pending' : 'All Processed'}
-                            </span>
-                          </td>
-                        </tr>
-                        <tr className="hover:bg-gray-50 border-b border-gray-100">
-                          <td className="px-4 py-3 text-gray-700 font-medium">Registered Vehicles</td>
-                          <td className="px-4 py-3 text-gray-900">{stats.totalVehicles}</td>
-                          <td className="px-4 py-3 text-gray-600">-</td>
-                          <td className="px-4 py-3">
-                            <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">Approved</span>
-                          </td>
-                        </tr>
-                        <tr className="hover:bg-gray-50 border-b border-gray-100">
-                          <td className="px-4 py-3 text-gray-700 font-medium">Maintenance Requests</td>
-                          <td className="px-4 py-3 text-gray-900">{stats.totalMaintenance}</td>
-                          <td className="px-4 py-3 text-gray-900">{stats.pendingMaintenance}</td>
-                          <td className="px-4 py-3">
-                            <span className="px-2 py-1 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
-                              {stats.pendingMaintenance > 0 ? 'Pending' : 'All Processed'}
-                            </span>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+                {(() => {
+                  const reportRows = [
+                    { key: 'residents', label: 'Total Residents', total: stats.totalUsers, pending: '-', status: 'Active', badgeClass: 'bg-blue-100 text-blue-800' },
+                    { key: 'billings', label: 'Total Billings', total: stats.totalBillings, pending: stats.pendingBillings, status: stats.pendingBillings > 0 ? 'Pending' : 'All Paid', badgeClass: 'bg-yellow-100 text-yellow-800' },
+                    { key: 'complaints', label: 'Complaints', total: stats.totalComplaints, pending: stats.pendingComplaints, status: stats.pendingComplaints > 0 ? 'Pending' : 'Resolved', badgeClass: 'bg-red-100 text-red-800' },
+                    { key: 'visitors', label: 'Visitors', total: stats.totalVisitors, pending: stats.pendingVisitors, status: stats.pendingVisitors > 0 ? 'Pending' : 'All Processed', badgeClass: 'bg-purple-100 text-purple-800' },
+                    { key: 'vehicles', label: 'Registered Vehicles', total: stats.totalVehicles, pending: '-', status: 'Approved', badgeClass: 'bg-green-100 text-green-800' },
+                    { key: 'maintenance', label: 'Maintenance Requests', total: stats.totalMaintenance, pending: stats.pendingMaintenance, status: stats.pendingMaintenance > 0 ? 'Pending' : 'All Processed', badgeClass: 'bg-indigo-100 text-indigo-800' },
+                  ]
+
+                  const totalPages = Math.max(1, Math.ceil(reportRows.length / REPORT_ITEMS_PER_PAGE))
+                  const safePage = Math.min(reportPage, totalPages)
+                  const startIndex = (safePage - 1) * REPORT_ITEMS_PER_PAGE
+                  const paginatedRows = reportRows.slice(startIndex, startIndex + REPORT_ITEMS_PER_PAGE)
+
+                  return (
+                    <>
+                      <div className="overflow-x-auto -mx-4 sm:mx-0">
+                        <table className="w-full border-collapse text-xs sm:text-sm min-w-[600px]">
+                          <thead>
+                            <tr className="bg-gray-50 border-b-2 border-gray-200">
+                              <th className="px-4 py-3 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Category</th>
+                              <th className="px-4 py-3 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Total</th>
+                              <th className="px-4 py-3 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Pending</th>
+                              <th className="px-4 py-3 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginatedRows.map((row) => (
+                              <tr key={row.key} className="hover:bg-gray-50 border-b border-gray-100">
+                                <td className="px-4 py-3 text-gray-700 font-medium">{row.label}</td>
+                                <td className="px-4 py-3 text-gray-900">{row.total}</td>
+                                <td className="px-4 py-3 text-gray-900">{row.pending}</td>
+                                <td className="px-4 py-3">
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${row.badgeClass}`}>{row.status}</span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {reportRows.length > 0 && (
+                        <div className="flex items-center justify-between mt-4 gap-3">
+                          <span className="text-xs text-gray-600">
+                            Page {safePage} of {totalPages}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                              onClick={() => setReportPage((p) => Math.max(1, p - 1))}
+                              disabled={safePage === 1}
+                            >
+                              Previous
+                            </button>
+                            <button
+                              className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                              onClick={() => setReportPage((p) => Math.min(totalPages, p + 1))}
+                              disabled={safePage === totalPages}
+                            >
+                              Next
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
                   {selectedYear && residentGrowthData.length > 0 && (
                     <div className="mt-6">
                       <h4 className="text-sm font-semibold text-gray-900 mb-3">Resident Growth - {selectedYear}</h4>
