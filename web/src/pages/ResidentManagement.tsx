@@ -52,6 +52,10 @@ function ResidentManagement() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'approved' | 'deactivated' | 'archived'>('all');
+  const [residentTypeFilter, setResidentTypeFilter] = useState<'all' | 'homeowner' | 'tenant'>('all');
+  const [blockFilter, setBlockFilter] = useState('');
+  const [streetFilter, setStreetFilter] = useState('');
   const [isApproving, setIsApproving] = useState(false); // Flag to prevent redirect during approval
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
@@ -230,7 +234,15 @@ function ResidentManagement() {
   
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, activeView, residents.length]);
+  }, [
+    searchQuery,
+    statusFilter,
+    residentTypeFilter,
+    blockFilter,
+    streetFilter,
+    activeView,
+    residents.length,
+  ]);
   
   // Redirect to applications if on base route
   useEffect(() => {
@@ -597,23 +609,110 @@ function ResidentManagement() {
               </div>
 
               {activeView === 'registered' && (
-                <div className="mb-4 md:mb-6">
-                  <input
-                    type="text"
-                    placeholder="Search by name, email, or phone..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full px-3 md:px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                  />
+                <div className="mb-5 md:mb-6 space-y-4">
+                  <div className="flex flex-col md:flex-row gap-3 items-start md:items-center md:justify-end">
+                    <input
+                      type="text"
+                      placeholder="Search by name, email, or phone..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full md:w-[320px] px-3 md:px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                    />
+                    <button
+                      className="px-4 py-2 text-sm bg-gray-100 border border-gray-200 rounded-md hover:bg-gray-200"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setStatusFilter('all');
+                        setResidentTypeFilter('all');
+                        setBlockFilter('');
+                        setStreetFilter('');
+                      }}
+                    >
+                      Reset Filters
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3 md:flex md:flex-wrap md:items-end">
+                    <div className="flex flex-col gap-1 md:w-[180px]">
+                      <label className="text-xs text-gray-600">Status</label>
+                      <select
+                        className="border border-gray-300 rounded-md px-2 py-2 text-sm"
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value as any)}
+                      >
+                        <option value="all">All</option>
+                        <option value="approved">Approved</option>
+                        <option value="deactivated">Deactivated</option>
+                        <option value="archived">Archived</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1 md:w-[180px]">
+                      <label className="text-xs text-gray-600">Resident Type</label>
+                      <select
+                        className="border border-gray-300 rounded-md px-2 py-2 text-sm"
+                        value={residentTypeFilter}
+                        onChange={(e) => setResidentTypeFilter(e.target.value as any)}
+                      >
+                        <option value="all">All</option>
+                        <option value="homeowner">Homeowner</option>
+                        <option value="tenant">Tenant</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1 md:w-[180px]">
+                      <label className="text-xs text-gray-600">Block</label>
+                      <select
+                        className="border border-gray-300 rounded-md px-2 py-2 text-sm"
+                        value={blockFilter}
+                        onChange={(e) => setBlockFilter(e.target.value)}
+                      >
+                        <option value="">All</option>
+                        {Array.from(new Set(residents.map(r => r.address?.block).filter(Boolean))).map((block) => (
+                          <option key={block as string} value={block as string}>{block as string}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1 md:w-[180px]">
+                      <label className="text-xs text-gray-600">Street</label>
+                      <select
+                        className="border border-gray-300 rounded-md px-2 py-2 text-sm"
+                        value={streetFilter}
+                        onChange={(e) => setStreetFilter(e.target.value)}
+                      >
+                        <option value="">All</option>
+                        {Array.from(new Set(residents.map(r => r.address?.street).filter(Boolean))).map((street) => (
+                          <option key={street as string} value={street as string}>{street as string}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
               )}
 
               {(() => {
                 // Filter residents based on search query (only for registered view)
                 let filteredResidents = residents;
+
+                if (activeView === 'registered') {
+                  if (statusFilter !== 'all') {
+                    filteredResidents = filteredResidents.filter(r => r.status === statusFilter);
+                  }
+                  if (residentTypeFilter !== 'all') {
+                    if (residentTypeFilter === 'tenant') {
+                      filteredResidents = filteredResidents.filter(r => r.isTenant || r.residentType === 'tenant');
+                    } else {
+                      filteredResidents = filteredResidents.filter(r => !(r.isTenant || r.residentType === 'tenant'));
+                    }
+                  }
+                  if (blockFilter) {
+                    filteredResidents = filteredResidents.filter(r => (r.address?.block || '').toLowerCase() === blockFilter.toLowerCase());
+                  }
+                  if (streetFilter) {
+                    filteredResidents = filteredResidents.filter(r => (r.address?.street || '').toLowerCase() === streetFilter.toLowerCase());
+                  }
+                }
                 if (activeView === 'registered' && searchQuery.trim()) {
                   const query = searchQuery.toLowerCase().trim();
-                  filteredResidents = residents.filter(resident => {
+                  filteredResidents = filteredResidents.filter(resident => {
                     const fullName = (resident.fullName || '').toLowerCase();
                     const firstName = (resident.firstName || '').toLowerCase();
                     const lastName = (resident.lastName || '').toLowerCase();

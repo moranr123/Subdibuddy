@@ -56,6 +56,13 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
     }
   }, [navigate]);
 
+  const renderBadge = (count: number) =>
+    count > 0 ? (
+      <span className="bg-red-500 text-white text-xs font-semibold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+        {count > 9 ? '9+' : count}
+      </span>
+    ) : null;
+
   // Listen to pending and in-progress complaints
   useEffect(() => {
     if (!db) return;
@@ -270,11 +277,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                     <span className="font-normal text-sm flex-1">
                       {item.label}
                     </span>
-                    {pendingApplicationsCount > 0 && (
-                      <span className="bg-red-500 text-white text-xs font-semibold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
-                        {pendingApplicationsCount > 9 ? '9+' : pendingApplicationsCount}
-                      </span>
-                    )}
+                    {renderBadge(pendingApplicationsCount)}
                     <span className={`material-symbols-outlined text-sm transition-transform ${residentManagementOpen ? 'rotate-90' : ''}`}>chevron_right</span>
                   </button>
                   {residentManagementOpen && (
@@ -294,7 +297,8 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                         }}
                       >
                         <span className="material-symbols-outlined text-lg">description</span>
-                        <span className="text-xs">Applications</span>
+                        <span className="text-xs flex-1 text-left">Applications</span>
+                        {renderBadge(pendingApplicationsCount)}
                       </button>
                       <button
                         className={`flex items-center gap-3 px-4 py-2 w-full border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left ${
@@ -344,11 +348,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                     <span className="font-normal text-sm flex-1">
                       {item.label}
                     </span>
-                    {pendingVisitorsCount > 0 && (
-                      <span className="bg-red-500 text-white text-xs font-semibold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
-                        {pendingVisitorsCount > 9 ? '9+' : pendingVisitorsCount}
-                      </span>
-                    )}
+                    {renderBadge(pendingVisitorsCount)}
                     <span className={`material-symbols-outlined text-sm transition-transform ${visitorPreRegistrationOpen ? 'rotate-90' : ''}`}>chevron_right</span>
                   </button>
                   {visitorPreRegistrationOpen && (
@@ -368,7 +368,8 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                         }}
                       >
                         <span className="material-symbols-outlined text-lg">description</span>
-                        <span className="text-xs">Applications</span>
+                        <span className="text-xs flex-1 text-left">Applications</span>
+                        {renderBadge(pendingVisitorsCount)}
                       </button>
                       <button
                         className={`flex items-center gap-3 px-4 py-2 w-full border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left ${
@@ -418,11 +419,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                     <span className="font-normal text-sm flex-1">
                       {item.label}
                     </span>
-                    {pendingVehicleRegistrationsCount > 0 && (
-                      <span className="bg-red-500 text-white text-xs font-semibold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
-                        {pendingVehicleRegistrationsCount > 9 ? '9+' : pendingVehicleRegistrationsCount}
-                      </span>
-                    )}
+                    {renderBadge(pendingVehicleRegistrationsCount)}
                     <span className={`material-symbols-outlined text-sm transition-transform ${vehicleRegistrationOpen ? 'rotate-90' : ''}`}>chevron_right</span>
                   </button>
                   {vehicleRegistrationOpen && (
@@ -442,7 +439,8 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                         }}
                       >
                         <span className="material-symbols-outlined text-lg">description</span>
-                        <span className="text-xs">Applications</span>
+                        <span className="text-xs flex-1 text-left">Applications</span>
+                        {renderBadge(pendingVehicleRegistrationsCount)}
                       </button>
                       <button
                         className={`flex items-center gap-3 px-4 py-2 w-full border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left ${
