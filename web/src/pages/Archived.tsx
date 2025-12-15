@@ -1,7 +1,7 @@
 import { useEffect, useState, memo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs, query, orderBy, doc, setDoc, deleteDoc, getDoc, Timestamp, addDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, doc, setDoc, deleteDoc, getDoc, Timestamp, addDoc, where, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
@@ -42,6 +42,19 @@ type FilterType =
   | 'billings-payments' 
   | 'maintenance'
   | 'vehicle-registration'
+
+interface ArchivedBilling {
+  id: string;
+  residentEmail?: string;
+  billingCycle?: string;
+  amount?: number;
+  dueDate?: any;
+  billingType?: string;
+  status?: string;
+  userProofStatus?: string;
+  archivedAt?: any;
+  updatedAt?: any;
+}
 
 interface ArchivedComplaint {
   id: string;
@@ -101,10 +114,12 @@ function Archived() {
   const [archivedComplaints, setArchivedComplaints] = useState<ArchivedComplaint[]>([]);
   const [archivedVehicleRegistrations, setArchivedVehicleRegistrations] = useState<ArchivedVehicleRegistration[]>([]);
   const [archivedMaintenance, setArchivedMaintenance] = useState<ArchivedMaintenance[]>([]);
+  const [archivedBillings, setArchivedBillings] = useState<ArchivedBilling[]>([]);
   const [filteredArchivedComplaints, setFilteredArchivedComplaints] = useState<ArchivedComplaint[]>([]);
   const [filteredArchivedResidents, setFilteredArchivedResidents] = useState<Resident[]>([]);
   const [filteredArchivedVehicleRegistrations, setFilteredArchivedVehicleRegistrations] = useState<ArchivedVehicleRegistration[]>([]);
   const [filteredArchivedMaintenance, setFilteredArchivedMaintenance] = useState<ArchivedMaintenance[]>([]);
+  const [filteredArchivedBillings, setFilteredArchivedBillings] = useState<ArchivedBilling[]>([]);
   const [vehicleRegistrationUserNames, setVehicleRegistrationUserNames] = useState<Record<string, string>>({});
   const [complaintUserNames, setComplaintUserNames] = useState<Record<string, string>>({});
   const [maintenanceUserNames, setMaintenanceUserNames] = useState<Record<string, string>>({});
@@ -112,6 +127,7 @@ function Archived() {
   const [loadingComplaints, setLoadingComplaints] = useState(false);
   const [loadingVehicleRegistrations, setLoadingVehicleRegistrations] = useState(false);
   const [loadingMaintenance, setLoadingMaintenance] = useState(false);
+  const [loadingBillings, setLoadingBillings] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -195,6 +211,74 @@ function Archived() {
       alert(`Failed to load archived complaints: ${error.message || 'Unknown error'}`);
     } finally {
       setLoadingComplaints(false);
+    }
+  }, [db]);
+
+  const fetchArchivedBillings = useCallback(async () => {
+    if (!db) {
+      console.error('Firestore db is not initialized');
+      return;
+    }
+    
+    try {
+      setLoadingBillings(true);
+      console.log('Fetching archived billings from Firestore...');
+      
+      let querySnapshot;
+      try {
+        const q = query(collection(db, 'billings'), where('archived', '==', true), orderBy('updatedAt', 'desc'));
+        querySnapshot = await getDocs(q);
+      } catch (orderByError: any) {
+        console.warn('orderBy failed, trying without orderBy:', orderByError);
+        querySnapshot = await getDocs(query(collection(db, 'billings'), where('archived', '==', true)));
+      }
+      
+      const billingsData: ArchivedBilling[] = [];
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        billingsData.push({
+          id: docSnap.id,
+          ...data,
+        } as ArchivedBilling);
+      });
+      
+      billingsData.sort((a, b) => {
+        const aDate = a.updatedAt?.toDate ? a.updatedAt.toDate().getTime() : 0;
+        const bDate = b.updatedAt?.toDate ? b.updatedAt.toDate().getTime() : 0;
+        return bDate - aDate;
+      });
+      
+      console.log(`Fetched ${billingsData.length} archived billings`);
+      setArchivedBillings(billingsData);
+    } catch (error: any) {
+      console.error('Error fetching archived billings:', error);
+      alert(`Failed to load archived billings: ${error.message || 'Unknown error'}`);
+    } finally {
+      setLoadingBillings(false);
+    }
+  }, [db]);
+
+  const handleRestoreBilling = useCallback(async (billingId: string) => {
+    if (!db) return;
+
+    if (!window.confirm('Are you sure you want to restore this billing?')) {
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, 'billings', billingId), {
+        archived: false,
+        archivedAt: null,
+        updatedAt: Timestamp.now(),
+      });
+
+      setArchivedBillings(prev => prev.filter(b => b.id !== billingId));
+      setFilteredArchivedBillings(prev => prev.filter(b => b.id !== billingId));
+
+      alert('Billing restored successfully');
+    } catch (error: any) {
+      console.error('Error restoring billing:', error);
+      alert(`Failed to restore billing: ${error.message || 'Unknown error'}`);
     }
   }, [db]);
 
@@ -483,15 +567,18 @@ function Archived() {
         fetchArchivedVehicleRegistrations();
       } else if (activeFilter === 'maintenance') {
         fetchArchivedMaintenance();
+      } else if (activeFilter === 'billings-payments') {
+        fetchArchivedBillings();
       } else {
         // Clear data when switching to a different filter
       setArchivedResidents([]);
         setArchivedComplaints([]);
         setArchivedVehicleRegistrations([]);
         setArchivedMaintenance([]);
+        setArchivedBillings([]);
     }
     }
-  }, [user, activeFilter, db, fetchArchivedResidents, fetchArchivedComplaints, fetchArchivedVehicleRegistrations, fetchArchivedMaintenance]);
+  }, [user, activeFilter, db, fetchArchivedResidents, fetchArchivedComplaints, fetchArchivedVehicleRegistrations, fetchArchivedMaintenance, fetchArchivedBillings]);
 
   const handleRestore = useCallback(async (residentId: string) => {
     if (!db) return;
@@ -890,8 +977,29 @@ function Archived() {
       applyDateFilterVehicleRegistrations(archivedVehicleRegistrations);
     } else if (activeFilter === 'maintenance') {
       applyDateFilterMaintenance(archivedMaintenance);
+    } else if (activeFilter === 'billings-payments') {
+      // Simple filter: date filter checks updatedAt or archivedAt; search by email or billingCycle
+      const list = archivedBillings;
+      let filtered = list;
+      if (filterDate) {
+        filtered = filtered.filter((item) => {
+          const d = item.archivedAt || item.updatedAt;
+          if (!d) return false;
+          const dateStr = d.toDate ? d.toDate().toISOString().split('T')[0] : new Date(d).toISOString().split('T')[0];
+          return dateStr === filterDate;
+        });
+      }
+      if (searchQuery) {
+        const term = searchQuery.toLowerCase();
+        filtered = filtered.filter(
+          (b) =>
+            (b.residentEmail || '').toLowerCase().includes(term) ||
+            (b.billingCycle || '').toLowerCase().includes(term)
+        );
+      }
+      setFilteredArchivedBillings(filtered);
     }
-  }, [archivedComplaints, archivedResidents, archivedVehicleRegistrations, archivedMaintenance, filterDate, searchQuery, activeFilter, applyDateFilterComplaints, applyDateFilterResidents, applyDateFilterVehicleRegistrations, applyDateFilterMaintenance]);
+  }, [archivedComplaints, archivedResidents, archivedVehicleRegistrations, archivedMaintenance, archivedBillings, filterDate, searchQuery, activeFilter, applyDateFilterComplaints, applyDateFilterResidents, applyDateFilterVehicleRegistrations, applyDateFilterMaintenance]);
 
   const handleDateFilter = useCallback(() => {
     setShowDateFilter(!showDateFilter);
@@ -992,6 +1100,9 @@ function Archived() {
                       )}
                       {activeFilter === 'maintenance' && (
                         <>Showing {filteredArchivedMaintenance.length} of {archivedMaintenance.length} archived maintenance requests</>
+                      )}
+                      {activeFilter === 'billings-payments' && (
+                        <>Showing {filteredArchivedBillings.length} of {archivedBillings.length} archived billings</>
                       )}
                     </div>
                   )}
@@ -1545,7 +1656,7 @@ function Archived() {
                     )}
                   </>
                 )}
-                {activeFilter !== 'registered-residents' && activeFilter !== 'complaints' && activeFilter !== 'vehicle-registration' && activeFilter !== 'maintenance' && (
+                {activeFilter !== 'registered-residents' && activeFilter !== 'complaints' && activeFilter !== 'vehicle-registration' && activeFilter !== 'maintenance' && activeFilter !== 'billings-payments' && (
                   <div className="text-center py-20 px-5 text-gray-600">
                     <p className="text-base font-normal text-gray-600">
                       Archived {filters.find(f => f.id === activeFilter)?.label} items will appear here
@@ -1554,6 +1665,136 @@ function Archived() {
                       This feature is coming soon.
                     </p>
                   </div>
+                )}
+                {activeFilter === 'billings-payments' && (
+                  <>
+                    {loadingBillings && archivedBillings.length === 0 ? (
+                      <div className="text-center py-[60px] px-5 text-gray-600 text-sm">Loading archived billings...</div>
+                    ) : filteredArchivedBillings.length === 0 ? (
+                      <div className="text-center py-20 px-5 text-gray-600">
+                        <p className="text-base font-normal text-gray-600">
+                          No archived billings found.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Desktop table */}
+                        <div className="hidden md:block overflow-x-auto">
+                          <table className="w-full border-collapse text-sm">
+                            <thead>
+                              <tr className="bg-gray-50 border-b-2 border-gray-200">
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Resident</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Billing Cycle</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Type</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Amount</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Due Date</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Proof Status</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Archived At</th>
+                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredArchivedBillings.map((b) => (
+                                <tr key={b.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                  <td className="px-4 py-3 text-gray-700">{b.residentEmail || 'N/A'}</td>
+                                  <td className="px-4 py-3 text-gray-700">{b.billingCycle || 'N/A'}</td>
+                                  <td className="px-4 py-3 text-gray-700">
+                                    {b.billingType ? (b.billingType === 'water' ? 'Water' : 'Electricity') : '—'}
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-700">
+                                    {typeof b.amount === 'number'
+                                      ? new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(b.amount)
+                                      : 'N/A'}
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-700">{formatDate(b.dueDate)}</td>
+                                  <td className="px-4 py-3 text-gray-700">
+                                    <span
+                                      className={`px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide inline-block ${
+                                        b.userProofStatus === 'pending'
+                                          ? 'bg-yellow-100 text-yellow-800'
+                                          : b.userProofStatus === 'verified'
+                                          ? 'bg-green-100 text-green-800'
+                                          : b.userProofStatus === 'rejected'
+                                          ? 'bg-red-100 text-red-800'
+                                          : 'bg-gray-100 text-gray-700'
+                                      }`}
+                                    >
+                                      {(b.userProofStatus || 'None').toUpperCase()}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-700">
+                                    {formatDate(b.archivedAt || b.updatedAt)}
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-700">
+                                    <button
+                                      className="bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      onClick={() => handleRestoreBilling(b.id)}
+                                    >
+                                      Restore
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Mobile cards */}
+                        <div className="md:hidden space-y-4">
+                          {filteredArchivedBillings.map((b) => (
+                            <div key={b.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                              <div className="flex justify-between items-start mb-2">
+                                <div className="flex-1">
+                                  <h3 className="font-semibold text-gray-900 text-sm mb-1">
+                                    {b.billingCycle || 'Billing'}
+                                  </h3>
+                                  <p className="text-xs text-gray-500">
+                                    {formatDate(b.archivedAt || b.updatedAt)}
+                                  </p>
+                                </div>
+                                <span
+                                  className={`px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide inline-block ${
+                                    b.userProofStatus === 'pending'
+                                      ? 'bg-yellow-100 text-yellow-800'
+                                      : b.userProofStatus === 'verified'
+                                      ? 'bg-green-100 text-green-800'
+                                      : b.userProofStatus === 'rejected'
+                                      ? 'bg-red-100 text-red-800'
+                                      : 'bg-gray-100 text-gray-700'
+                                  }`}
+                                >
+                                  {(b.userProofStatus || 'None').toUpperCase()}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-700 mb-1">
+                                {b.residentEmail || 'N/A'}
+                              </p>
+                              <p className="text-sm text-gray-700 mb-1">
+                                Type: {b.billingType ? (b.billingType === 'water' ? 'Water' : 'Electricity') : '—'}
+                              </p>
+                              <p className="text-sm text-gray-700 mb-1">
+                                Amount:{' '}
+                                {typeof b.amount === 'number'
+                                  ? new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(b.amount)
+                                  : 'N/A'}
+                              </p>
+                              <p className="text-sm text-gray-700 mb-1">
+                                Due: {formatDate(b.dueDate)}
+                              </p>
+                              <div className="mt-2">
+                                <button
+                                  className="bg-green-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => handleRestoreBilling(b.id)}
+                                >
+                                  Restore
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </>
                 )}
               </div>
             </div>

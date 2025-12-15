@@ -30,6 +30,7 @@ function App() {
       <Route path="/billing-payment" element={<BillingPayment />} />
       <Route path="/billing-payment/water" element={<BillingPayment />} />
       <Route path="/billing-payment/electricity" element={<BillingPayment />} />
+      <Route path="/billing-payment/proofs" element={<BillingPayment />} />
       <Route path="/maintenance" element={<Maintenance />} />
       <Route path="/vehicle-registration" element={<VehicleRegistration />} />
       <Route path="/vehicle-registration/applications" element={<VehicleRegistration />} />

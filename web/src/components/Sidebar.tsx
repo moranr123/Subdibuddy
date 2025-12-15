@@ -38,6 +38,9 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [pendingMaintenanceCount, setPendingMaintenanceCount] = useState(0);
   const [pendingApplicationsCount, setPendingApplicationsCount] = useState(0);
   const [pendingVisitorsCount, setPendingVisitorsCount] = useState(0);
+  const [pendingProofsCount, setPendingProofsCount] = useState(0);
+  const [pendingWaterBillingsCount, setPendingWaterBillingsCount] = useState(0);
+  const [pendingElectricBillingsCount, setPendingElectricBillingsCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -223,6 +226,148 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
     };
   }, [db]);
 
+  // Listen to pending billing proofs of payment
+  useEffect(() => {
+    if (!db) return;
+
+    let unsubscribe: (() => void) | null = null;
+
+    const q = query(
+      collection(db, 'billings'),
+      where('userProofStatus', '==', 'pending')
+    );
+
+    unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        setPendingProofsCount(snapshot.size);
+      },
+      (error: any) => {
+        console.error('Error listening to pending billing proofs:', error);
+        // Fallback: fetch all and filter client-side if needed
+        if (error.code === 'failed-precondition' || error.message?.includes('index')) {
+          const q2 = query(collection(db, 'billings'));
+          unsubscribe = onSnapshot(q2, (snapshot2) => {
+            let count = 0;
+            snapshot2.forEach((doc) => {
+              const data = doc.data();
+              if (data.userProofStatus === 'pending') {
+                count++;
+              }
+            });
+            setPendingProofsCount(count);
+          });
+        }
+      }
+    );
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [db]);
+
+  // Listen to residents with due water billing date (waterBillingDate <= today)
+  useEffect(() => {
+    if (!db) return;
+
+    let unsubscribe: (() => void) | null = null;
+
+    try {
+      const usersRef = collection(db, 'users');
+      unsubscribe = onSnapshot(
+        usersRef,
+        (snapshot) => {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          let count = 0;
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as any;
+            // Skip superadmin accounts
+            if (data.role === 'superadmin') return;
+            const raw = data.waterBillingDate;
+            if (!raw) return;
+            let date: Date | null = null;
+            try {
+              if (raw?.toDate && typeof raw.toDate === 'function') {
+                date = raw.toDate();
+              } else {
+                date = new Date(raw);
+              }
+            } catch {
+              date = null;
+            }
+            if (!date || Number.isNaN(date.getTime())) return;
+            date.setHours(0, 0, 0, 0);
+            if (date <= today) {
+              count++;
+            }
+          });
+          setPendingWaterBillingsCount(count);
+        },
+        (error: any) => {
+          console.error('Error listening to users for water billing dates:', error);
+        }
+      );
+    } catch (err) {
+      console.error('Error setting up water billing date listener:', err);
+    }
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [db]);
+
+  // Listen to residents with due electricity billing date (electricBillingDate <= today)
+  useEffect(() => {
+    if (!db) return;
+
+    let unsubscribe: (() => void) | null = null;
+
+    try {
+      const usersRef = collection(db, 'users');
+      unsubscribe = onSnapshot(
+        usersRef,
+        (snapshot) => {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          let count = 0;
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as any;
+            // Skip superadmin accounts
+            if (data.role === 'superadmin') return;
+            const raw = data.electricBillingDate;
+            if (!raw) return;
+            let date: Date | null = null;
+            try {
+              if (raw?.toDate && typeof raw.toDate === 'function') {
+                date = raw.toDate();
+              } else {
+                date = new Date(raw);
+              }
+            } catch {
+              date = null;
+            }
+            if (!date || Number.isNaN(date.getTime())) return;
+            date.setHours(0, 0, 0, 0);
+            if (date <= today) {
+              count++;
+            }
+          });
+          setPendingElectricBillingsCount(count);
+        },
+        (error: any) => {
+          console.error('Error listening to users for electricity billing dates:', error);
+        }
+      );
+    } catch (err) {
+      console.error('Error setting up electricity billing date listener:', err);
+    }
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [db]);
+
   return (
     <>
       {/* Overlay for mobile */}
@@ -258,12 +403,6 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <div 
                   key={item.path} 
                   className="relative"
-                  onMouseEnter={() => {
-                    setResidentManagementOpen(true);
-                  }}
-                  onMouseLeave={() => {
-                    setResidentManagementOpen(false);
-                  }}
                 >
                   <button
                     className={`flex items-center gap-3 px-4 py-2.5 mx-2 border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
@@ -271,6 +410,9 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                         ? 'bg-[#1877F2] text-white font-semibold'
                         : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                     }`}
+                    onClick={() => {
+                      setResidentManagementOpen(prev => !prev);
+                    }}
                   >
                     <span className="material-symbols-outlined text-xl">
                       {item.icon}
@@ -329,12 +471,6 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <div 
                   key={item.path} 
                   className="relative"
-                  onMouseEnter={() => {
-                    setVisitorPreRegistrationOpen(true);
-                  }}
-                  onMouseLeave={() => {
-                    setVisitorPreRegistrationOpen(false);
-                  }}
                 >
                   <button
                     className={`flex items-center gap-3 px-4 py-2.5 mx-2 border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
@@ -342,6 +478,9 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                         ? 'bg-[#1877F2] text-white font-semibold'
                         : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                     }`}
+                    onClick={() => {
+                      setVisitorPreRegistrationOpen(prev => !prev);
+                    }}
                   >
                     <span className="material-symbols-outlined text-xl">
                       {item.icon}
@@ -400,12 +539,6 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <div 
                   key={item.path} 
                   className="relative"
-                  onMouseEnter={() => {
-                    setVehicleRegistrationOpen(true);
-                  }}
-                  onMouseLeave={() => {
-                    setVehicleRegistrationOpen(false);
-                  }}
                 >
                   <button
                     className={`flex items-center gap-3 px-4 py-2.5 mx-2 border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
@@ -413,6 +546,9 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                         ? 'bg-[#1877F2] text-white font-semibold'
                         : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                     }`}
+                    onClick={() => {
+                      setVehicleRegistrationOpen(prev => !prev);
+                    }}
                   >
                     <span className="material-symbols-outlined text-xl">
                       {item.icon}
@@ -467,16 +603,12 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
             }
             if (item.path === '/billing-payment') {
               const isActive = location.pathname.startsWith('/billing-payment');
+              const billingParentBadgeCount =
+                pendingProofsCount + pendingWaterBillingsCount + pendingElectricBillingsCount;
               return (
                 <div
                   key={item.path}
                   className="relative"
-                  onMouseEnter={() => {
-                    setBillingOpen(true);
-                  }}
-                  onMouseLeave={() => {
-                    setBillingOpen(false);
-                  }}
                 >
                   <button
                     className={`flex items-center gap-3 px-4 py-2.5 mx-2 border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left whitespace-nowrap w-auto relative ${
@@ -484,6 +616,9 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                         ? 'bg-[#1877F2] text-white font-semibold'
                         : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
                     }`}
+                    onClick={() => {
+                      setBillingOpen(prev => !prev);
+                    }}
                   >
                     <span className="material-symbols-outlined text-xl">
                       {item.icon}
@@ -491,6 +626,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                     <span className="font-normal text-sm flex-1">
                       {item.label}
                     </span>
+                    {renderBadge(billingParentBadgeCount)}
                     <span className={`material-symbols-outlined text-sm transition-transform ${billingOpen ? 'rotate-90' : ''}`}>chevron_right</span>
                   </button>
                   {billingOpen && (
@@ -511,6 +647,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                       >
                         <span className="material-symbols-outlined text-lg">water_drop</span>
                         <span className="text-xs flex-1 text-left">Water</span>
+                        {renderBadge(pendingWaterBillingsCount)}
                       </button>
                       <button
                         className={`flex items-center gap-3 px-4 py-2 w-full border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left ${
@@ -528,6 +665,25 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                       >
                         <span className="material-symbols-outlined text-lg">bolt</span>
                         <span className="text-xs flex-1 text-left">Electricity</span>
+                        {renderBadge(pendingElectricBillingsCount)}
+                      </button>
+                      <button
+                        className={`flex items-center gap-3 px-4 py-2 w-full border-none rounded-md cursor-pointer transition-all duration-200 text-sm text-left ${
+                          location.pathname === '/billing-payment/proofs'
+                            ? 'bg-[#1877F2] text-white font-semibold'
+                            : 'bg-transparent hover:bg-gray-100 hover:text-[#1877F2] text-gray-600'
+                        }`}
+                        onClick={() => {
+                          handleNavigation('/billing-payment/proofs');
+                          setBillingOpen(false);
+                          if (window.innerWidth < 1024) {
+                            onClose();
+                          }
+                        }}
+                      >
+                        <span className="material-symbols-outlined text-lg">receipt_long</span>
+                        <span className="text-xs flex-1 text-left">Proof of Payments</span>
+                        {renderBadge(pendingProofsCount)}
                       </button>
                     </div>
                   )}
