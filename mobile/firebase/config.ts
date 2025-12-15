@@ -8,13 +8,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyAcWeoaUkuWyODs2dLwP9wblhGm7uBg6HA",
-  authDomain: "subsibuddy-88108.firebaseapp.com",
-  projectId: "subsibuddy-88108",
-  storageBucket: "subsibuddy-88108.firebasestorage.app",
-  messagingSenderId: "9632330814",
-  appId: "1:9632330814:web:a40032aa07f294eb0dcd6f",
-  measurementId: "G-YTVMYLV5J2"
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "AIzaSyAcWeoaUkuWyODs2dLwP9wblhGm7uBg6HA",
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "subsibuddy-88108.firebaseapp.com",
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "subsibuddy-88108",
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "subsibuddy-88108.firebasestorage.app",
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "9632330814",
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || "1:9632330814:web:a40032aa07f294eb0dcd6f",
+  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID || "G-YTVMYLV5J2"
 };
 
 let app: FirebaseApp | undefined;

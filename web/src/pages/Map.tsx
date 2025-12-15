@@ -61,8 +61,9 @@ function Map() {
     }
 
     // Load Google Maps script with Places library for autocomplete
+    const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyByXb-FgYHiNhVIsK00kM1jdXYr_OerV7Q";
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyByXb-FgYHiNhVIsK00kM1jdXYr_OerV7Q&libraries=places`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places`;
     script.async = true;
     script.defer = true;
     

@@ -68,6 +68,7 @@ function Dashboard() {
   const [allTenantsCount, setAllTenantsCount] = useState(0)
   const [allHomeownersCount, setAllHomeownersCount] = useState(0)
   const [tenantsByYear, setTenantsByYear] = useState<Map<number, { tenants: number; homeowners: number }>>(new Map())
+  const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; data: ResidentGrowthData } | null>(null)
   const [showReportModal, setShowReportModal] = useState(false)
   const [reportPage, setReportPage] = useState(1)
   const REPORT_ITEMS_PER_PAGE = 10
@@ -543,13 +544,62 @@ function Dashboard() {
                           key={i}
                           cx={x}
                           cy={y}
-                          r="4"
+                          r="6"
                           fill="#1877F2"
                           stroke="white"
                           strokeWidth="2"
+                          style={{ cursor: 'pointer' }}
+                          onMouseEnter={() => {
+                            setHoveredPoint({
+                              x: x,
+                              y: y,
+                              data: d
+                            });
+                          }}
+                          onMouseLeave={() => setHoveredPoint(null)}
                         />
                       );
                     })}
+                    
+                    {/* Tooltip */}
+                    {hoveredPoint && (
+                      <g>
+                        {/* Tooltip background */}
+                        <rect
+                          x={hoveredPoint.x - 60}
+                          y={hoveredPoint.y - 50}
+                          width="120"
+                          height="40"
+                          rx="4"
+                          fill="rgba(0, 0, 0, 0.8)"
+                        />
+                        {/* Tooltip text */}
+                        <text
+                          x={hoveredPoint.x}
+                          y={hoveredPoint.y - 35}
+                          textAnchor="middle"
+                          fill="#ffffff"
+                          fontSize="11"
+                          fontWeight="600"
+                        >
+                          {hoveredPoint.data.date}
+                        </text>
+                        <text
+                          x={hoveredPoint.x}
+                          y={hoveredPoint.y - 20}
+                          textAnchor="middle"
+                          fill="#ffffff"
+                          fontSize="10"
+                        >
+                          Residents: {hoveredPoint.data.count}
+                        </text>
+                        {/* Tooltip pointer */}
+                        <polygon
+                          points={`${hoveredPoint.x - 6},${hoveredPoint.y - 10} ${hoveredPoint.x + 6},${hoveredPoint.y - 10} ${hoveredPoint.x},${hoveredPoint.y - 4}`}
+                          fill="rgba(0, 0, 0, 0.8)"
+                        />
+                      </g>
+                    )}
                     
                     {/* X-axis labels (show all 12 months) */}
                     {residentGrowthData.length > 0 && residentGrowthData.map((d, idx) => {

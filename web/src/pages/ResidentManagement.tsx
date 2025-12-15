@@ -347,13 +347,13 @@ function ResidentManagement() {
       } catch (e) {
         // App doesn't exist, create it with the same config as the main app
         const firebaseConfig = {
-          apiKey: "AIzaSyAcWeoaUkuWyODs2dLwP9wblhGm7uBg6HA",
-          authDomain: "subsibuddy-88108.firebaseapp.com",
-          projectId: "subsibuddy-88108",
-          storageBucket: "subsibuddy-88108.firebasestorage.app",
-          messagingSenderId: "9632330814",
-          appId: "1:9632330814:web:a40032aa07f294eb0dcd6f",
-          measurementId: "G-YTVMYLV5J2"
+          apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyAcWeoaUkuWyODs2dLwP9wblhGm7uBg6HA",
+          authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "subsibuddy-88108.firebaseapp.com",
+          projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "subsibuddy-88108",
+          storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "subsibuddy-88108.firebasestorage.app",
+          messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "9632330814",
+          appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:9632330814:web:a40032aa07f294eb0dcd6f",
+          measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-YTVMYLV5J2"
         };
         separateApp = initializeApp(firebaseConfig, separateAppName);
       }

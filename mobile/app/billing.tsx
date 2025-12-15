@@ -50,6 +50,7 @@ export default function Billing() {
   const [proofImage, setProofImage] = useState<string | null>(null);
   const [viewProofModalVisible, setViewProofModalVisible] = useState(false);
   const [viewProofBilling, setViewProofBilling] = useState<Billing | null>(null);
+  const [submittingProof, setSubmittingProof] = useState(false);
 
   const toggleSidebar = () => {
     const toValue = sidebarOpen ? -Dimensions.get('window').width : 0;
@@ -285,6 +286,7 @@ export default function Billing() {
       Alert.alert('Proof required', 'Please attach an image of your payment proof.');
       return;
     }
+    setSubmittingProof(true);
     try {
       // Upload image to Firebase Storage first
       let downloadUrl: string | null = null;
@@ -335,8 +337,10 @@ export default function Billing() {
     } catch (error) {
       console.error('Error submitting proof of payment:', error);
       Alert.alert('Error', 'Failed to submit proof. Please try again.');
+    } finally {
+      setSubmittingProof(false);
     }
-  }, [db, selectedBilling, proofImage]);
+  }, [db, selectedBilling, proofImage, user]);
 
   const openViewProofModal = useCallback((billing: Billing) => {
     setViewProofBilling(billing);
@@ -537,10 +541,18 @@ export default function Billing() {
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalButton, styles.modalSubmit]}
+                style={[styles.modalButton, styles.modalSubmit, submittingProof && styles.modalButtonDisabled]}
                 onPress={handleSubmitProof}
+                disabled={submittingProof}
               >
-                <Text style={styles.modalSubmitText}>Submit Proof</Text>
+                {submittingProof ? (
+                  <View style={styles.submitButtonContent}>
+                    <ActivityIndicator size="small" color="#ffffff" />
+                    <Text style={styles.modalSubmitText}>Submitting...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.modalSubmitText}>Submit Proof</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -802,6 +814,14 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 13,
     fontWeight: '600',
+  },
+  modalButtonDisabled: {
+    opacity: 0.6,
+  },
+  submitButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   proofActionsRow: {
     flexDirection: 'row',
