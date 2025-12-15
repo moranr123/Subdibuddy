@@ -1,11 +1,12 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Modal, Dimensions, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { doc, setDoc, Timestamp } from 'firebase/firestore';
+import { doc, setDoc, Timestamp, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -122,6 +123,34 @@ export default function Signup() {
   const handleBillingDatePickerConfirm = useCallback(() => {
     handleBillingDateChange(tempBillingDate);
   }, [tempBillingDate, handleBillingDateChange]);
+
+  // Fetch device location when map opens
+  useEffect(() => {
+    const fetchLocation = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          console.warn('Location permission not granted');
+          return;
+        }
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        if (position?.coords) {
+          setLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+        }
+      } catch (err) {
+        console.warn('Failed to fetch location', err);
+      }
+    };
+
+    if (showMapModal) {
+      fetchLocation();
+    }
+  }, [showMapModal]);
 
   const getDaysInMonth = useCallback((year: number, month: number) => {
     return new Date(year, month + 1, 0).getDate();
@@ -320,6 +349,24 @@ export default function Signup() {
             margin-top: 2px;
           }
           #map { width: 100%; height: 100vh; }
+          #confirmButton {
+            position: absolute;
+            bottom: 72px;
+            left: 10px;
+            right: 10px;
+            padding: 14px;
+            background: #111827;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+          }
+          #confirmButton:active {
+            background: #0f172a;
+          }
         </style>
       </head>
       <body>
@@ -336,6 +383,7 @@ export default function Signup() {
           <div id="suggestionsContainer"></div>
         </div>
         <div id="map"></div>
+        <button id="confirmButton">Confirm Location</button>
         <script>
           let map;
           let marker = null;
@@ -345,6 +393,8 @@ export default function Signup() {
           let searchInput = null;
           let searchTimeout = null;
           
+          let currentLatLng = { lat: ${mapCenter.lat}, lng: ${mapCenter.lng} };
+
           function initMap() {
             // Try to get saved center and zoom from localStorage (admin map settings)
             let center = { lat: ${mapCenter.lat}, lng: ${mapCenter.lng} };
@@ -389,9 +439,11 @@ export default function Signup() {
               },
             });
             ` : ''}
+            ${currentLocation ? `currentLatLng = { lat: ${currentLocation.latitude}, lng: ${currentLocation.longitude} };` : ''}
 
             // Search functionality with autocomplete
             const searchButton = document.getElementById('searchButton');
+            const confirmButton = document.getElementById('confirmButton');
             
             function showSuggestions(suggestions) {
               suggestionsContainer.innerHTML = '';
@@ -450,6 +502,8 @@ export default function Signup() {
                       },
                     });
                     
+                    currentLatLng = { lat, lng };
+
                     // Send location to React Native
                     if (window.ReactNativeWebView) {
                       window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -498,6 +552,8 @@ export default function Signup() {
                       },
                     });
                     
+                    currentLatLng = { lat, lng };
+
                     // Send location to React Native
                     if (window.ReactNativeWebView) {
                       window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -579,6 +635,8 @@ export default function Signup() {
                 },
               });
               
+              currentLatLng = { lat, lng };
+
               // Send location to React Native
               if (window.ReactNativeWebView) {
                 window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -594,6 +652,7 @@ export default function Signup() {
               marker.addListener('dragend', (e) => {
                 const lat = e.latLng.lat();
                 const lng = e.latLng.lng();
+                currentLatLng = { lat, lng };
                 if (window.ReactNativeWebView) {
                   window.ReactNativeWebView.postMessage(JSON.stringify({
                     type: 'locationPinned',
@@ -603,6 +662,20 @@ export default function Signup() {
                 }
               });
             }
+
+            confirmButton.addEventListener('click', () => {
+              const position = marker ? marker.getPosition() : map.getCenter();
+              const lat = typeof position.lat === 'function' ? position.lat() : position.lat;
+              const lng = typeof position.lng === 'function' ? position.lng() : position.lng;
+              currentLatLng = { lat, lng };
+              if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: 'confirmLocation',
+                  latitude: lat,
+                  longitude: lng,
+                }));
+              }
+            });
           }
         </script>
         <script async defer
@@ -913,6 +986,10 @@ export default function Signup() {
           newErrors.billingProof = 'Please upload a billing proof image';
           isValid = false;
         }
+        if (!documentImages['deedOfSale']) {
+          newErrors.deedOfSale = 'Please upload the Deed of Sale image';
+          isValid = false;
+        }
         if (!idImages.front) {
           newErrors.idFront = 'Please upload the front of your valid ID';
           isValid = false;
@@ -936,15 +1013,84 @@ export default function Signup() {
 
     setErrors(newErrors);
     return isValid;
-  }, [emailOrPhone, isEmail, password, confirmPassword, firstName, middleName, lastName, birthdate, sex, block, lot, street, location, residentType, tenantRelation, waterBillingDate, electricBillingDate, billingProofImage, idImages, acceptedTerms, calculateAge]);
+  }, [
+    emailOrPhone,
+    isEmail,
+    password,
+    confirmPassword,
+    firstName,
+    middleName,
+    lastName,
+    birthdate,
+    sex,
+    block,
+    lot,
+    street,
+    location,
+    residentType,
+    tenantRelation,
+    waterBillingDate,
+    electricBillingDate,
+    billingProofImage,
+    idImages,
+    documentImages,
+    acceptedTerms,
+    calculateAge,
+  ]);
 
-  const handleNext = useCallback(() => {
-    if (validateStep(currentStep)) {
-      // Clear errors when moving to next step
-      setErrors({});
-      nextStep();
+  const handleNext = useCallback(async () => {
+    if (!validateStep(currentStep)) {
+      return;
     }
-  }, [currentStep, validateStep, nextStep]);
+
+    // Extra duplicate check on step 1 for email/phone
+    if (currentStep === 1 && db) {
+      try {
+        const value = emailOrPhone.trim();
+        if (value) {
+          if (isEmail) {
+            const usersQ = query(
+              collection(db, 'users'),
+              where('email', '==', value),
+              limit(1)
+            );
+            const pendingQ = query(
+              collection(db, 'pendingUsers'),
+              where('email', '==', value),
+              limit(1)
+            );
+            const [usersSnap, pendingSnap] = await Promise.all([getDocs(usersQ), getDocs(pendingQ)]);
+            if (!usersSnap.empty || !pendingSnap.empty) {
+              setError('emailOrPhone', 'This email is already registered. Please sign in instead.');
+              return;
+            }
+          } else {
+            const usersQ = query(
+              collection(db, 'users'),
+              where('phone', '==', value),
+              limit(1)
+            );
+            const pendingQ = query(
+              collection(db, 'pendingUsers'),
+              where('phone', '==', value),
+              limit(1)
+            );
+            const [usersSnap, pendingSnap] = await Promise.all([getDocs(usersQ), getDocs(pendingQ)]);
+            if (!usersSnap.empty || !pendingSnap.empty) {
+              setError('emailOrPhone', 'This phone number is already registered. Please sign in instead.');
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Duplicate email/phone check failed', err);
+      }
+    }
+
+    // Clear errors when moving to next step
+    setErrors({});
+    nextStep();
+  }, [currentStep, db, emailOrPhone, isEmail, validateStep, nextStep, setError]);
 
   const handlePrev = useCallback(() => {
     // Clear errors when going back
@@ -1042,14 +1188,13 @@ export default function Signup() {
         }
       }
 
-      // Upload documents
-      for (const [key, uri] of Object.entries(documentImages)) {
-        if (uri) {
-          const docURL = await uploadImageToStorage(uri, `pendingUsers/${pendingUserId}/documents/${key}.jpg`);
-          if (docURL) {
-            documentURLs[key] = docURL;
-          }
+      // Upload deed of sale
+      if (documentImages['deedOfSale']) {
+        const docURL = await uploadImageToStorage(documentImages['deedOfSale'], `pendingUsers/${pendingUserId}/documents/deedOfSale.jpg`);
+        if (!docURL) {
+          throw new Error('Failed to upload Deed of Sale image');
         }
+        documentURLs['deedOfSale'] = docURL;
       }
       
       // Save to pendingUsers collection WITHOUT creating Firebase Auth account
@@ -1132,9 +1277,9 @@ export default function Signup() {
             <Text style={styles.stepSubtitle}>Step 1 of {TOTAL_STEPS}</Text>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Email or Phone Number *</Text>
+              <Text style={styles.label}>Email or Phone Number</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, errors.emailOrPhone && styles.inputError]}
                 placeholder={isEmail ? "your.email@example.com" : "09XX XXX XXXX"}
                 value={emailOrPhone}
                 onChangeText={handleEmailOrPhoneChange}
@@ -1144,6 +1289,9 @@ export default function Signup() {
                 placeholderTextColor="#999"
                 editable={!loading}
               />
+              {errors.emailOrPhone && (
+                <Text style={styles.errorText}>{errors.emailOrPhone}</Text>
+              )}
               <TouchableOpacity
                 style={styles.switchButton}
                 onPress={() => setIsEmail(!isEmail)}
@@ -1156,7 +1304,7 @@ export default function Signup() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Password *</Text>
+              <Text style={styles.label}>Password</Text>
               <View style={styles.passwordContainer}>
                 <TextInput
                   style={[styles.passwordInput, errors.password && styles.inputError]}
@@ -1187,7 +1335,7 @@ export default function Signup() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Confirm Password *</Text>
+              <Text style={styles.label}>Confirm Password</Text>
               <View style={styles.passwordContainer}>
                 <TextInput
                   style={[styles.passwordInput, errors.confirmPassword && styles.inputError]}
@@ -1243,7 +1391,7 @@ export default function Signup() {
             <Text style={styles.stepSubtitle}>Step 2 of {TOTAL_STEPS}</Text>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>First Name *</Text>
+              <Text style={styles.label}>First Name</Text>
               <TextInput
                 style={[styles.input, errors.firstName && styles.inputError]}
                 placeholder="Enter your first name"
@@ -1281,7 +1429,7 @@ export default function Signup() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Last Name *</Text>
+              <Text style={styles.label}>Last Name</Text>
               <TextInput
                 style={[styles.input, errors.lastName && styles.inputError]}
                 placeholder="Enter your last name"
@@ -1300,7 +1448,7 @@ export default function Signup() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Birthdate *</Text>
+              <Text style={styles.label}>Birthdate</Text>
               <TouchableOpacity
                 style={[styles.datePickerButton, errors.birthdate && styles.inputError]}
                 onPress={() => {
@@ -1322,7 +1470,7 @@ export default function Signup() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Sex *</Text>
+              <Text style={styles.label}>Sex</Text>
               <TouchableOpacity
                 style={[styles.pickerButton, errors.sex && styles.inputError]}
                 onPress={() => {
@@ -1368,7 +1516,7 @@ export default function Signup() {
             <Text style={styles.stepSubtitle}>Step 3 of {TOTAL_STEPS}</Text>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Block *</Text>
+              <Text style={styles.label}>Block</Text>
               <TouchableOpacity
                 style={[styles.pickerButton, errors.block && styles.inputError]}
                 onPress={() => {
@@ -1388,7 +1536,7 @@ export default function Signup() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Lot *</Text>
+              <Text style={styles.label}>Lot</Text>
               <TouchableOpacity
                 style={[styles.pickerButton, errors.lot && styles.inputError]}
                 onPress={() => {
@@ -1408,7 +1556,7 @@ export default function Signup() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Street *</Text>
+              <Text style={styles.label}>Street</Text>
               <TouchableOpacity
                 style={[styles.pickerButton, errors.street && styles.inputError]}
                 onPress={() => {
@@ -1428,7 +1576,7 @@ export default function Signup() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Pin Your Location on Map *</Text>
+              <Text style={styles.label}>Pin Your Location on Map</Text>
               <Text style={styles.subLabel}>Tap on the map to mark your exact location</Text>
               <TouchableOpacity
                 style={[styles.mapButton, errors.location && styles.inputError]}
@@ -1476,11 +1624,11 @@ export default function Signup() {
       case 4:
         return (
           <View style={styles.stepContent}>
-            <Text style={styles.stepTitle}>Resident Type & ID Verification</Text>
+            <Text style={styles.stepTitle}>Resident Type & Documents</Text>
             <Text style={styles.stepSubtitle}>Step 4 of {TOTAL_STEPS}</Text>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>I am a *</Text>
+              <Text style={styles.label}>I am a</Text>
               <View style={styles.radioGroup}>
                 <TouchableOpacity
                   style={styles.radioContainer}
@@ -1537,7 +1685,7 @@ export default function Signup() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Billing Dates *</Text>
+              <Text style={styles.label}>Billing Dates</Text>
               <Text style={styles.subLabel}>Provide separate billing dates for each utility</Text>
 
               <Text style={styles.subLabel}>Water</Text>
@@ -1580,7 +1728,7 @@ export default function Signup() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Billing Proof *</Text>
+              <Text style={styles.label}>Billing Proof</Text>
               <Text style={styles.subLabel}>Upload a recent water or electric bill to verify dates</Text>
               {billingProofImage ? (
                 <View style={styles.documentImageContainer}>
@@ -1613,12 +1761,12 @@ export default function Signup() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Valid ID *</Text>
+              <Text style={styles.label}>Valid ID</Text>
               <Text style={styles.subLabel}>Upload front and back of your valid ID</Text>
               
               <View style={styles.idContainer}>
                 <View style={styles.idItem}>
-                  <Text style={styles.idLabel}>Front {errors.idFront && <Text style={styles.errorText}>*</Text>}</Text>
+                  <Text style={styles.idLabel}>Front</Text>
                   {idImages.front ? (
                     <Image source={{ uri: idImages.front }} style={styles.idImage} />
                   ) : (
@@ -1639,7 +1787,7 @@ export default function Signup() {
                 </View>
 
                 <View style={styles.idItem}>
-                  <Text style={styles.idLabel}>Back {errors.idBack && <Text style={styles.errorText}>*</Text>}</Text>
+                  <Text style={styles.idLabel}>Back</Text>
                   {idImages.back ? (
                     <Image source={{ uri: idImages.back }} style={styles.idImage} />
                   ) : (
@@ -1662,46 +1810,44 @@ export default function Signup() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Documents (Optional)</Text>
-              <Text style={styles.subLabel}>Upload any additional documents</Text>
+              <Text style={styles.label}>Deed of Sale</Text>
+              <Text style={styles.subLabel}>Upload a photo of the Deed of Sale</Text>
               
               <View style={styles.documentsContainer}>
-                {['Document 1', 'Document 2', 'Document 3'].map((docName, index) => {
-                  const docKey = `doc${index + 1}`;
-                  return (
-                    <View key={docKey} style={styles.documentItem}>
-                      <Text style={styles.documentLabel}>{docName}</Text>
-                      {documentImages[docKey] ? (
-                        <View style={styles.documentImageContainer}>
-                          <Image source={{ uri: documentImages[docKey]! }} style={styles.documentImage} />
-                          <TouchableOpacity
-                            style={styles.removeDocumentButton}
-                            onPress={() => {
-                              setDocumentImages(prev => {
-                                const newDocs = { ...prev };
-                                delete newDocs[docKey];
-                                return newDocs;
-                              });
-                            }}
-                            disabled={loading}
-                          >
-                            <Text style={styles.removeDocumentText}>Remove</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <TouchableOpacity
-                          style={styles.documentUploadButton}
-                          onPress={() => {
-                            showDocumentSourcePicker(docKey);
-                          }}
-                          disabled={loading}
-                        >
-                          <Text style={styles.documentUploadText}>Upload {docName}</Text>
-                        </TouchableOpacity>
-                      )}
+                <View style={styles.documentItem}>
+                  <Text style={styles.documentLabel}>Upload Image</Text>
+                  {documentImages['deedOfSale'] ? (
+                    <View style={styles.documentImageContainer}>
+                      <Image source={{ uri: documentImages['deedOfSale']! }} style={styles.documentImage} />
+                      <TouchableOpacity
+                        style={styles.removeDocumentButton}
+                        onPress={() => {
+                          setDocumentImages(prev => {
+                            const newDocs = { ...prev };
+                            delete newDocs['deedOfSale'];
+                            return newDocs;
+                          });
+                        }}
+                        disabled={loading}
+                      >
+                        <Text style={styles.removeDocumentText}>Remove</Text>
+                      </TouchableOpacity>
                     </View>
-                  );
-                })}
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.documentUploadButton, errors.deedOfSale && styles.idUploadButtonError]}
+                      onPress={() => {
+                        showDocumentSourcePicker('deedOfSale');
+                      }}
+                      disabled={loading}
+                    >
+                      <Text style={styles.documentUploadText}>Upload Deed of Sale</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {errors.deedOfSale && (
+                  <Text style={styles.errorText}>{errors.deedOfSale}</Text>
+                )}
               </View>
             </View>
 
@@ -1850,19 +1996,13 @@ export default function Signup() {
                 )}
               </View>
 
-              {documentImages && Object.keys(documentImages).length > 0 && (
+              {documentImages['deedOfSale'] && (
                 <>
                   <Text style={styles.reviewSectionTitle}>Documents</Text>
-                  {Object.entries(documentImages).map(([key, uri]) => (
-                    uri && (
-                      <View key={key} style={styles.reviewSection}>
-                        <Text style={styles.reviewLabel}>
-                          {key.replace('doc', 'Document ')}:
-                        </Text>
-                        <Image source={{ uri }} style={styles.reviewImage} />
-                      </View>
-                    )
-                  ))}
+                  <View style={styles.reviewSection}>
+                    <Text style={styles.reviewLabel}>Deed of Sale:</Text>
+                    <Image source={{ uri: documentImages['deedOfSale']! }} style={styles.reviewImage} />
+                  </View>
                 </>
               )}
             </ScrollView>
@@ -2398,7 +2538,7 @@ export default function Signup() {
           <Text style={styles.mapModalSubtitle}>Tap on the map to mark your exact location</Text>
           <WebView
             ref={mapWebViewRef}
-            source={{ html: generateMapHTML(null) }}
+            source={{ html: generateMapHTML(location) }}
             style={styles.mapWebView}
             onMessage={(event) => {
               try {
@@ -2410,6 +2550,13 @@ export default function Signup() {
                     longitude: data.longitude,
                   });
                   // Don't close modal - let user continue adjusting or close manually
+                } else if (data.type === 'confirmLocation') {
+                  setLocation({
+                    latitude: data.latitude,
+                    longitude: data.longitude,
+                  });
+                  clearError('location');
+                  setShowMapModal(false);
                 }
               } catch (error) {
                 console.error('Error parsing map message:', error);

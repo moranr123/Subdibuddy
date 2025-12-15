@@ -643,7 +643,6 @@ function ResidentManagement() {
                         <option value="all">All</option>
                         <option value="approved">Approved</option>
                         <option value="deactivated">Deactivated</option>
-                        <option value="archived">Archived</option>
                       </select>
                     </div>
                     <div className="flex flex-col gap-1 md:w-[180px]">
