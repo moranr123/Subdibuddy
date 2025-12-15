@@ -336,6 +336,9 @@ export default function Notifications() {
       padding: 16,
       borderWidth: 1,
       borderColor: theme.border,
+      marginBottom: 12,
+      flexDirection: 'row',
+      alignItems: 'flex-start',
     },
     notificationContent: {
       flex: 1,
@@ -635,29 +638,29 @@ export default function Notifications() {
                             <View style={dynamicStyles.unreadDot} />
                           )}
                         </View>
-                    <Text style={dynamicStyles.notificationMessage}>
-                      {notification.message}
-                    </Text>
-                    {notification.rejectionReason && (
-                      <View style={dynamicStyles.rejectionReasonContainer}>
-                        <Text style={dynamicStyles.rejectionReasonLabel}>Rejection Reason: </Text>
-                        <Text style={dynamicStyles.rejectionReasonText}>{notification.rejectionReason}</Text>
-                      </View>
-                    )}
-                    {notification.status && (
-                      <View style={dynamicStyles.statusContainer}>
-                        <Text style={dynamicStyles.statusLabel}>Status: </Text>
-                        <Text style={[
-                          dynamicStyles.statusValue,
-                          notification.status === 'pending' && { color: '#f59e0b' },
-                          notification.status === 'in-progress' && { color: '#3b82f6' },
-                          notification.status === 'resolved' && { color: '#10b981' },
-                          notification.status === 'rejected' && { color: '#ef4444' },
-                        ]}>
-                          {notification.status}
+                        <Text style={dynamicStyles.notificationMessage}>
+                          {notification.message}
                         </Text>
-                      </View>
-                    )}
+                        {notification.rejectionReason && (
+                          <View style={dynamicStyles.rejectionReasonContainer}>
+                            <Text style={dynamicStyles.rejectionReasonLabel}>Rejection Reason: </Text>
+                            <Text style={dynamicStyles.rejectionReasonText}>{notification.rejectionReason}</Text>
+                          </View>
+                        )}
+                        {notification.status && (
+                          <View style={dynamicStyles.statusContainer}>
+                            <Text style={dynamicStyles.statusLabel}>Status: </Text>
+                            <Text style={[
+                              dynamicStyles.statusValue,
+                              notification.status === 'pending' && { color: '#f59e0b' },
+                              notification.status === 'in-progress' && { color: '#3b82f6' },
+                              notification.status === 'resolved' && { color: '#10b981' },
+                              notification.status === 'rejected' && { color: '#ef4444' },
+                            ]}>
+                              {notification.status}
+                            </Text>
+                          </View>
+                        )}
                         <Text style={dynamicStyles.notificationTime}>
                           {formatTimeAgo(notification.createdAt)}
                         </Text>
@@ -680,241 +683,4 @@ export default function Notifications() {
     </View>
   );
 }
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#111827',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#ffffff',
-    flex: 1,
-    textAlign: 'center',
-  },
-  headerSpacer: {
-    width: 36,
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingBottom: 20,
-  },
-  section: {
-    padding: 20,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  filterScrollView: {
-    marginBottom: 20,
-    marginHorizontal: -20,
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 20,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#e5e7eb',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-  },
-  filterButtonActive: {
-    backgroundColor: '#1877F2',
-    borderColor: '#1877F2',
-  },
-  filterButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6b7280',
-  },
-  filterButtonTextActive: {
-    color: '#ffffff',
-    fontWeight: '600',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  deleteAllButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#ef4444',
-    borderRadius: 6,
-  },
-  deleteAllButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#ffffff',
-  },
-  loadingContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  emptyContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '500',
-    color: '#6b7280',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#9ca3af',
-  },
-  notificationsList: {
-    gap: 8,
-  },
-  notificationItem: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  notificationItemUnread: {
-    backgroundColor: '#ffffff',
-  },
-  notificationContent: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  notificationRow: {
-    flexDirection: 'row',
-    flex: 1,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f0f2f5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    flexShrink: 0,
-  },
-  notificationTextContainer: {
-    flex: 1,
-  },
-  deleteButton: {
-    width: 28,
-    height: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-    borderRadius: 14,
-    backgroundColor: '#f0f2f5',
-  },
-  deleteButtonText: {
-    fontSize: 20,
-    fontWeight: '300',
-    color: '#65676b',
-    lineHeight: 20,
-  },
-  notificationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  notificationSubject: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#050505',
-    flex: 1,
-  },
-  unreadDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#1877F2',
-    marginLeft: 8,
-  },
-  notificationMessage: {
-    fontSize: 15,
-    color: '#050505',
-    marginBottom: 6,
-    lineHeight: 20,
-  },
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  statusLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  statusValue: {
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  statusPending: {
-    color: '#f59e0b',
-  },
-  statusInprogress: {
-    color: '#3b82f6',
-  },
-  statusResolved: {
-    color: '#10b981',
-  },
-  statusRejected: {
-    color: '#ef4444',
-  },
-  rejectionReasonContainer: {
-    marginTop: 8,
-    marginBottom: 8,
-    padding: 12,
-    backgroundColor: '#fef2f2',
-    borderRadius: 6,
-    borderLeftWidth: 3,
-    borderLeftColor: '#ef4444',
-  },
-  rejectionReasonLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#991b1b',
-    marginBottom: 4,
-  },
-  rejectionReasonText: {
-    fontSize: 13,
-    color: '#7f1d1d',
-    lineHeight: 18,
-  },
-  notificationTime: {
-    fontSize: 12,
-    color: '#9ca3af',
-    marginTop: 4,
-  },
-});
 

@@ -137,6 +137,9 @@ function Map() {
       streetViewControl: true,
       fullscreenControl: true,
       zoomControl: true,
+      zoomControlOptions: {
+        position: window.google.maps.ControlPosition.LEFT_CENTER,
+      },
       mapTypeId: window.google.maps.MapTypeId.SATELLITE,
       disableDefaultUI: false,
       gestureHandling: savedLockState ? 'none' : 'auto',
@@ -802,7 +805,7 @@ function Map() {
           )}
           <div className="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden m-4 md:m-6 lg:m-8 min-h-0 relative">
             {/* Resident Search Bar */}
-            <div className="absolute top-4 left-4 z-10 w-full max-w-md">
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 w-full max-w-md px-4">
               <div className="relative">
                 <input
                   ref={residentSearchInputRef}

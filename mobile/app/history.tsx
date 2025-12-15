@@ -1,11 +1,12 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, onSnapshot, orderBy, Timestamp } from 'firebase/firestore';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { getAuthService, db } from '../firebase/config';
+import { useTheme } from '../contexts/ThemeContext';
 
 type FilterType = 'all' | 'complaints' | 'billings-payments' | 'maintenance' | 'vehicle-registration' | 'visitor-registration';
 
@@ -34,6 +35,7 @@ interface HistoryItem {
 export default function History() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const [user, setUser] = useState<any>(null);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [loading, setLoading] = useState(true);
@@ -412,39 +414,227 @@ export default function History() {
     { id: 'visitor-registration', label: 'Visitor Registration' },
   ];
 
+  const dynamicStyles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingBottom: 12,
+      backgroundColor: theme.headerBackground,
+    },
+    backButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: '#ffffff',
+      flex: 1,
+      textAlign: 'center',
+    },
+    headerSpacer: {
+      width: 36,
+    },
+    content: {
+      flex: 1,
+    },
+    contentContainer: {
+      paddingBottom: 20,
+    },
+    section: {
+      padding: 20,
+    },
+    filterContainer: {
+      marginBottom: 20,
+    },
+    filterScroll: {
+      paddingRight: 20,
+    },
+    filterButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: theme.cardBackground,
+      borderWidth: 1,
+      borderColor: theme.border,
+      marginRight: 8,
+    },
+    filterButtonActive: {
+      backgroundColor: '#1877F2',
+      borderColor: '#1877F2',
+    },
+    filterButtonText: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: theme.textSecondary,
+    },
+    filterButtonTextActive: {
+      color: '#ffffff',
+    },
+    loadingContainer: {
+      padding: 40,
+      alignItems: 'center',
+    },
+    emptyContainer: {
+      padding: 40,
+      alignItems: 'center',
+    },
+    emptyText: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: theme.textSecondary,
+      marginBottom: 8,
+    },
+    emptySubtext: {
+      fontSize: 14,
+      color: theme.textSecondary,
+    },
+    historyList: {
+      gap: 8,
+    },
+    historyCard: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 8,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 1,
+      },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 1,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    historyCardContent: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+    },
+    iconContainer: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+      flexShrink: 0,
+    },
+    historyCardTextContainer: {
+      flex: 1,
+    },
+    historyCardHeader: {
+      marginBottom: 8,
+    },
+    historyCardTitleRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
+    historyCardType: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: '#1877F2',
+      textTransform: 'uppercase',
+    },
+    statusBadge: {
+      paddingHorizontal: 6,
+      paddingVertical: 3,
+      borderRadius: 4,
+    },
+    statusText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: '#ffffff',
+    },
+    historyCardDate: {
+      fontSize: 13,
+      color: theme.textSecondary,
+    },
+    historyCardTitle: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 6,
+    },
+    historyCardDescription: {
+      fontSize: 15,
+      color: theme.text,
+      marginBottom: 6,
+      lineHeight: 20,
+    },
+    historyCardAmount: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: theme.text,
+      marginTop: 4,
+    },
+    rejectionContainer: {
+      marginTop: 8,
+      padding: 10,
+      backgroundColor: theme.inputBackground,
+      borderRadius: 6,
+      borderLeftWidth: 2,
+      borderLeftColor: '#ef4444',
+    },
+    rejectionLabel: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: '#ef4444',
+      marginBottom: 4,
+    },
+    rejectionText: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      lineHeight: 18,
+    },
+  }), [theme]);
+
   return (
-    <View style={styles.container}>
+    <View style={dynamicStyles.container}>
       {/* Back Button */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[dynamicStyles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity 
           onPress={() => router.back()}
-          style={styles.backButton}
+          style={dynamicStyles.backButton}
           activeOpacity={0.7}
         >
           <FontAwesome5 name="arrow-left" size={20} color="#ffffff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>History</Text>
-        <View style={styles.headerSpacer} />
+        <Text style={dynamicStyles.headerTitle}>History</Text>
+        <View style={dynamicStyles.headerSpacer} />
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        <View style={styles.section}>
+      <ScrollView style={dynamicStyles.content} contentContainerStyle={dynamicStyles.contentContainer}>
+        <View style={dynamicStyles.section}>
 
           {/* Filter Buttons */}
-          <View style={styles.filterContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+          <View style={dynamicStyles.filterContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={dynamicStyles.filterScroll}>
               {filters.map((filter) => (
                 <TouchableOpacity
                   key={filter.id}
                   style={[
-                    styles.filterButton,
-                    activeFilter === filter.id && styles.filterButtonActive
+                    dynamicStyles.filterButton,
+                    activeFilter === filter.id && dynamicStyles.filterButtonActive
                   ]}
                   onPress={() => setActiveFilter(filter.id)}
                 >
                   <Text style={[
-                    styles.filterButtonText,
-                    activeFilter === filter.id && styles.filterButtonTextActive
+                    dynamicStyles.filterButtonText,
+                    activeFilter === filter.id && dynamicStyles.filterButtonTextActive
                   ]}>
                     {filter.label}
                   </Text>
@@ -455,26 +645,26 @@ export default function History() {
 
           {/* History Items */}
           {loading && filteredItems.length === 0 ? (
-            <View style={styles.loadingContainer}>
+            <View style={dynamicStyles.loadingContainer}>
               <ActivityIndicator size="large" color="#1877F2" />
             </View>
           ) : filteredItems.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No history found</Text>
-              <Text style={styles.emptySubtext}>
+            <View style={dynamicStyles.emptyContainer}>
+              <Text style={dynamicStyles.emptyText}>No history found</Text>
+              <Text style={dynamicStyles.emptySubtext}>
                 {activeFilter === 'all' 
                   ? 'No history found' 
                   : `No ${filters.find(f => f.id === activeFilter)?.label.toLowerCase()} history found`}
               </Text>
             </View>
           ) : (
-            <View style={styles.historyList}>
+            <View style={dynamicStyles.historyList}>
               {filteredItems.map((item) => {
                 const icon = getTypeIcon(item.type);
                 return (
-                  <View key={item.id} style={styles.historyCard}>
-                    <View style={styles.historyCardContent}>
-                      <View style={[styles.iconContainer, { backgroundColor: icon.color + '1A' }]}>
+                  <View key={item.id} style={dynamicStyles.historyCard}>
+                    <View style={dynamicStyles.historyCardContent}>
+                      <View style={[dynamicStyles.iconContainer, { backgroundColor: icon.color + '1A' }]}>
                         <FontAwesome5
                           name={icon.name as any}
                           size={24}
@@ -482,37 +672,37 @@ export default function History() {
                           solid
                         />
                       </View>
-                      <View style={styles.historyCardTextContainer}>
-                        <View style={styles.historyCardHeader}>
-                          <View style={styles.historyCardTitleRow}>
-                            <Text style={styles.historyCardType}>{getTypeLabel(item.type)}</Text>
+                      <View style={dynamicStyles.historyCardTextContainer}>
+                        <View style={dynamicStyles.historyCardHeader}>
+                          <View style={dynamicStyles.historyCardTitleRow}>
+                            <Text style={dynamicStyles.historyCardType}>{getTypeLabel(item.type)}</Text>
                             {item.status && (
-                              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-                                <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+                              <View style={[dynamicStyles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+                                <Text style={dynamicStyles.statusText}>{item.status.toUpperCase()}</Text>
                               </View>
                             )}
                           </View>
-                          <Text style={styles.historyCardDate}>{formatDate(item.date)}</Text>
+                          <Text style={dynamicStyles.historyCardDate}>{formatDate(item.date)}</Text>
                         </View>
                         
-                        <Text style={styles.historyCardTitle}>{item.title}</Text>
+                        <Text style={dynamicStyles.historyCardTitle}>{item.title}</Text>
                   
                   {item.description && (
-                    <Text style={styles.historyCardDescription} numberOfLines={2}>
+                    <Text style={dynamicStyles.historyCardDescription} numberOfLines={2}>
                       {item.description}
                     </Text>
                   )}
 
                   {item.amount !== undefined && (
-                    <Text style={styles.historyCardAmount}>
+                    <Text style={dynamicStyles.historyCardAmount}>
                       Amount: ₱{item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Text>
                   )}
 
                         {item.rejectionReason && (
-                          <View style={styles.rejectionContainer}>
-                            <Text style={styles.rejectionLabel}>Rejection Reason:</Text>
-                            <Text style={styles.rejectionText}>{item.rejectionReason}</Text>
+                          <View style={dynamicStyles.rejectionContainer}>
+                            <Text style={dynamicStyles.rejectionLabel}>Rejection Reason:</Text>
+                            <Text style={dynamicStyles.rejectionText}>{item.rejectionReason}</Text>
                           </View>
                         )}
                       </View>
@@ -527,193 +717,4 @@ export default function History() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f0f2f5',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#111827',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#ffffff',
-    flex: 1,
-    textAlign: 'center',
-  },
-  headerSpacer: {
-    width: 36,
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingBottom: 20,
-  },
-  section: {
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 20,
-  },
-  filterContainer: {
-    marginBottom: 20,
-  },
-  filterScroll: {
-    paddingRight: 20,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    marginRight: 8,
-  },
-  filterButtonActive: {
-    backgroundColor: '#1877F2',
-    borderColor: '#1877F2',
-  },
-  filterButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6b7280',
-  },
-  filterButtonTextActive: {
-    color: '#ffffff',
-  },
-  loadingContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  emptyContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#6b7280',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#9ca3af',
-  },
-  historyList: {
-    gap: 8,
-  },
-  historyCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  historyCardContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    flexShrink: 0,
-  },
-  historyCardTextContainer: {
-    flex: 1,
-  },
-  historyCardHeader: {
-    marginBottom: 8,
-  },
-  historyCardTitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  historyCardType: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1877F2',
-    textTransform: 'uppercase',
-  },
-  statusBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  historyCardDate: {
-    fontSize: 13,
-    color: '#65676b',
-  },
-  historyCardTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#050505',
-    marginBottom: 6,
-  },
-  historyCardDescription: {
-    fontSize: 15,
-    color: '#050505',
-    marginBottom: 6,
-    lineHeight: 20,
-  },
-  historyCardAmount: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#050505',
-    marginTop: 4,
-  },
-  rejectionContainer: {
-    marginTop: 8,
-    padding: 10,
-    backgroundColor: '#fef2f2',
-    borderRadius: 6,
-    borderLeftWidth: 2,
-    borderLeftColor: '#ef4444',
-  },
-  rejectionLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#991b1b',
-    marginBottom: 4,
-  },
-  rejectionText: {
-    fontSize: 13,
-    color: '#991b1b',
-    lineHeight: 18,
-  },
-});
 

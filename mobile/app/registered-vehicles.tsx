@@ -1,12 +1,13 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { getAuthService, db, storage } from '../firebase/config';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface VehicleRegistration {
   id: string;
@@ -28,6 +29,7 @@ interface VehicleRegistration {
 export default function RegisteredVehicles() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const [user, setUser] = useState<any>(null);
   const [registeredVehicles, setRegisteredVehicles] = useState<VehicleRegistration[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,88 +150,256 @@ export default function RegisteredVehicles() {
     );
   }, [db, deleteImageFromStorage]);
 
+  const dynamicStyles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: theme.headerBackground,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    backButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: '#ffffff',
+      flex: 1,
+      textAlign: 'center',
+    },
+    headerSpacer: {
+      width: 36,
+    },
+    content: {
+      flex: 1,
+    },
+    contentContainer: {
+      paddingBottom: 20,
+    },
+    section: {
+      padding: 20,
+    },
+    description: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      marginBottom: 20,
+    },
+    loadingContainer: {
+      padding: 40,
+      alignItems: 'center',
+    },
+    emptyContainer: {
+      padding: 40,
+      alignItems: 'center',
+    },
+    emptyText: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: theme.textSecondary,
+      marginBottom: 8,
+    },
+    emptySubtext: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      textAlign: 'center',
+    },
+    vehiclesList: {
+      gap: 12,
+    },
+    vehicleCard: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 8,
+      padding: 16,
+      marginBottom: 8,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 1,
+      },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 1,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    vehicleHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 12,
+    },
+    vehicleHeaderLeft: {
+      flex: 1,
+    },
+    vehiclePlate: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 4,
+    },
+    vehicleDetails: {
+      fontSize: 14,
+      color: theme.textSecondary,
+    },
+    actionButtons: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 12,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
+    actionButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      borderRadius: 6,
+      gap: 6,
+    },
+    deleteButton: {
+      backgroundColor: '#ef4444',
+    },
+    actionButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#ffffff',
+    },
+    actionButtonDisabled: {
+      opacity: 0.6,
+    },
+    vehicleInfo: {
+      marginBottom: 12,
+    },
+    infoRow: {
+      flexDirection: 'row',
+      marginBottom: 6,
+    },
+    infoLabel: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      fontWeight: '500',
+      width: 100,
+    },
+    infoValue: {
+      fontSize: 14,
+      color: theme.text,
+      flex: 1,
+    },
+    imageContainer: {
+      marginTop: 12,
+    },
+    imageLabel: {
+      fontSize: 12,
+      fontWeight: '500',
+      color: theme.textSecondary,
+      marginBottom: 6,
+    },
+    vehicleImage: {
+      width: '100%',
+      height: 200,
+      borderRadius: 8,
+      backgroundColor: theme.inputBackground,
+    },
+  }), [theme]);
+
   return (
-    <View style={styles.container}>
+    <View style={dynamicStyles.container}>
       {/* Back Button */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[dynamicStyles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity 
           onPress={() => router.back()}
-          style={styles.backButton}
+          style={dynamicStyles.backButton}
           activeOpacity={0.7}
         >
           <FontAwesome5 name="arrow-left" size={20} color="#ffffff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Registered Vehicles</Text>
-        <View style={styles.headerSpacer} />
+        <Text style={dynamicStyles.headerTitle}>Registered Vehicles</Text>
+        <View style={dynamicStyles.headerSpacer} />
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        <View style={styles.section}>
-          <Text style={styles.description}>
+      <ScrollView style={dynamicStyles.content} contentContainerStyle={dynamicStyles.contentContainer}>
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.description}>
             Your approved and registered vehicles
           </Text>
 
           {loading ? (
-            <View style={styles.loadingContainer}>
+            <View style={dynamicStyles.loadingContainer}>
               <ActivityIndicator size="large" color="#1877F2" />
             </View>
           ) : registeredVehicles.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No registered vehicles</Text>
-              <Text style={styles.emptySubtext}>
+            <View style={dynamicStyles.emptyContainer}>
+              <Text style={dynamicStyles.emptyText}>No registered vehicles</Text>
+              <Text style={dynamicStyles.emptySubtext}>
                 Your approved vehicle registrations will appear here
               </Text>
             </View>
           ) : (
-            <View style={styles.vehiclesList}>
+            <View style={dynamicStyles.vehiclesList}>
               {registeredVehicles.map((vehicle) => (
-                <View key={vehicle.id} style={styles.vehicleCard}>
-                  <View style={styles.vehicleHeader}>
-                    <View style={styles.vehicleHeaderLeft}>
-                      <Text style={styles.vehiclePlate}>{vehicle.plateNumber}</Text>
-                      <Text style={styles.vehicleDetails}>
+                <View key={vehicle.id} style={dynamicStyles.vehicleCard}>
+                  <View style={dynamicStyles.vehicleHeader}>
+                    <View style={dynamicStyles.vehicleHeaderLeft}>
+                      <Text style={dynamicStyles.vehiclePlate}>{vehicle.plateNumber}</Text>
+                      <Text style={dynamicStyles.vehicleDetails}>
                         {vehicle.make} {vehicle.model} ({vehicle.year})
                       </Text>
                     </View>
                   </View>
                   
-                  <View style={styles.vehicleInfo}>
-                    <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Color:</Text>
-                      <Text style={styles.infoValue}>{vehicle.color}</Text>
+                  <View style={dynamicStyles.vehicleInfo}>
+                    <View style={dynamicStyles.infoRow}>
+                      <Text style={dynamicStyles.infoLabel}>Color:</Text>
+                      <Text style={dynamicStyles.infoValue}>{vehicle.color}</Text>
                     </View>
-                    <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Type:</Text>
-                      <Text style={styles.infoValue}>{vehicle.vehicleType}</Text>
+                    <View style={dynamicStyles.infoRow}>
+                      <Text style={dynamicStyles.infoLabel}>Type:</Text>
+                      <Text style={dynamicStyles.infoValue}>{vehicle.vehicleType}</Text>
                     </View>
-                    <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Registered:</Text>
-                      <Text style={styles.infoValue}>{formatDate(vehicle.updatedAt || vehicle.createdAt)}</Text>
+                    <View style={dynamicStyles.infoRow}>
+                      <Text style={dynamicStyles.infoLabel}>Registered:</Text>
+                      <Text style={dynamicStyles.infoValue}>{formatDate(vehicle.updatedAt || vehicle.createdAt)}</Text>
                     </View>
                   </View>
 
                   {vehicle.vehicleImageURL && (
-                    <View style={styles.imageContainer}>
+                    <View style={dynamicStyles.imageContainer}>
                       <Image 
                         source={{ uri: vehicle.vehicleImageURL }} 
-                        style={styles.vehicleImage} 
+                        style={dynamicStyles.vehicleImage} 
                       />
                     </View>
                   )}
 
                   {vehicle.registrationImageURL && (
-                    <View style={styles.imageContainer}>
-                      <Text style={styles.imageLabel}>Registration Document:</Text>
+                    <View style={dynamicStyles.imageContainer}>
+                      <Text style={dynamicStyles.imageLabel}>Registration Document:</Text>
                       <Image 
                         source={{ uri: vehicle.registrationImageURL }} 
-                        style={styles.vehicleImage} 
+                        style={dynamicStyles.vehicleImage} 
                       />
                     </View>
                   )}
 
-                  <View style={styles.actionButtons}>
+                  <View style={dynamicStyles.actionButtons}>
                     <TouchableOpacity
-                      style={[styles.actionButton, styles.deleteButton, deletingVehicleId === vehicle.id && styles.actionButtonDisabled]}
+                      style={[dynamicStyles.actionButton, dynamicStyles.deleteButton, deletingVehicleId === vehicle.id && dynamicStyles.actionButtonDisabled]}
                       onPress={() => handleDelete(vehicle)}
                       activeOpacity={0.7}
                       disabled={deletingVehicleId === vehicle.id}
@@ -239,7 +409,7 @@ export default function RegisteredVehicles() {
                       ) : (
                         <>
                           <FontAwesome5 name="trash" size={14} color="#ffffff" />
-                          <Text style={styles.actionButtonText}>Delete</Text>
+                          <Text style={dynamicStyles.actionButtonText}>Delete</Text>
                         </>
                       )}
                     </TouchableOpacity>
@@ -253,171 +423,4 @@ export default function RegisteredVehicles() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f0f2f5',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#111827',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#ffffff',
-    flex: 1,
-    textAlign: 'center',
-  },
-  headerSpacer: {
-    width: 36,
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingBottom: 20,
-  },
-  section: {
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  description: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 20,
-  },
-  loadingContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  emptyContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#6b7280',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#9ca3af',
-    textAlign: 'center',
-  },
-  vehiclesList: {
-    gap: 12,
-  },
-  vehicleCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  vehicleHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  vehicleHeaderLeft: {
-    flex: 1,
-  },
-  vehiclePlate: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#050505',
-    marginBottom: 4,
-  },
-  vehicleDetails: {
-    fontSize: 14,
-    color: '#65676b',
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    gap: 6,
-  },
-  deleteButton: {
-    backgroundColor: '#ef4444',
-  },
-  actionButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  actionButtonDisabled: {
-    opacity: 0.6,
-  },
-  vehicleInfo: {
-    marginBottom: 12,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    marginBottom: 6,
-  },
-  infoLabel: {
-    fontSize: 14,
-    color: '#65676b',
-    fontWeight: '500',
-    width: 100,
-  },
-  infoValue: {
-    fontSize: 14,
-    color: '#050505',
-    flex: 1,
-  },
-  imageContainer: {
-    marginTop: 12,
-  },
-  imageLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#6b7280',
-    marginBottom: 6,
-  },
-  vehicleImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    backgroundColor: '#f3f4f6',
-  },
-});
 

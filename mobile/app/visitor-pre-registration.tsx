@@ -1,11 +1,12 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Modal, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, Timestamp, query, where, onSnapshot, orderBy, doc, getDoc } from 'firebase/firestore';
 import { getAuthService, db } from '../firebase/config';
 import { FontAwesome5, MaterialIcons } from '@expo/vector-icons';
+import { useTheme } from '../contexts/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -27,6 +28,7 @@ interface Visitor {
 export default function VisitorPreRegistration() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const [visitorName, setVisitorName] = useState('');
   const [visitorPhone, setVisitorPhone] = useState('');
   const [visitorPurpose, setVisitorPurpose] = useState('');
@@ -356,21 +358,504 @@ export default function VisitorPreRegistration() {
     return new Date(timestamp).toLocaleDateString();
   };
 
+  const dynamicStyles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: theme.headerBackground,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    backButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: '#ffffff',
+      flex: 1,
+      textAlign: 'center',
+    },
+    headerSpacer: {
+      width: 36,
+    },
+    headerButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    keyboardAvoidingView: {
+      flex: 1,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingBottom: 20,
+    },
+    content: {
+      padding: 20,
+    },
+    subtitle: {
+      fontSize: 16,
+      color: theme.textSecondary,
+      marginBottom: 24,
+    },
+    formSection: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 12,
+      padding: 20,
+      marginBottom: 24,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 2,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    sectionTitle: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 20,
+    },
+    inputGroup: {
+      marginBottom: 16,
+    },
+    label: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: theme.text,
+      marginBottom: 8,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: theme.inputBorder,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 16,
+      color: theme.text,
+      backgroundColor: theme.inputBackground,
+    },
+    textArea: {
+      minHeight: 100,
+      paddingTop: 12,
+    },
+    hint: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      marginTop: 4,
+    },
+    datePickerButton: {
+      padding: 12,
+      borderWidth: 1,
+      borderColor: theme.inputBorder,
+      borderRadius: 8,
+      backgroundColor: theme.inputBackground,
+    },
+    datePickerText: {
+      fontSize: 16,
+      color: theme.text,
+    },
+    datePickerPlaceholder: {
+      color: theme.placeholderText,
+    },
+    row: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    halfWidth: {
+      flex: 1,
+    },
+    submitButton: {
+      backgroundColor: '#1877F2',
+      borderRadius: 8,
+      padding: 16,
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    submitButtonDisabled: {
+      opacity: 0.6,
+    },
+    submitButtonText: {
+      color: '#ffffff',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    registrationsButton: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 8,
+      padding: 12,
+      alignItems: 'center',
+      marginTop: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    registrationsButtonText: {
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    datePickerModal: {
+      flex: 1,
+      justifyContent: 'flex-end',
+    },
+    datePickerModalContent: {
+      backgroundColor: theme.cardBackground,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      padding: 20,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
+    datePickerModalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 20,
+    },
+    datePickerModalTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    datePickerModalClose: {
+      padding: 4,
+    },
+    timePickerContainer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 20,
+      marginVertical: 20,
+    },
+    timePickerColumn: {
+      alignItems: 'center',
+    },
+    timePickerLabel: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      marginBottom: 8,
+    },
+    timePickerValue: {
+      fontSize: 32,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    timePickerButtons: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 8,
+    },
+    timePickerButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.inputBackground,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    confirmButton: {
+      backgroundColor: '#1877F2',
+      borderRadius: 8,
+      padding: 16,
+      alignItems: 'center',
+      marginTop: 20,
+    },
+    confirmButtonText: {
+      color: '#ffffff',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    registrationsModalContainer: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    registrationsModalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+      backgroundColor: theme.cardBackground,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    registrationsModalTitle: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    modalCloseButton: {
+      padding: 4,
+    },
+    registrationsModalContent: {
+      flex: 1,
+    },
+    registrationsModalScrollContent: {
+      padding: 20,
+      paddingBottom: 40,
+    },
+    visitorCard: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    visitorHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 12,
+    },
+    visitorName: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 4,
+    },
+    visitorPhone: {
+      fontSize: 14,
+      color: theme.textSecondary,
+    },
+    statusBadge: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 12,
+    },
+    statusText: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+    },
+    registrationDetails: {
+      gap: 8,
+    },
+    detailRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    detailText: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      flex: 1,
+    },
+    verifiedBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: 12,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
+    verifiedText: {
+      fontSize: 14,
+      color: '#4CAF50',
+      fontWeight: '500',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 16,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.text,
+      flex: 1,
+    },
+    modalCloseText: {
+      fontSize: 24,
+      color: theme.textSecondary,
+      padding: 4,
+    },
+    datePickerModalContent: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 20,
+      maxHeight: Math.min(height * 0.8, 600),
+      width: '100%',
+      maxWidth: Math.min(width * 0.9, 400),
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 10,
+      elevation: 10,
+    },
+    datePickerContainer: {
+      flexDirection: 'row',
+      height: 300,
+      padding: 16,
+    },
+    datePickerColumn: {
+      flex: 1,
+      marginHorizontal: 4,
+    },
+    datePickerLabel: {
+      fontSize: 12,
+      fontWeight: '500',
+      color: theme.textSecondary,
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    datePickerScroll: {
+      flex: 1,
+    },
+    datePickerOption: {
+      padding: 12,
+      borderRadius: 8,
+      marginBottom: 4,
+      alignItems: 'center',
+    },
+    datePickerOptionSelected: {
+      backgroundColor: '#1877F2',
+    },
+    datePickerOptionText: {
+      fontSize: 14,
+      color: theme.text,
+    },
+    datePickerOptionTextSelected: {
+      color: '#ffffff',
+      fontWeight: '500',
+    },
+    datePickerFooter: {
+      flexDirection: 'row',
+      padding: 16,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+      gap: 12,
+    },
+    datePickerCancelButton: {
+      flex: 1,
+      padding: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+      backgroundColor: theme.inputBackground,
+    },
+    datePickerCancelText: {
+      fontSize: 14,
+      color: theme.text,
+      fontWeight: '500',
+    },
+    datePickerConfirmButton: {
+      flex: 1,
+      padding: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+      backgroundColor: '#1877F2',
+    },
+    datePickerConfirmText: {
+      fontSize: 14,
+      color: '#ffffff',
+      fontWeight: '500',
+    },
+    registrationsSection: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 12,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    loadingContainer: {
+      padding: 40,
+      alignItems: 'center',
+    },
+    loadingText: {
+      marginTop: 12,
+      fontSize: 14,
+      color: theme.textSecondary,
+    },
+    emptyContainer: {
+      padding: 40,
+      alignItems: 'center',
+    },
+    emptyText: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: theme.textSecondary,
+      marginTop: 12,
+    },
+    emptySubtext: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      marginTop: 4,
+    },
+    registrationsList: {
+      gap: 12,
+    },
+    registrationCard: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 8,
+      padding: 16,
+      backgroundColor: theme.inputBackground,
+    },
+    registrationHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 12,
+    },
+    registrationInfo: {
+      flex: 1,
+    },
+    visitorCard: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+  }), [theme]);
+
   return (
-    <View style={styles.container}>
+    <View style={dynamicStyles.container}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[dynamicStyles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity 
           onPress={() => router.back()}
-          style={styles.backButton}
+          style={dynamicStyles.backButton}
           activeOpacity={0.7}
         >
           <FontAwesome5 name="arrow-left" size={20} color="#ffffff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Visitor Pre-Registration</Text>
+        <Text style={dynamicStyles.headerTitle}>Visitor Pre-Registration</Text>
         <TouchableOpacity 
           onPress={() => setShowRegistrationsModal(true)}
-          style={styles.headerButton}
+          style={dynamicStyles.headerButton}
           activeOpacity={0.7}
         >
           <MaterialIcons name="list" size={22} color="#ffffff" />
@@ -378,39 +863,41 @@ export default function VisitorPreRegistration() {
       </View>
 
       <KeyboardAvoidingView 
-        style={styles.keyboardAvoidingView}
+        style={dynamicStyles.keyboardAvoidingView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView 
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          style={dynamicStyles.scrollView}
+          contentContainerStyle={dynamicStyles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.content}>
-            <Text style={styles.subtitle}>Register your visitors in advance for easier access</Text>
+          <View style={dynamicStyles.content}>
+            <Text style={dynamicStyles.subtitle}>Register your visitors in advance for easier access</Text>
 
           {/* Form Section */}
-          <View style={styles.formSection}>
-            <Text style={styles.sectionTitle}>Visitor Information</Text>
+          <View style={dynamicStyles.formSection}>
+            <Text style={dynamicStyles.sectionTitle}>Visitor Information</Text>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Visitor Name</Text>
+            <View style={dynamicStyles.inputGroup}>
+              <Text style={dynamicStyles.label}>Visitor Name</Text>
               <TextInput
-                style={styles.input}
+                style={dynamicStyles.input}
                 placeholder="Enter visitor's full name"
+                placeholderTextColor={theme.placeholderText}
                 value={visitorName}
                 onChangeText={setVisitorName}
                 autoCapitalize="words"
               />
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Visitor Phone</Text>
+            <View style={dynamicStyles.inputGroup}>
+              <Text style={dynamicStyles.label}>Visitor Phone</Text>
               <TextInput
-                style={styles.input}
+                style={dynamicStyles.input}
                 placeholder="09XX-XXX-XXXX"
+                placeholderTextColor={theme.placeholderText}
                 value={visitorPhone}
                 onChangeText={(text) => setVisitorPhone(formatPhoneNumber(text))}
                 keyboardType="phone-pad"
@@ -418,11 +905,12 @@ export default function VisitorPreRegistration() {
               />
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Purpose of Visit</Text>
+            <View style={dynamicStyles.inputGroup}>
+              <Text style={dynamicStyles.label}>Purpose of Visit</Text>
               <TextInput
-                style={[styles.input, styles.textArea]}
+                style={[dynamicStyles.input, dynamicStyles.textArea]}
                 placeholder="Describe the purpose of the visit"
+                placeholderTextColor={theme.placeholderText}
                 value={visitorPurpose}
                 onChangeText={setVisitorPurpose}
                 multiline
@@ -431,14 +919,14 @@ export default function VisitorPreRegistration() {
               />
             </View>
 
-            <View style={styles.row}>
-              <View style={[styles.inputGroup, styles.halfWidth]}>
-                <Text style={styles.label}>Visit Date</Text>
+            <View style={dynamicStyles.row}>
+              <View style={[dynamicStyles.inputGroup, dynamicStyles.halfWidth]}>
+                <Text style={dynamicStyles.label}>Visit Date</Text>
                 <TouchableOpacity
-                  style={styles.datePickerButton}
+                  style={dynamicStyles.datePickerButton}
                   onPress={handleDatePickerOpen}
                 >
-                  <Text style={[styles.datePickerText, !visitorDate && styles.datePickerPlaceholder]}>
+                  <Text style={[dynamicStyles.datePickerText, !visitorDate && dynamicStyles.datePickerPlaceholder]}>
                     {visitorDate ? (() => {
                       const [year, month, day] = visitorDate.split('-').map(Number);
                       return formatDateForDisplay(new Date(year, month - 1, day));
@@ -447,13 +935,13 @@ export default function VisitorPreRegistration() {
                 </TouchableOpacity>
               </View>
 
-              <View style={[styles.inputGroup, styles.halfWidth]}>
-                <Text style={styles.label}>Visit Time</Text>
+              <View style={[dynamicStyles.inputGroup, dynamicStyles.halfWidth]}>
+                <Text style={dynamicStyles.label}>Visit Time</Text>
                 <TouchableOpacity
-                  style={styles.datePickerButton}
+                  style={dynamicStyles.datePickerButton}
                   onPress={handleTimePickerOpen}
                 >
-                  <Text style={[styles.datePickerText, !visitorTime && styles.datePickerPlaceholder]}>
+                  <Text style={[dynamicStyles.datePickerText, !visitorTime && dynamicStyles.datePickerPlaceholder]}>
                     {visitorTime ? formatTimeForDisplay(parseInt(visitorTime.split(':')[0]), parseInt(visitorTime.split(':')[1])) : 'Select visit time'}
                   </Text>
                 </TouchableOpacity>
@@ -461,14 +949,14 @@ export default function VisitorPreRegistration() {
             </View>
 
             <TouchableOpacity
-              style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+              style={[dynamicStyles.submitButton, submitting && dynamicStyles.submitButtonDisabled]}
               onPress={submitVisitorRegistration}
               disabled={submitting}
             >
               {submitting ? (
                 <ActivityIndicator color="#ffffff" />
               ) : (
-                <Text style={styles.submitButtonText}>Submit Registration</Text>
+                <Text style={dynamicStyles.submitButtonText}>Submit Registration</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -484,27 +972,27 @@ export default function VisitorPreRegistration() {
         onRequestClose={() => setShowDatePicker(false)}
       >
         <TouchableOpacity 
-          style={styles.modalOverlay}
+          style={dynamicStyles.modalOverlay}
           activeOpacity={1}
           onPress={() => setShowDatePicker(false)}
         >
-          <View style={styles.datePickerModalContent} onStartShouldSetResponder={() => true}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Visit Date</Text>
+          <View style={dynamicStyles.datePickerModalContent} onStartShouldSetResponder={() => true}>
+            <View style={dynamicStyles.modalHeader}>
+              <Text style={dynamicStyles.modalTitle}>Select Visit Date</Text>
               <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                <Text style={styles.modalCloseText}>✕</Text>
+                <Text style={dynamicStyles.modalCloseText}>✕</Text>
               </TouchableOpacity>
             </View>
-            <View style={styles.datePickerContainer}>
-              <View style={styles.datePickerColumn}>
-                <Text style={styles.datePickerLabel}>Month</Text>
-                <ScrollView style={styles.datePickerScroll}>
+            <View style={dynamicStyles.datePickerContainer}>
+              <View style={dynamicStyles.datePickerColumn}>
+                <Text style={dynamicStyles.datePickerLabel}>Month</Text>
+                <ScrollView style={dynamicStyles.datePickerScroll}>
                   {getMonthOptions().map((month, index) => (
                     <TouchableOpacity
                       key={month}
                       style={[
-                        styles.datePickerOption,
-                        tempDate.getMonth() === index && styles.datePickerOptionSelected
+                        dynamicStyles.datePickerOption,
+                        tempDate.getMonth() === index && dynamicStyles.datePickerOptionSelected
                       ]}
                       onPress={() => {
                         const newDate = new Date(tempDate);
@@ -517,8 +1005,8 @@ export default function VisitorPreRegistration() {
                       }}
                     >
                       <Text style={[
-                        styles.datePickerOptionText,
-                        tempDate.getMonth() === index && styles.datePickerOptionTextSelected
+                        dynamicStyles.datePickerOptionText,
+                        tempDate.getMonth() === index && dynamicStyles.datePickerOptionTextSelected
                       ]}>
                         {month}
                       </Text>
@@ -526,15 +1014,15 @@ export default function VisitorPreRegistration() {
                   ))}
                 </ScrollView>
               </View>
-              <View style={styles.datePickerColumn}>
-                <Text style={styles.datePickerLabel}>Day</Text>
-                <ScrollView style={styles.datePickerScroll}>
+              <View style={dynamicStyles.datePickerColumn}>
+                <Text style={dynamicStyles.datePickerLabel}>Day</Text>
+                <ScrollView style={dynamicStyles.datePickerScroll}>
                   {Array.from({ length: getDaysInMonth(tempDate.getFullYear(), tempDate.getMonth()) }, (_, i) => i + 1).map((day) => (
                     <TouchableOpacity
                       key={day}
                       style={[
-                        styles.datePickerOption,
-                        tempDate.getDate() === day && styles.datePickerOptionSelected
+                        dynamicStyles.datePickerOption,
+                        tempDate.getDate() === day && dynamicStyles.datePickerOptionSelected
                       ]}
                       onPress={() => {
                         const newDate = new Date(tempDate);
@@ -543,8 +1031,8 @@ export default function VisitorPreRegistration() {
                       }}
                     >
                       <Text style={[
-                        styles.datePickerOptionText,
-                        tempDate.getDate() === day && styles.datePickerOptionTextSelected
+                        dynamicStyles.datePickerOptionText,
+                        tempDate.getDate() === day && dynamicStyles.datePickerOptionTextSelected
                       ]}>
                         {day}
                       </Text>
@@ -552,15 +1040,15 @@ export default function VisitorPreRegistration() {
                   ))}
                 </ScrollView>
               </View>
-              <View style={styles.datePickerColumn}>
-                <Text style={styles.datePickerLabel}>Year</Text>
-                <ScrollView style={styles.datePickerScroll}>
+              <View style={dynamicStyles.datePickerColumn}>
+                <Text style={dynamicStyles.datePickerLabel}>Year</Text>
+                <ScrollView style={dynamicStyles.datePickerScroll}>
                   {getYearOptions().map((year) => (
                     <TouchableOpacity
                       key={year}
                       style={[
-                        styles.datePickerOption,
-                        tempDate.getFullYear() === year && styles.datePickerOptionSelected
+                        dynamicStyles.datePickerOption,
+                        tempDate.getFullYear() === year && dynamicStyles.datePickerOptionSelected
                       ]}
                       onPress={() => {
                         const newDate = new Date(tempDate);
@@ -573,8 +1061,8 @@ export default function VisitorPreRegistration() {
                       }}
                     >
                       <Text style={[
-                        styles.datePickerOptionText,
-                        tempDate.getFullYear() === year && styles.datePickerOptionTextSelected
+                        dynamicStyles.datePickerOptionText,
+                        tempDate.getFullYear() === year && dynamicStyles.datePickerOptionTextSelected
                       ]}>
                         {year}
                       </Text>
@@ -583,18 +1071,18 @@ export default function VisitorPreRegistration() {
                 </ScrollView>
               </View>
             </View>
-            <View style={styles.datePickerFooter}>
+            <View style={dynamicStyles.datePickerFooter}>
               <TouchableOpacity
-                style={styles.datePickerCancelButton}
+                style={dynamicStyles.datePickerCancelButton}
                 onPress={() => setShowDatePicker(false)}
               >
-                <Text style={styles.datePickerCancelText}>Cancel</Text>
+                <Text style={dynamicStyles.datePickerCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.datePickerConfirmButton}
+                style={dynamicStyles.datePickerConfirmButton}
                 onPress={handleDatePickerConfirm}
               >
-                <Text style={styles.datePickerConfirmText}>Confirm</Text>
+                <Text style={dynamicStyles.datePickerConfirmText}>Confirm</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -609,35 +1097,35 @@ export default function VisitorPreRegistration() {
         onRequestClose={() => setShowTimePicker(false)}
       >
         <TouchableOpacity 
-          style={styles.modalOverlay}
+          style={dynamicStyles.modalOverlay}
           activeOpacity={1}
           onPress={() => setShowTimePicker(false)}
         >
-          <View style={styles.datePickerModalContent} onStartShouldSetResponder={() => true}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Visit Time</Text>
+          <View style={dynamicStyles.datePickerModalContent} onStartShouldSetResponder={() => true}>
+            <View style={dynamicStyles.modalHeader}>
+              <Text style={dynamicStyles.modalTitle}>Select Visit Time</Text>
               <TouchableOpacity onPress={() => setShowTimePicker(false)}>
-                <Text style={styles.modalCloseText}>✕</Text>
+                <Text style={dynamicStyles.modalCloseText}>✕</Text>
               </TouchableOpacity>
             </View>
-            <View style={styles.datePickerContainer}>
-              <View style={styles.datePickerColumn}>
-                <Text style={styles.datePickerLabel}>Hour</Text>
-                <ScrollView style={styles.datePickerScroll}>
+            <View style={dynamicStyles.datePickerContainer}>
+              <View style={dynamicStyles.datePickerColumn}>
+                <Text style={dynamicStyles.datePickerLabel}>Hour</Text>
+                <ScrollView style={dynamicStyles.datePickerScroll}>
                   {getHourOptions().map((hour) => (
                     <TouchableOpacity
                       key={hour}
                       style={[
-                        styles.datePickerOption,
-                        tempTime.hour === hour && styles.datePickerOptionSelected
+                        dynamicStyles.datePickerOption,
+                        tempTime.hour === hour && dynamicStyles.datePickerOptionSelected
                       ]}
                       onPress={() => {
                         setTempTime({ ...tempTime, hour });
                       }}
                     >
                       <Text style={[
-                        styles.datePickerOptionText,
-                        tempTime.hour === hour && styles.datePickerOptionTextSelected
+                        dynamicStyles.datePickerOptionText,
+                        tempTime.hour === hour && dynamicStyles.datePickerOptionTextSelected
                       ]}>
                         {String(hour).padStart(2, '0')}
                       </Text>
@@ -645,23 +1133,23 @@ export default function VisitorPreRegistration() {
                   ))}
                 </ScrollView>
               </View>
-              <View style={styles.datePickerColumn}>
-                <Text style={styles.datePickerLabel}>Minute</Text>
-                <ScrollView style={styles.datePickerScroll}>
+              <View style={dynamicStyles.datePickerColumn}>
+                <Text style={dynamicStyles.datePickerLabel}>Minute</Text>
+                <ScrollView style={dynamicStyles.datePickerScroll}>
                   {getMinuteOptions().map((minute) => (
                     <TouchableOpacity
                       key={minute}
                       style={[
-                        styles.datePickerOption,
-                        tempTime.minute === minute && styles.datePickerOptionSelected
+                        dynamicStyles.datePickerOption,
+                        tempTime.minute === minute && dynamicStyles.datePickerOptionSelected
                       ]}
                       onPress={() => {
                         setTempTime({ ...tempTime, minute });
                       }}
                     >
                       <Text style={[
-                        styles.datePickerOptionText,
-                        tempTime.minute === minute && styles.datePickerOptionTextSelected
+                        dynamicStyles.datePickerOptionText,
+                        tempTime.minute === minute && dynamicStyles.datePickerOptionTextSelected
                       ]}>
                         {String(minute).padStart(2, '0')}
                       </Text>
@@ -670,18 +1158,18 @@ export default function VisitorPreRegistration() {
                 </ScrollView>
               </View>
             </View>
-            <View style={styles.datePickerFooter}>
+            <View style={dynamicStyles.datePickerFooter}>
               <TouchableOpacity
-                style={styles.datePickerCancelButton}
+                style={dynamicStyles.datePickerCancelButton}
                 onPress={() => setShowTimePicker(false)}
               >
-                <Text style={styles.datePickerCancelText}>Cancel</Text>
+                <Text style={dynamicStyles.datePickerCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.datePickerConfirmButton}
+                style={dynamicStyles.datePickerConfirmButton}
                 onPress={handleTimePickerConfirm}
               >
-                <Text style={styles.datePickerConfirmText}>Confirm</Text>
+                <Text style={dynamicStyles.datePickerConfirmText}>Confirm</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -695,68 +1183,68 @@ export default function VisitorPreRegistration() {
         animationType="slide"
         onRequestClose={() => setShowRegistrationsModal(false)}
       >
-        <View style={styles.registrationsModalContainer}>
-          <View style={[styles.registrationsModalHeader, { paddingTop: insets.top + 16 }]}>
-            <Text style={styles.registrationsModalTitle}>My Visitor Registrations</Text>
+        <View style={dynamicStyles.registrationsModalContainer}>
+          <View style={[dynamicStyles.registrationsModalHeader, { paddingTop: insets.top + 16 }]}>
+            <Text style={dynamicStyles.registrationsModalTitle}>My Visitor Registrations</Text>
             <TouchableOpacity 
               onPress={() => setShowRegistrationsModal(false)}
-              style={styles.modalCloseButton}
+              style={dynamicStyles.modalCloseButton}
             >
-              <MaterialIcons name="close" size={24} color="#111827" />
+              <MaterialIcons name="close" size={24} color={theme.text} />
             </TouchableOpacity>
           </View>
           <ScrollView 
-            style={styles.registrationsModalContent}
-            contentContainerStyle={styles.registrationsModalScrollContent}
+            style={dynamicStyles.registrationsModalContent}
+            contentContainerStyle={dynamicStyles.registrationsModalScrollContent}
           >
             {loadingVisitors ? (
-              <View style={styles.loadingContainer}>
+              <View style={dynamicStyles.loadingContainer}>
                 <ActivityIndicator size="large" color="#1877F2" />
-                <Text style={styles.loadingText}>Loading registrations...</Text>
+                <Text style={dynamicStyles.loadingText}>Loading registrations...</Text>
               </View>
             ) : userVisitors.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <MaterialIcons name="person-add" size={48} color="#9CA3AF" />
-                <Text style={styles.emptyText}>No visitor registrations yet</Text>
-                <Text style={styles.emptySubtext}>Submit a form above to register a visitor</Text>
+              <View style={dynamicStyles.emptyContainer}>
+                <MaterialIcons name="person-add" size={48} color={theme.textSecondary} />
+                <Text style={dynamicStyles.emptyText}>No visitor registrations yet</Text>
+                <Text style={dynamicStyles.emptySubtext}>Submit a form above to register a visitor</Text>
               </View>
             ) : (
-              <View style={styles.registrationsList}>
+              <View style={dynamicStyles.registrationsList}>
                 {userVisitors.map((visitor) => (
-                  <View key={visitor.id} style={styles.registrationCard}>
-                    <View style={styles.registrationHeader}>
-                      <View style={styles.registrationInfo}>
-                        <Text style={styles.visitorName}>{visitor.visitorName}</Text>
-                        <Text style={styles.visitorPhone}>{visitor.visitorPhone}</Text>
+                  <View key={visitor.id} style={dynamicStyles.registrationCard}>
+                    <View style={dynamicStyles.registrationHeader}>
+                      <View style={dynamicStyles.registrationInfo}>
+                        <Text style={dynamicStyles.visitorName}>{visitor.visitorName}</Text>
+                        <Text style={dynamicStyles.visitorPhone}>{visitor.visitorPhone}</Text>
                       </View>
-                      <View style={[styles.statusBadge, { backgroundColor: getStatusColor(visitor.status) }]}>
-                        <Text style={styles.statusText}>{getStatusText(visitor.status)}</Text>
+                      <View style={[dynamicStyles.statusBadge, { backgroundColor: getStatusColor(visitor.status) }]}>
+                        <Text style={dynamicStyles.statusText}>{getStatusText(visitor.status)}</Text>
                       </View>
                     </View>
                     
-                    <View style={styles.registrationDetails}>
-                      <View style={styles.detailRow}>
-                        <MaterialIcons name="phone" size={16} color="#6B7280" />
-                        <Text style={styles.detailText}>{visitor.visitorPhone}</Text>
+                    <View style={dynamicStyles.registrationDetails}>
+                      <View style={dynamicStyles.detailRow}>
+                        <MaterialIcons name="phone" size={16} color={theme.textSecondary} />
+                        <Text style={dynamicStyles.detailText}>{visitor.visitorPhone}</Text>
                       </View>
-                      <View style={styles.detailRow}>
-                        <MaterialIcons name="event" size={16} color="#6B7280" />
-                        <Text style={styles.detailText}>{visitor.visitorDate} at {visitor.visitorTime}</Text>
+                      <View style={dynamicStyles.detailRow}>
+                        <MaterialIcons name="event" size={16} color={theme.textSecondary} />
+                        <Text style={dynamicStyles.detailText}>{visitor.visitorDate} at {visitor.visitorTime}</Text>
                       </View>
-                      <View style={styles.detailRow}>
-                        <MaterialIcons name="description" size={16} color="#6B7280" />
-                        <Text style={styles.detailText} numberOfLines={2}>{visitor.visitorPurpose}</Text>
+                      <View style={dynamicStyles.detailRow}>
+                        <MaterialIcons name="description" size={16} color={theme.textSecondary} />
+                        <Text style={dynamicStyles.detailText} numberOfLines={2}>{visitor.visitorPurpose}</Text>
                       </View>
-                      <View style={styles.detailRow}>
-                        <MaterialIcons name="schedule" size={16} color="#6B7280" />
-                        <Text style={styles.detailText}>Submitted: {formatDate(visitor.createdAt)}</Text>
+                      <View style={dynamicStyles.detailRow}>
+                        <MaterialIcons name="schedule" size={16} color={theme.textSecondary} />
+                        <Text style={dynamicStyles.detailText}>Submitted: {formatDate(visitor.createdAt)}</Text>
                       </View>
                     </View>
 
                     {visitor.status === 'approved' && visitor.gatePassVerified && (
-                      <View style={styles.verifiedBadge}>
+                      <View style={dynamicStyles.verifiedBadge}>
                         <MaterialIcons name="verified" size={16} color="#4CAF50" />
-                        <Text style={styles.verifiedText}>Gate Pass Verified</Text>
+                        <Text style={dynamicStyles.verifiedText}>Gate Pass Verified</Text>
                       </View>
                     )}
                   </View>
@@ -769,374 +1257,3 @@ export default function VisitorPreRegistration() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f0f2f5',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#111827',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#ffffff',
-    flex: 1,
-    textAlign: 'center',
-  },
-  headerSpacer: {
-    width: 36,
-  },
-  headerButton: {
-    padding: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  keyboardAvoidingView: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 20,
-  },
-  content: {
-    padding: 20,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginBottom: 24,
-  },
-  formSection: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 20,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: '#111827',
-    backgroundColor: '#FFFFFF',
-  },
-  textArea: {
-    minHeight: 100,
-    paddingTop: 12,
-  },
-  hint: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 4,
-  },
-  datePickerButton: {
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-  },
-  datePickerText: {
-    fontSize: 16,
-    color: '#111827',
-  },
-  datePickerPlaceholder: {
-    color: '#9CA3AF',
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  halfWidth: {
-    flex: 1,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    flex: 1,
-  },
-  modalCloseText: {
-    fontSize: 24,
-    color: '#6b7280',
-    padding: 4,
-  },
-  datePickerModalContent: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    maxHeight: Math.min(height * 0.8, 600),
-    width: '100%',
-    maxWidth: Math.min(width * 0.9, 400),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  datePickerContainer: {
-    flexDirection: 'row',
-    height: 300,
-    padding: 16,
-  },
-  datePickerColumn: {
-    flex: 1,
-    marginHorizontal: 4,
-  },
-  datePickerLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#6b7280',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  datePickerScroll: {
-    flex: 1,
-  },
-  datePickerOption: {
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 4,
-    alignItems: 'center',
-  },
-  datePickerOptionSelected: {
-    backgroundColor: '#111827',
-  },
-  datePickerOptionText: {
-    fontSize: 14,
-    color: '#374151',
-  },
-  datePickerOptionTextSelected: {
-    color: '#ffffff',
-    fontWeight: '500',
-  },
-  datePickerFooter: {
-    flexDirection: 'row',
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    gap: 12,
-  },
-  datePickerCancelButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    backgroundColor: '#f3f4f6',
-  },
-  datePickerCancelText: {
-    fontSize: 14,
-    color: '#374151',
-    fontWeight: '500',
-  },
-  datePickerConfirmButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    backgroundColor: '#111827',
-  },
-  datePickerConfirmText: {
-    fontSize: 14,
-    color: '#ffffff',
-    fontWeight: '500',
-  },
-  submitButton: {
-    backgroundColor: '#1877F2',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  registrationsSection: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  loadingContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  emptyContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#6B7280',
-    marginTop: 12,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginTop: 4,
-  },
-  registrationsList: {
-    gap: 12,
-  },
-  registrationCard: {
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    padding: 16,
-    backgroundColor: '#F9FAFB',
-  },
-  registrationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  registrationInfo: {
-    flex: 1,
-  },
-  visitorName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  visitorPhone: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  statusText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  registrationDetails: {
-    gap: 8,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  detailText: {
-    fontSize: 14,
-    color: '#6B7280',
-    flex: 1,
-  },
-  verifiedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  verifiedText: {
-    fontSize: 14,
-    color: '#4CAF50',
-    fontWeight: '500',
-  },
-  registrationsModalContainer: {
-    flex: 1,
-    backgroundColor: '#f0f2f5',
-  },
-  registrationsModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  registrationsModalTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  modalCloseButton: {
-    padding: 4,
-  },
-  registrationsModalContent: {
-    flex: 1,
-  },
-  registrationsModalScrollContent: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-});
-
-
-

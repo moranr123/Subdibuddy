@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image, Alert, ActivityIndicator, Animated, Dimensions, Modal, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, Timestamp, query, where, onSnapshot, orderBy, updateDoc, doc } from 'firebase/firestore';
@@ -9,6 +9,7 @@ import { getAuthService, db, storage } from '../firebase/config';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import { useNotifications } from '../hooks/useNotifications';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface VehicleRegistration {
   id: string;
@@ -30,6 +31,7 @@ interface VehicleRegistration {
 
 export default function VehicleRegistration() {
   const router = useRouter();
+  const { theme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sidebarAnimation = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
   const [plateNumber, setPlateNumber] = useState('');
@@ -131,9 +133,8 @@ export default function VehicleRegistration() {
         return () => unsubscribe2();
       } else {
         setLoadingRegistrations(false);
-      }
-    });
-
+  }
+});
     return () => unsubscribe();
   }, [user, db]);
 
@@ -147,6 +148,64 @@ export default function VehicleRegistration() {
     }).start();
     setSidebarOpen(!sidebarOpen);
   };
+
+  const showImageSourcePicker = useCallback((type: 'registration' | 'vehicle') => {
+    Alert.alert(
+      'Select Image Source',
+      'Choose an option',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Camera', onPress: () => pickImageFromSource(type, 'camera') },
+        { text: 'Gallery', onPress: () => pickImageFromSource(type, 'gallery') },
+      ]
+    );
+  }, []);
+
+  const pickImageFromSource = useCallback(async (type: 'registration' | 'vehicle', source: 'camera' | 'gallery') => {
+    try {
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'We need camera permissions to take photos.');
+          return;
+        }
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+        });
+        if (!result.canceled && result.assets[0]) {
+          if (type === 'registration') {
+            setRegistrationImageUri(result.assets[0].uri);
+          } else {
+            setVehicleImageUri(result.assets[0].uri);
+          }
+        }
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'We need camera roll permissions to upload images.');
+          return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.8,
+        });
+        if (!result.canceled && result.assets[0]) {
+          if (type === 'registration') {
+            setRegistrationImageUri(result.assets[0].uri);
+          } else {
+            setVehicleImageUri(result.assets[0].uri);
+          }
+        }
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
+  }, []);
 
   const pickImage = useCallback(async (type: 'registration' | 'vehicle') => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -417,8 +476,316 @@ export default function VehicleRegistration() {
     }
   };
 
+  const dynamicStyles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    keyboardAvoidingView: {
+      flex: 1,
+    },
+    content: {
+      flex: 1,
+    },
+    contentContainer: {
+      paddingBottom: 20,
+    },
+    section: {
+      padding: 20,
+    },
+    title: {
+      fontSize: 24,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 16,
+    },
+    loadingContainer: {
+      padding: 40,
+      alignItems: 'center',
+    },
+    registrationsList: {
+      gap: 12,
+      marginBottom: 24,
+    },
+    registrationCard: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 8,
+      padding: 16,
+      marginBottom: 8,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 1,
+      },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 1,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    registrationHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    registrationPlate: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    statusBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 4,
+    },
+    statusText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: '#ffffff',
+    },
+    registrationDetails: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      marginBottom: 4,
+    },
+    imageContainer: {
+      marginTop: 12,
+    },
+    imageLabel: {
+      fontSize: 12,
+      fontWeight: '500',
+      color: theme.textSecondary,
+      marginBottom: 6,
+    },
+    registrationImage: {
+      width: '100%',
+      height: 200,
+      borderRadius: 8,
+      backgroundColor: theme.inputBackground,
+    },
+    registrationDate: {
+      fontSize: 12,
+      color: theme.textSecondary,
+    },
+    rejectionContainer: {
+      marginTop: 12,
+      padding: 10,
+      backgroundColor: theme.inputBackground,
+      borderRadius: 6,
+      borderLeftWidth: 2,
+      borderLeftColor: '#ef4444',
+    },
+    rejectionLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#ef4444',
+      marginBottom: 4,
+    },
+    rejectionText: {
+      fontSize: 12,
+      color: theme.textSecondary,
+    },
+    formSection: {
+      marginTop: 24,
+    },
+    formHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    formTitle: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    cancelEditButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+    },
+    cancelEditText: {
+      color: '#ef4444',
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    formDescription: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      marginBottom: 20,
+    },
+    form: {
+      gap: 16,
+    },
+    inputGroup: {
+      marginBottom: 4,
+    },
+    label: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: theme.text,
+      marginBottom: 8,
+    },
+    input: {
+      backgroundColor: theme.inputBackground,
+      borderWidth: 1,
+      borderColor: theme.inputBorder,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 16,
+      color: theme.text,
+    },
+    imageButton: {
+      width: '100%',
+      height: 200,
+      borderRadius: 8,
+      overflow: 'hidden',
+      backgroundColor: theme.inputBackground,
+      borderWidth: 1,
+      borderColor: theme.inputBorder,
+      borderStyle: 'dashed',
+    },
+    previewImage: {
+      width: '100%',
+      height: '100%',
+    },
+    imagePlaceholder: {
+      width: '100%',
+      height: '100%',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    imagePlaceholderText: {
+      fontSize: 14,
+      color: theme.placeholderText,
+    },
+    removeImageButton: {
+      marginTop: 8,
+      padding: 8,
+      alignItems: 'center',
+    },
+    removeImageButtonText: {
+      fontSize: 14,
+      color: '#ef4444',
+      fontWeight: '500',
+    },
+    submitButton: {
+      backgroundColor: '#1877F2',
+      borderRadius: 8,
+      padding: 16,
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    submitButtonDisabled: {
+      opacity: 0.6,
+    },
+    submitButtonText: {
+      color: '#ffffff',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    infoContainer: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 8,
+      padding: 16,
+      marginTop: 24,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    infoText: {
+      fontSize: 14,
+      color: theme.text,
+      textAlign: 'center',
+    },
+    hintText: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      marginTop: 4,
+    },
+    pickerText: {
+      fontSize: 16,
+      color: theme.text,
+    },
+    placeholderText: {
+      color: theme.placeholderText,
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    modalContentCentered: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 20,
+      maxHeight: '70%',
+      paddingBottom: 20,
+      width: '100%',
+      maxWidth: 400,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+      elevation: 5,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    modalCloseButton: {
+      fontSize: 24,
+      color: theme.textSecondary,
+      fontWeight: '300',
+    },
+    modalItem: {
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    modalItemText: {
+      fontSize: 16,
+      color: theme.text,
+    },
+    searchContainer: {
+      paddingHorizontal: 16,
+      paddingBottom: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    searchInput: {
+      backgroundColor: theme.inputBackground,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 16,
+      color: theme.text,
+      borderWidth: 1,
+      borderColor: theme.inputBorder,
+    },
+    emptyContainer: {
+      padding: 40,
+      alignItems: 'center',
+    },
+    emptyText: {
+      fontSize: 14,
+      color: theme.textSecondary,
+    },
+  }), [theme]);
+
   return (
-    <View style={styles.container}>
+    <View style={dynamicStyles.container}>
       <Header 
         onMenuPress={toggleSidebar}
         onNotificationPress={() => router.push('/notifications')}
@@ -426,57 +793,57 @@ export default function VehicleRegistration() {
       />
       <Sidebar isOpen={sidebarOpen} onClose={toggleSidebar} animation={sidebarAnimation} />
       <KeyboardAvoidingView
-        style={styles.keyboardAvoidingView}
+        style={dynamicStyles.keyboardAvoidingView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView 
-          style={styles.content} 
-          contentContainerStyle={styles.contentContainer}
+          style={dynamicStyles.content} 
+          contentContainerStyle={dynamicStyles.contentContainer}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.section}>
+          <View style={dynamicStyles.section}>
           {userRegistrations.length > 0 && (
             <>
-              <Text style={styles.title}>My Vehicle Registrations</Text>
+              <Text style={dynamicStyles.title}>My Vehicle Registrations</Text>
               {loadingRegistrations ? (
-                <View style={styles.loadingContainer}>
+                <View style={dynamicStyles.loadingContainer}>
                   <ActivityIndicator size="large" color="#1877F2" />
                 </View>
               ) : (
-                <View style={styles.registrationsList}>
+                <View style={dynamicStyles.registrationsList}>
                   {userRegistrations.map((registration) => (
-                    <View key={registration.id} style={styles.registrationCard}>
-                      <View style={styles.registrationHeader}>
-                        <Text style={styles.registrationPlate}>{registration.plateNumber}</Text>
-                        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(registration.status) }]}>
-                          <Text style={styles.statusText}>{registration.status.toUpperCase()}</Text>
+                    <View key={registration.id} style={dynamicStyles.registrationCard}>
+                      <View style={dynamicStyles.registrationHeader}>
+                        <Text style={dynamicStyles.registrationPlate}>{registration.plateNumber}</Text>
+                        <View style={[dynamicStyles.statusBadge, { backgroundColor: getStatusColor(registration.status) }]}>
+                          <Text style={dynamicStyles.statusText}>{registration.status.toUpperCase()}</Text>
                         </View>
                       </View>
-                      <Text style={styles.registrationDetails}>
+                      <Text style={dynamicStyles.registrationDetails}>
                         {registration.make} {registration.model} ({registration.year})
                       </Text>
-                      <Text style={styles.registrationDetails}>Color: {registration.color}</Text>
-                      <Text style={styles.registrationDetails}>Type: {registration.vehicleType}</Text>
+                      <Text style={dynamicStyles.registrationDetails}>Color: {registration.color}</Text>
+                      <Text style={dynamicStyles.registrationDetails}>Type: {registration.vehicleType}</Text>
                       {registration.vehicleImageURL && (
-                        <View style={styles.imageContainer}>
-                          <Text style={styles.imageLabel}>Vehicle Image:</Text>
-                          <Image source={{ uri: registration.vehicleImageURL }} style={styles.registrationImage} />
+                        <View style={dynamicStyles.imageContainer}>
+                          <Text style={dynamicStyles.imageLabel}>Vehicle Image:</Text>
+                          <Image source={{ uri: registration.vehicleImageURL }} style={dynamicStyles.registrationImage} />
                         </View>
                       )}
                       {registration.registrationImageURL && (
-                        <View style={styles.imageContainer}>
-                          <Text style={styles.imageLabel}>Registration Document:</Text>
-                          <Image source={{ uri: registration.registrationImageURL }} style={styles.registrationImage} />
+                        <View style={dynamicStyles.imageContainer}>
+                          <Text style={dynamicStyles.imageLabel}>Registration Document:</Text>
+                          <Image source={{ uri: registration.registrationImageURL }} style={dynamicStyles.registrationImage} />
                         </View>
                       )}
-                      <Text style={styles.registrationDate}>
+                      <Text style={dynamicStyles.registrationDate}>
                         Submitted: {formatDate(registration.createdAt)}
                       </Text>
                       {registration.rejectionReason && (
-                        <View style={styles.rejectionContainer}>
-                          <Text style={styles.rejectionLabel}>Rejection Reason:</Text>
-                          <Text style={styles.rejectionText}>{registration.rejectionReason}</Text>
+                        <View style={dynamicStyles.rejectionContainer}>
+                          <Text style={dynamicStyles.rejectionLabel}>Rejection Reason:</Text>
+                          <Text style={dynamicStyles.rejectionText}>{registration.rejectionReason}</Text>
                         </View>
                       )}
                     </View>
@@ -488,147 +855,152 @@ export default function VehicleRegistration() {
 
           {/* Submit/Edit Form - Show if user can submit new or is editing */}
           {(canSubmitNew || editingRegistration) && (
-            <View style={styles.formSection}>
-              <View style={styles.formHeader}>
-                <Text style={styles.formTitle}>
+            <View style={dynamicStyles.formSection}>
+              <View style={dynamicStyles.formHeader}>
+                <Text style={dynamicStyles.formTitle}>
                   {editingRegistration ? 'Edit Vehicle Registration' : 'Register a Vehicle'}
                 </Text>
                 {editingRegistration && (
                   <TouchableOpacity
-                    style={styles.cancelEditButton}
+                    style={dynamicStyles.cancelEditButton}
                     onPress={handleCancelEdit}
                   >
-                    <Text style={styles.cancelEditText}>Cancel</Text>
+                    <Text style={dynamicStyles.cancelEditText}>Cancel</Text>
                   </TouchableOpacity>
                 )}
               </View>
-              <Text style={styles.formDescription}>
+              <Text style={dynamicStyles.formDescription}>
                 {editingRegistration ? 'Update your vehicle registration details below' : 'Fill out the form below to register your vehicle.'}
               </Text>
 
-              <View style={styles.form}>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Plate Number</Text>
+              <View style={dynamicStyles.form}>
+                <View style={dynamicStyles.inputGroup}>
+                  <Text style={dynamicStyles.label}>Plate Number</Text>
                   <TextInput
-                    style={styles.input}
+                    style={dynamicStyles.input}
                     value={plateNumber}
                     onChangeText={(text) => setPlateNumber(formatPlateNumber(text))}
                     placeholder="ABC-1234"
+                    placeholderTextColor={theme.placeholderText}
                     autoCapitalize="characters"
                     maxLength={8}
                   />
-                  <Text style={styles.hintText}>Format: ABC-1234 (3 letters, 4 numbers)</Text>
+                  <Text style={dynamicStyles.hintText}>Format: ABC-1234 (3 letters, 4 numbers)</Text>
                 </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Brand</Text>
+                <View style={dynamicStyles.inputGroup}>
+                  <Text style={dynamicStyles.label}>Brand</Text>
                   <TouchableOpacity
-                    style={styles.input}
+                    style={dynamicStyles.input}
                     onPress={() => setShowBrandPicker(true)}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.pickerText, !make && styles.placeholderText]}>
+                    <Text style={[dynamicStyles.pickerText, !make && dynamicStyles.placeholderText]}>
                       {make || 'Select brand'}
                     </Text>
                   </TouchableOpacity>
                 </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Model</Text>
+                <View style={dynamicStyles.inputGroup}>
+                  <Text style={dynamicStyles.label}>Model</Text>
                   <TextInput
-                    style={styles.input}
+                    style={dynamicStyles.input}
                     value={model}
                     onChangeText={setModel}
                     placeholder="e.g., Camry, Civic"
+                    placeholderTextColor={theme.placeholderText}
                     autoCapitalize="words"
                   />
                 </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Color</Text>
+                <View style={dynamicStyles.inputGroup}>
+                  <Text style={dynamicStyles.label}>Color</Text>
                   <TextInput
-                    style={styles.input}
+                    style={dynamicStyles.input}
                     value={color}
                     onChangeText={setColor}
                     placeholder="e.g., Red, Blue, Black"
+                    placeholderTextColor={theme.placeholderText}
                     autoCapitalize="words"
                   />
                 </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Year</Text>
+                <View style={dynamicStyles.inputGroup}>
+                  <Text style={dynamicStyles.label}>Year</Text>
                   <TextInput
-                    style={styles.input}
+                    style={dynamicStyles.input}
                     value={year}
                     onChangeText={setYear}
                     placeholder="e.g., 2020"
+                    placeholderTextColor={theme.placeholderText}
                     keyboardType="numeric"
                     maxLength={4}
                   />
                 </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Vehicle Type</Text>
+                <View style={dynamicStyles.inputGroup}>
+                  <Text style={dynamicStyles.label}>Vehicle Type</Text>
                   <TextInput
-                    style={styles.input}
+                    style={dynamicStyles.input}
                     value={vehicleType}
                     onChangeText={setVehicleType}
                     placeholder="e.g., Sedan, SUV, Motorcycle"
+                    placeholderTextColor={theme.placeholderText}
                     autoCapitalize="words"
                   />
                 </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Vehicle Image</Text>
-                  <TouchableOpacity style={styles.imageButton} onPress={() => showImageSourcePicker('vehicle')} activeOpacity={0.7}>
+                <View style={dynamicStyles.inputGroup}>
+                  <Text style={dynamicStyles.label}>Vehicle Image</Text>
+                  <TouchableOpacity style={dynamicStyles.imageButton} onPress={() => showImageSourcePicker('vehicle')} activeOpacity={0.7}>
                     {vehicleImageUri ? (
-                      <Image source={{ uri: vehicleImageUri }} style={styles.previewImage} />
+                      <Image source={{ uri: vehicleImageUri }} style={dynamicStyles.previewImage} />
                     ) : (
-                      <View style={styles.imagePlaceholder}>
-                        <Text style={styles.imagePlaceholderText}>Tap to add vehicle image</Text>
+                      <View style={dynamicStyles.imagePlaceholder}>
+                        <Text style={dynamicStyles.imagePlaceholderText}>Tap to add vehicle image</Text>
                       </View>
                     )}
                   </TouchableOpacity>
                   {vehicleImageUri && (
                     <TouchableOpacity
-                      style={styles.removeImageButton}
+                      style={dynamicStyles.removeImageButton}
                       onPress={() => setVehicleImageUri(null)}
                     >
-                      <Text style={styles.removeImageButtonText}>Remove Image</Text>
+                      <Text style={dynamicStyles.removeImageButtonText}>Remove Image</Text>
                     </TouchableOpacity>
                   )}
                 </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Registration Document (Optional)</Text>
-                  <TouchableOpacity style={styles.imageButton} onPress={() => showImageSourcePicker('registration')} activeOpacity={0.7}>
+                <View style={dynamicStyles.inputGroup}>
+                  <Text style={dynamicStyles.label}>Registration Document (Optional)</Text>
+                  <TouchableOpacity style={dynamicStyles.imageButton} onPress={() => showImageSourcePicker('registration')} activeOpacity={0.7}>
                     {registrationImageUri ? (
-                      <Image source={{ uri: registrationImageUri }} style={styles.previewImage} />
+                      <Image source={{ uri: registrationImageUri }} style={dynamicStyles.previewImage} />
                     ) : (
-                      <View style={styles.imagePlaceholder}>
-                        <Text style={styles.imagePlaceholderText}>Tap to add registration document</Text>
+                      <View style={dynamicStyles.imagePlaceholder}>
+                        <Text style={dynamicStyles.imagePlaceholderText}>Tap to add registration document</Text>
                       </View>
                     )}
                   </TouchableOpacity>
                   {registrationImageUri && (
                     <TouchableOpacity
-                      style={styles.removeImageButton}
+                      style={dynamicStyles.removeImageButton}
                       onPress={() => setRegistrationImageUri(null)}
                     >
-                      <Text style={styles.removeImageButtonText}>Remove Image</Text>
+                      <Text style={dynamicStyles.removeImageButtonText}>Remove Image</Text>
                     </TouchableOpacity>
                   )}
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+                  style={[dynamicStyles.submitButton, submitting && dynamicStyles.submitButtonDisabled]}
                   onPress={handleSubmit}
                   disabled={submitting}
                 >
                   {submitting ? (
                     <ActivityIndicator color="#ffffff" />
                   ) : (
-                    <Text style={styles.submitButtonText}>
+                    <Text style={dynamicStyles.submitButtonText}>
                       {editingRegistration ? 'Update Registration' : 'Submit Registration'}
                     </Text>
                   )}
@@ -639,8 +1011,8 @@ export default function VehicleRegistration() {
 
           {/* Show message if user has a pending registration */}
           {!canSubmitNew && !editingRegistration && (
-            <View style={styles.infoContainer}>
-              <Text style={styles.infoText}>
+            <View style={dynamicStyles.infoContainer}>
+              <Text style={dynamicStyles.infoText}>
                 You have a pending vehicle registration. Please wait for it to be reviewed before submitting a new one. Once your registration is approved or rejected, you can submit a new one.
               </Text>
             </View>
@@ -659,21 +1031,22 @@ export default function VehicleRegistration() {
           setBrandSearchQuery('');
         }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContentCentered}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Brand</Text>
+        <View style={dynamicStyles.modalOverlay}>
+          <View style={dynamicStyles.modalContentCentered}>
+            <View style={dynamicStyles.modalHeader}>
+              <Text style={dynamicStyles.modalTitle}>Select Brand</Text>
               <TouchableOpacity onPress={() => {
                 setShowBrandPicker(false);
                 setBrandSearchQuery('');
               }}>
-                <Text style={styles.modalCloseButton}>✕</Text>
+                <Text style={dynamicStyles.modalCloseButton}>✕</Text>
               </TouchableOpacity>
             </View>
-            <View style={styles.searchContainer}>
+            <View style={dynamicStyles.searchContainer}>
               <TextInput
-                style={styles.searchInput}
+                style={dynamicStyles.searchInput}
                 placeholder="Search brand..."
+                placeholderTextColor={theme.placeholderText}
                 value={brandSearchQuery}
                 onChangeText={setBrandSearchQuery}
                 autoCapitalize="words"
@@ -684,19 +1057,19 @@ export default function VehicleRegistration() {
               keyExtractor={(item) => item}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.modalItem}
+                  style={dynamicStyles.modalItem}
                   onPress={() => {
                     setMake(item);
                     setShowBrandPicker(false);
                     setBrandSearchQuery('');
                   }}
                 >
-                  <Text style={styles.modalItemText}>{item}</Text>
+                  <Text style={dynamicStyles.modalItemText}>{item}</Text>
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No brands found</Text>
+                <View style={dynamicStyles.emptyContainer}>
+                  <Text style={dynamicStyles.emptyText}>No brands found</Text>
                 </View>
               }
             />
@@ -707,333 +1080,4 @@ export default function VehicleRegistration() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f0f2f5',
-  },
-  keyboardAvoidingView: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingBottom: 20,
-  },
-  section: {
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 16,
-  },
-  loadingContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  registrationsList: {
-    gap: 12,
-    marginBottom: 24,
-  },
-  registrationCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  registrationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  registrationPlate: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#050505',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  registrationDetails: {
-    fontSize: 14,
-    color: '#65676b',
-    marginBottom: 4,
-  },
-  imageContainer: {
-    marginTop: 12,
-  },
-  imageLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#6b7280',
-    marginBottom: 6,
-  },
-  registrationImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    backgroundColor: '#f3f4f6',
-  },
-  registrationActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  registrationDate: {
-    fontSize: 12,
-    color: '#9ca3af',
-  },
-  editButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#1877F2',
-    borderRadius: 6,
-  },
-  editButtonText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  rejectionContainer: {
-    marginTop: 12,
-    padding: 10,
-    backgroundColor: '#fef2f2',
-    borderRadius: 6,
-    borderLeftWidth: 2,
-    borderLeftColor: '#ef4444',
-  },
-  rejectionLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#991b1b',
-    marginBottom: 4,
-  },
-  rejectionText: {
-    fontSize: 12,
-    color: '#991b1b',
-  },
-  formSection: {
-    marginTop: 24,
-  },
-  formHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  formTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  cancelEditButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  cancelEditText: {
-    color: '#ef4444',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  formDescription: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 20,
-  },
-  form: {
-    gap: 16,
-  },
-  inputGroup: {
-    marginBottom: 4,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: '#111827',
-  },
-  imageButton: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: '#f3f4f6',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderStyle: 'dashed',
-  },
-  previewImage: {
-    width: '100%',
-    height: '100%',
-  },
-  imagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  imagePlaceholderText: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  removeImageButton: {
-    marginTop: 8,
-    padding: 8,
-    alignItems: 'center',
-  },
-  removeImageButtonText: {
-    fontSize: 14,
-    color: '#ef4444',
-    fontWeight: '500',
-  },
-  submitButton: {
-    backgroundColor: '#1877F2',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  infoContainer: {
-    backgroundColor: '#fef3c7',
-    borderRadius: 8,
-    padding: 16,
-    marginTop: 24,
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#92400e',
-    textAlign: 'center',
-  },
-  hintText: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 4,
-  },
-  pickerText: {
-    fontSize: 16,
-    color: '#111827',
-  },
-  placeholderText: {
-    color: '#9ca3af',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '70%',
-    paddingBottom: 20,
-    width: '100%',
-  },
-  modalContentCentered: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    maxHeight: '70%',
-    paddingBottom: 20,
-    width: '100%',
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  modalCloseButton: {
-    fontSize: 24,
-    color: '#6b7280',
-    fontWeight: '300',
-  },
-  modalItem: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  modalItemText: {
-    fontSize: 16,
-    color: '#111827',
-  },
-  searchContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  searchInput: {
-    backgroundColor: '#f3f4f6',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: '#111827',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-  },
-  emptyContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-});
 
