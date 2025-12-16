@@ -6,6 +6,7 @@ import { auth, db } from '../firebase/config'
 import { isSuperadmin } from '../utils/auth'
 import Layout from '../components/Layout';
 import Header from '../components/Header';
+import jsPDF from 'jspdf';
 
 interface StatCardProps {
   title: string;
@@ -93,8 +94,124 @@ function Dashboard() {
   })
   const [showReportModal, setShowReportModal] = useState(false)
   const [reportPage, setReportPage] = useState(1)
+  const [generatingPDF, setGeneratingPDF] = useState(false)
   const REPORT_ITEMS_PER_PAGE = 10
   const navigate = useNavigate()
+
+  const generatePDF = useCallback(() => {
+    setGeneratingPDF(true);
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      let yPosition = 20;
+      const margin = 20;
+      const lineHeight = 7;
+      const sectionSpacing = 10;
+
+      // Title
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Dashboard Report', margin, yPosition);
+      yPosition += lineHeight + 5;
+
+      // Generated date
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, margin, yPosition);
+      yPosition += lineHeight + sectionSpacing;
+
+      // Report data
+      const reportData = [
+        { category: 'Total Residents', total: stats.totalUsers, pending: '-', status: 'Active' },
+        { category: 'Total Billings', total: stats.totalBillings, pending: stats.pendingBillings, status: stats.pendingBillings > 0 ? 'Pending' : 'All Paid' },
+        { category: 'Complaints', total: stats.totalComplaints, pending: stats.pendingComplaints, status: stats.pendingComplaints > 0 ? 'Pending' : 'Resolved' },
+        { category: 'Visitors', total: stats.totalVisitors, pending: stats.pendingVisitors, status: stats.pendingVisitors > 0 ? 'Pending' : 'All Processed' },
+        { category: 'Registered Vehicles', total: stats.totalVehicles, pending: '-', status: 'Approved' },
+        { category: 'Maintenance Requests', total: stats.totalMaintenance, pending: stats.pendingMaintenance, status: stats.pendingMaintenance > 0 ? 'Pending' : 'All Processed' },
+      ];
+
+      // Table header
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Category', margin, yPosition);
+      doc.text('Total', margin + 60, yPosition);
+      doc.text('Pending', margin + 90, yPosition);
+      doc.text('Status', margin + 130, yPosition);
+      yPosition += lineHeight + 2;
+
+      // Draw line under header
+      doc.setLineWidth(0.5);
+      doc.line(margin, yPosition - 2, pageWidth - margin, yPosition - 2);
+      yPosition += 3;
+
+      // Table rows
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      reportData.forEach((row) => {
+        // Check if we need a new page
+        if (yPosition > pageHeight - 30) {
+          doc.addPage();
+          yPosition = 20;
+        }
+
+        doc.text(row.category, margin, yPosition);
+        doc.text(String(row.total), margin + 60, yPosition);
+        doc.text(String(row.pending), margin + 90, yPosition);
+        doc.text(row.status, margin + 130, yPosition);
+        yPosition += lineHeight + 2;
+      });
+
+      // Add resident growth data if available
+      if (selectedYear && residentGrowthData.length > 0) {
+        yPosition += sectionSpacing;
+        
+        // Check if we need a new page
+        if (yPosition > pageHeight - 50) {
+          doc.addPage();
+          yPosition = 20;
+        }
+
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Resident Growth - ${selectedYear}`, margin, yPosition);
+        yPosition += lineHeight + 5;
+
+        // Table header
+        doc.setFontSize(10);
+        doc.text('Month', margin, yPosition);
+        doc.text('Cumulative Count', margin + 80, yPosition);
+        yPosition += lineHeight + 2;
+
+        // Draw line under header
+        doc.line(margin, yPosition - 2, pageWidth - margin, yPosition - 2);
+        yPosition += 3;
+
+        // Table rows
+        doc.setFont('helvetica', 'normal');
+        residentGrowthData.forEach((data) => {
+          // Check if we need a new page
+          if (yPosition > pageHeight - 30) {
+            doc.addPage();
+            yPosition = 20;
+          }
+
+          doc.text(data.date, margin, yPosition);
+          doc.text(String(data.count), margin + 80, yPosition);
+          yPosition += lineHeight + 2;
+        });
+      }
+
+      // Save the PDF
+      const fileName = `dashboard-report-${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setGeneratingPDF(false);
+    }
+  }, [stats, selectedYear, residentGrowthData]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -1284,6 +1401,28 @@ function Dashboard() {
                   )}
                 </div>
                 <div className="px-4 sm:px-6 py-4 sm:py-5 border-t border-gray-200 flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
+                  <button
+                    className="bg-red-600 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto flex items-center justify-center gap-2"
+                    onClick={generatePDF}
+                    disabled={generatingPDF}
+                  >
+                    {generatingPDF ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                        Generate PDF
+                      </>
+                    )}
+                  </button>
                   <button
                     className="bg-gray-900 text-white border-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-md text-xs sm:text-sm font-medium transition-all hover:bg-gray-800 w-full sm:w-auto"
                     onClick={() => {
