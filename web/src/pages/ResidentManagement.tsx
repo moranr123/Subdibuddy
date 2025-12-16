@@ -1,7 +1,7 @@
 import { useEffect, useState, memo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs, query, orderBy, doc, updateDoc, deleteDoc, setDoc, getDoc, Timestamp, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, doc, updateDoc, deleteDoc, setDoc, getDoc, Timestamp, onSnapshot, where, limit } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
@@ -29,6 +29,7 @@ interface Resident {
     street?: string;
   };
   isTenant?: boolean;
+  residentType?: string;
   tenantRelation?: string;
   idFront?: string;
   idBack?: string;
@@ -51,6 +52,9 @@ function ResidentManagement() {
   const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
+  const [homeownerName, setHomeownerName] = useState<string | null>(null);
+  const [tenantNames, setTenantNames] = useState<string[]>([]);
+  const [loadingRelatedResidents, setLoadingRelatedResidents] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'approved' | 'deactivated' | 'archived'>('all');
   const [residentTypeFilter, setResidentTypeFilter] = useState<'all' | 'homeowner' | 'tenant'>('all');
@@ -265,6 +269,75 @@ function ResidentManagement() {
     setShowDetailsModal(true);
   }, []);
 
+  // Fetch related residents (homeowner for tenants, tenants for homeowners)
+  useEffect(() => {
+    const fetchRelatedResidents = async () => {
+      if (!selectedResident || !db || !selectedResident.address) {
+        setHomeownerName(null);
+        setTenantNames([]);
+        return;
+      }
+
+      setLoadingRelatedResidents(true);
+      setHomeownerName(null);
+      setTenantNames([]);
+
+      try {
+        const isTenant = selectedResident.isTenant === true || selectedResident.residentType === 'tenant';
+        const address = selectedResident.address;
+
+        if (isTenant) {
+          // Fetch homeowner at the same address
+          const homeownerQuery = query(
+            collection(db, 'users'),
+            where('address.block', '==', address.block),
+            where('address.lot', '==', address.lot),
+            where('address.street', '==', address.street),
+            where('residentType', '==', 'homeowner'),
+            where('status', '==', 'approved'),
+            limit(1)
+          );
+
+          const homeownerSnapshot = await getDocs(homeownerQuery);
+          if (!homeownerSnapshot.empty) {
+            const homeownerData = homeownerSnapshot.docs[0].data();
+            const homeownerFullName = homeownerData.fullName || 
+              `${homeownerData.firstName || ''} ${homeownerData.middleName || ''} ${homeownerData.lastName || ''}`.trim() ||
+              'Unknown Homeowner';
+            setHomeownerName(homeownerFullName);
+          }
+        } else {
+          // Fetch tenants at the same address
+          const tenantsQuery = query(
+            collection(db, 'users'),
+            where('address.block', '==', address.block),
+            where('address.lot', '==', address.lot),
+            where('address.street', '==', address.street),
+            where('residentType', '==', 'tenant'),
+            where('status', '==', 'approved')
+          );
+
+          const tenantsSnapshot = await getDocs(tenantsQuery);
+          const names: string[] = [];
+          tenantsSnapshot.forEach((tenantDoc) => {
+            const tenantData = tenantDoc.data();
+            const tenantFullName = tenantData.fullName || 
+              `${tenantData.firstName || ''} ${tenantData.middleName || ''} ${tenantData.lastName || ''}`.trim() ||
+              'Unknown Tenant';
+            names.push(tenantFullName);
+          });
+          setTenantNames(names);
+        }
+      } catch (error) {
+        console.error('Error fetching related residents:', error);
+      } finally {
+        setLoadingRelatedResidents(false);
+      }
+    };
+
+    fetchRelatedResidents();
+  }, [selectedResident, db]);
+
   const handleApprove = useCallback(async (residentId: string): Promise<boolean> => {
     if (!db || !auth) {
       console.error('Database or auth not available');
@@ -382,6 +455,45 @@ function ResidentManagement() {
         updatedAt: Timestamp.now(),
       });
       console.log('User saved to users collection successfully');
+      
+      // If tenant is approved, set homeowner's availability status to unavailable
+      if (userData.residentType === 'tenant' || userData.isTenant === true) {
+        try {
+          const tenantAddress = userData.address;
+          if (tenantAddress && tenantAddress.block && tenantAddress.lot && tenantAddress.street) {
+            // Find homeowner at the same address
+            const homeownersQuery = query(
+              collection(db, 'users'),
+              where('address.block', '==', tenantAddress.block),
+              where('address.lot', '==', tenantAddress.lot),
+              where('address.street', '==', tenantAddress.street),
+              where('residentType', '==', 'homeowner'),
+              where('status', '==', 'approved'),
+              limit(1)
+            );
+            
+            const homeownersSnapshot = await getDocs(homeownersQuery);
+            
+            if (!homeownersSnapshot.empty) {
+              const homeownerDoc = homeownersSnapshot.docs[0];
+              const homeownerId = homeownerDoc.id;
+              
+              // Update homeowner's availability status to unavailable
+              await updateDoc(doc(db, 'users', homeownerId), {
+                availabilityStatus: 'unavailable',
+                updatedAt: Timestamp.now(),
+              });
+              
+              console.log(`Updated homeowner ${homeownerId} availability status to unavailable`);
+            } else {
+              console.warn(`No homeowner found at address Block ${tenantAddress.block}, Lot ${tenantAddress.lot}, ${tenantAddress.street}`);
+            }
+          }
+        } catch (error) {
+          console.error('Error updating homeowner availability status:', error);
+          // Don't fail the approval if this update fails
+        }
+      }
       
       // Delete from pendingUsers collection
       console.log(`Deleting pending user document: ${residentId}`);
@@ -1059,6 +1171,32 @@ function ResidentManagement() {
                     <div>
                       <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Tenant Relation</label>
                       <p className="text-gray-900">{selectedResident.tenantRelation || 'N/A'}</p>
+                    </div>
+                  )}
+                  {selectedResident.isTenant && (
+                    <div>
+                      <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Homeowner</label>
+                      {loadingRelatedResidents ? (
+                        <p className="text-gray-500 italic">Loading...</p>
+                      ) : (
+                        <p className="text-gray-900">{homeownerName || 'N/A'}</p>
+                      )}
+                    </div>
+                  )}
+                  {!selectedResident.isTenant && (
+                    <div>
+                      <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Tenants</label>
+                      {loadingRelatedResidents ? (
+                        <p className="text-gray-500 italic">Loading...</p>
+                      ) : tenantNames.length > 0 ? (
+                        <div className="space-y-1">
+                          {tenantNames.map((name, index) => (
+                            <p key={index} className="text-gray-900">{name}</p>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-gray-900">None</p>
+                      )}
                     </div>
                   )}
                   <div>

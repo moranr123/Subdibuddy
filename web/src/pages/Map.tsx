@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
@@ -39,6 +39,9 @@ function Map() {
   const [showResidentSuggestions, setShowResidentSuggestions] = useState(false);
   const residentSearchInputRef = useRef<HTMLInputElement>(null);
   const residentSuggestionsRef = useRef<HTMLDivElement>(null);
+  const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'available' | 'unavailable'>('all');
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const filterDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -248,6 +251,7 @@ function Map() {
           'Resident';
 
         // Store resident data for search
+        const availabilityStatus = data.availabilityStatus || 'unavailable';
         const residentInfo = {
           id: doc.id,
           fullName,
@@ -257,6 +261,7 @@ function Map() {
           address: data.address ? `${data.address.block || ''} ${data.address.lot || ''} ${data.address.street || ''}`.trim() : '',
           lat,
           lng,
+          availabilityStatus,
           data,
         };
         residents.push(residentInfo);
@@ -270,24 +275,32 @@ function Map() {
           const isTenant = data.residentType === 'tenant' || data.isTenant === true;
           const isHomeowner = !isTenant;
           
-          // Determine marker color: green for homeowner, grey for tenant
-          // Both use the same marker style, just different colors
+          // Skip creating markers for tenants - only show homeowners on map
+          if (isTenant) {
+            console.log(`Skipping marker for tenant ${fullName} at ${lat}, ${lng}`);
+            return; // Skip marker creation for tenants
+          }
+          
+          // Only create markers for homeowners
+          // For homeowners: blue = unavailable (default), green = available
+          const availabilityStatus = data.availabilityStatus || 'unavailable';
           let markerIcon;
-          if (isHomeowner) {
-            // Green marker for homeowners
+          if (availabilityStatus === 'available') {
+            // Green marker for available homeowners
             markerIcon = {
               url: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png',
               scaledSize: new window.google.maps.Size(32, 32),
             };
           } else {
-            // Blue marker for tenants - same style as homeowner, just different color
+            // Blue marker for unavailable homeowners (default)
             markerIcon = {
               url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
               scaledSize: new window.google.maps.Size(32, 32),
             };
           }
           
-          console.log(`Adding marker for ${fullName} at ${lat}, ${lng} (${isHomeowner ? 'green' : 'grey'}, residentType: ${data.residentType}, isTenant: ${data.isTenant}, isHomeowner: ${isHomeowner})`);
+          const markerColor = availabilityStatus === 'available' ? 'green' : 'blue';
+          console.log(`Adding marker for ${fullName} at ${lat}, ${lng} (${markerColor}, residentType: ${data.residentType}, isHomeowner: ${isHomeowner}, availabilityStatus: ${availabilityStatus})`);
           
           try {
             const marker = new window.google.maps.Marker({
@@ -310,9 +323,9 @@ function Map() {
               position: markerPosition ? { lat: markerPosition.lat(), lng: markerPosition.lng() } : null,
               map: markerMap ? 'attached' : 'not attached',
               visible: marker.getVisible(),
-              iconType: isHomeowner ? 'green' : 'grey',
+              iconType: markerColor,
               isHomeowner: isHomeowner,
-              isTenant: isTenant,
+              availabilityStatus: availabilityStatus,
             });
             
             // Force marker to be visible
@@ -322,24 +335,114 @@ function Map() {
             }
 
             // Add info window with resident details
+            const availabilityText = availabilityStatus === 'available' ? 'Available (Green)' : 'Unavailable (Blue)';
+            
+            // Create info window with async content loading for tenants
             const infoWindow = new window.google.maps.InfoWindow({
               content: `
                 <div style="padding: 8px; min-width: 200px;">
                   <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">${fullName}</h3>
                   <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                    <strong>Type:</strong> ${isHomeowner ? 'Homeowner' : 'Tenant'}
+                    <strong>Type:</strong> Homeowner
+                  </p>
+                  <p style="margin: 4px 0; font-size: 12px; color: #666;">
+                    <strong>Status:</strong> ${availabilityText}
                   </p>
                   ${data.address ? `
                     <p style="margin: 4px 0; font-size: 12px; color: #666;">
                       <strong>Address:</strong> ${data.address.block || ''}, ${data.address.lot || ''}, ${data.address.street || ''}
                     </p>
                   ` : ''}
+                  <div id="tenants-${doc.id}" style="margin-top: 8px;">
+                    <p style="margin: 4px 0; font-size: 12px; color: #666;">
+                      <strong>Tenants:</strong> <span style="color: #9ca3af;">Loading...</span>
+                    </p>
+                  </div>
                 </div>
               `,
             });
 
+            // Function to load and update tenant names
+            const loadTenantNames = async () => {
+              if (!data.address || !db) return;
+              
+              try {
+                const tenantsQuery = query(
+                  collection(db, 'users'),
+                  where('address.block', '==', data.address.block),
+                  where('address.lot', '==', data.address.lot),
+                  where('address.street', '==', data.address.street),
+                  where('residentType', '==', 'tenant'),
+                  where('status', '==', 'approved')
+                );
+                
+                const tenantsSnapshot = await getDocs(tenantsQuery);
+                const tenantNames: string[] = [];
+                
+                tenantsSnapshot.forEach((tenantDoc) => {
+                  const tenantData = tenantDoc.data();
+                  const tenantName = tenantData.fullName || 
+                    `${tenantData.firstName || ''} ${tenantData.middleName || ''} ${tenantData.lastName || ''}`.trim() ||
+                    'Unknown Tenant';
+                  tenantNames.push(tenantName);
+                });
+                
+                // Update info window content with tenant names
+                const tenantList = tenantNames.length > 0 
+                  ? tenantNames.join(', ')
+                  : 'None';
+                
+                const updatedContent = `
+                  <div style="padding: 8px; min-width: 200px;">
+                    <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">${fullName}</h3>
+                    <p style="margin: 4px 0; font-size: 12px; color: #666;">
+                      <strong>Type:</strong> Homeowner
+                    </p>
+                    <p style="margin: 4px 0; font-size: 12px; color: #666;">
+                      <strong>Status:</strong> ${availabilityText}
+                    </p>
+                    ${data.address ? `
+                      <p style="margin: 4px 0; font-size: 12px; color: #666;">
+                        <strong>Address:</strong> ${data.address.block || ''}, ${data.address.lot || ''}, ${data.address.street || ''}
+                      </p>
+                    ` : ''}
+                    <p style="margin: 4px 0; font-size: 12px; color: #666;">
+                      <strong>Tenants:</strong> ${tenantList}
+                    </p>
+                  </div>
+                `;
+                
+                infoWindow.setContent(updatedContent);
+              } catch (error) {
+                console.error('Error loading tenant names:', error);
+                // Update with error message
+                const updatedContent = `
+                  <div style="padding: 8px; min-width: 200px;">
+                    <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">${fullName}</h3>
+                    <p style="margin: 4px 0; font-size: 12px; color: #666;">
+                      <strong>Type:</strong> Homeowner
+                    </p>
+                    <p style="margin: 4px 0; font-size: 12px; color: #666;">
+                      <strong>Status:</strong> ${availabilityText}
+                    </p>
+                    ${data.address ? `
+                      <p style="margin: 4px 0; font-size: 12px; color: #666;">
+                        <strong>Address:</strong> ${data.address.block || ''}, ${data.address.lot || ''}, ${data.address.street || ''}
+                      </p>
+                    ` : ''}
+                    <p style="margin: 4px 0; font-size: 12px; color: #666;">
+                      <strong>Tenants:</strong> <span style="color: #ef4444;">Error loading tenants</span>
+                    </p>
+                  </div>
+                `;
+                infoWindow.setContent(updatedContent);
+              }
+            };
+
             marker.addListener('click', () => {
               infoWindow.open(map, marker);
+              // Load tenant names when info window is opened
+              loadTenantNames();
             });
 
             // Store resident info with marker for search functionality
@@ -570,7 +673,7 @@ function Map() {
     return () => clearTimeout(timer);
   }, [searchQuery, currentLocation, map]);
 
-  // Filter markers based on resident search query
+  // Filter markers based on resident search query and availability filter
   useEffect(() => {
     if (!map || residentMarkers.length === 0) return;
 
@@ -579,10 +682,11 @@ function Map() {
     residentMarkers.forEach((marker) => {
       const residentInfo = (marker as any).residentInfo;
       if (!residentInfo) {
-        marker.setVisible(true);
+        marker.setVisible(false);
         return;
       }
 
+      // Check if matches search query
       const matchesSearch = 
         !query ||
         residentInfo.fullName.toLowerCase().includes(query) ||
@@ -591,9 +695,15 @@ function Map() {
         residentInfo.email.toLowerCase().includes(query) ||
         residentInfo.address.toLowerCase().includes(query);
 
-      marker.setVisible(matchesSearch);
+      // Check if matches availability filter
+      const matchesAvailability = 
+        availabilityFilter === 'all' ||
+        (availabilityFilter === 'available' && residentInfo.availabilityStatus === 'available') ||
+        (availabilityFilter === 'unavailable' && (residentInfo.availabilityStatus === 'unavailable' || !residentInfo.availabilityStatus));
+
+      marker.setVisible(matchesSearch && matchesAvailability);
     });
-  }, [residentSearchQuery, residentMarkers, map]);
+  }, [residentSearchQuery, availabilityFilter, residentMarkers, map]);
 
   // Generate resident search suggestions
   useEffect(() => {
@@ -671,6 +781,11 @@ function Map() {
       if (residentSearchInputRef.current?.contains(target)) {
         return;
       }
+
+      // If clicking inside filter dropdown, don't close
+      if (filterDropdownRef.current?.contains(target)) {
+        return;
+      }
       
       // Close if clicking outside
       if (
@@ -681,12 +796,15 @@ function Map() {
         residentSuggestionsRef.current &&
         !residentSuggestionsRef.current.contains(target) &&
         residentSearchInputRef.current &&
-        !residentSearchInputRef.current.contains(target)
+        !residentSearchInputRef.current.contains(target) &&
+        filterDropdownRef.current &&
+        !filterDropdownRef.current.contains(target)
       ) {
         // Use setTimeout to allow click events to fire first
         setTimeout(() => {
           setShowSuggestions(false);
           setShowResidentSuggestions(false);
+          setShowFilterDropdown(false);
         }, 0);
       }
     };
@@ -804,66 +922,125 @@ function Map() {
             </div>
           )}
           <div className="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden m-4 md:m-6 lg:m-8 min-h-0 relative">
-            {/* Resident Search Bar */}
-            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 w-full max-w-md px-4">
-              <div className="relative">
-                <input
-                  ref={residentSearchInputRef}
-                  type="text"
-                  value={residentSearchQuery}
-                  onChange={(e) => setResidentSearchQuery(e.target.value)}
-                  onFocus={() => {
-                    if (residentSearchSuggestions.length > 0) {
-                      setShowResidentSuggestions(true);
-                    }
-                  }}
-                  placeholder="Search residents by name, email, or address..."
-                  className="w-full px-4 py-2 pl-10 pr-10 border border-gray-300 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                />
-                <svg
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                {residentSearchQuery && (
-                  <button
-                    onClick={() => {
-                      setResidentSearchQuery('');
-                      setShowResidentSuggestions(false);
+            {/* Resident Search Bar with Filter */}
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 w-full max-w-2xl px-4">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    ref={residentSearchInputRef}
+                    type="text"
+                    value={residentSearchQuery}
+                    onChange={(e) => setResidentSearchQuery(e.target.value)}
+                    onFocus={() => {
+                      if (residentSearchSuggestions.length > 0) {
+                        setShowResidentSuggestions(true);
+                      }
                     }}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    placeholder="Search residents by name, email, or address..."
+                    className="w-full px-4 py-2 pl-10 pr-10 border border-gray-300 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                  <svg
+                    className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  {residentSearchQuery && (
+                    <button
+                      onClick={() => {
+                        setResidentSearchQuery('');
+                        setShowResidentSuggestions(false);
+                      }}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                  {/* Resident Suggestions Dropdown */}
+                  {showResidentSuggestions && residentSearchSuggestions.length > 0 && (
+                    <div
+                      ref={residentSuggestionsRef}
+                      className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto z-20"
+                    >
+                      {residentSearchSuggestions.map((resident) => (
+                        <div
+                          key={resident.id}
+                          onClick={() => handleSelectResident(resident)}
+                          className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                        >
+                          <div className="font-medium text-gray-900 text-sm">{resident.fullName}</div>
+                          {resident.email && (
+                            <div className="text-xs text-gray-500 mt-1">{resident.email}</div>
+                          )}
+                          {resident.address && (
+                            <div className="text-xs text-gray-500">{resident.address}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* Filter Button */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                    className="px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm font-medium text-gray-700 flex items-center gap-2 whitespace-nowrap"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                    </svg>
+                    <span className="hidden sm:inline">
+                      {availabilityFilter === 'all' ? 'All' : availabilityFilter === 'available' ? 'Available' : 'Unavailable'}
+                    </span>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
-                )}
-                {/* Resident Suggestions Dropdown */}
-                {showResidentSuggestions && residentSearchSuggestions.length > 0 && (
-                  <div
-                    ref={residentSuggestionsRef}
-                    className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto z-20"
-                  >
-                    {residentSearchSuggestions.map((resident) => (
-                      <div
-                        key={resident.id}
-                        onClick={() => handleSelectResident(resident)}
-                        className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                  {/* Filter Dropdown */}
+                  {showFilterDropdown && (
+                    <div ref={filterDropdownRef} className="absolute top-full right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-20 min-w-[140px]">
+                      <button
+                        onClick={() => {
+                          setAvailabilityFilter('all');
+                          setShowFilterDropdown(false);
+                        }}
+                        className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${
+                          availabilityFilter === 'all' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
+                        }`}
                       >
-                        <div className="font-medium text-gray-900 text-sm">{resident.fullName}</div>
-                        {resident.email && (
-                          <div className="text-xs text-gray-500 mt-1">{resident.email}</div>
-                        )}
-                        {resident.address && (
-                          <div className="text-xs text-gray-500">{resident.address}</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                        All
+                      </button>
+                      <button
+                        onClick={() => {
+                          setAvailabilityFilter('available');
+                          setShowFilterDropdown(false);
+                        }}
+                        className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg flex items-center gap-2 ${
+                          availabilityFilter === 'available' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
+                        }`}
+                      >
+                        <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                        Available
+                      </button>
+                      <button
+                        onClick={() => {
+                          setAvailabilityFilter('unavailable');
+                          setShowFilterDropdown(false);
+                        }}
+                        className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg flex items-center gap-2 ${
+                          availabilityFilter === 'unavailable' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
+                        }`}
+                      >
+                        <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                        Unavailable
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div 

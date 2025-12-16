@@ -48,7 +48,7 @@ export default function Signup() {
   const [sex, setSex] = useState<'male' | 'female' | ''>('');
   const [showSexPicker, setShowSexPicker] = useState(false);
   
-  // Step 3: Address
+  // Step 3: Address and Resident Type (combined)
   const [block, setBlock] = useState('');
   const [lot, setLot] = useState('');
   const [street, setStreet] = useState('');
@@ -58,8 +58,6 @@ export default function Signup() {
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [showMapModal, setShowMapModal] = useState(false);
   const mapWebViewRef = useRef<WebView>(null);
-  
-  // Step 4: Resident Type and ID
   const [residentType, setResidentType] = useState<'tenant' | 'homeowner' | null>(null);
   const [tenantRelation, setTenantRelation] = useState('');
   const [showRelationPicker, setShowRelationPicker] = useState(false);
@@ -72,7 +70,7 @@ export default function Signup() {
   const [idImages, setIdImages] = useState<IDImages>({ front: null, back: null });
   const [documentImages, setDocumentImages] = useState<DocumentImages>({});
   
-  // Step 5: Terms
+  // Step 4: Terms
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   
   // Error states
@@ -80,6 +78,7 @@ export default function Signup() {
   
   // Other
   const [loading, setLoading] = useState(false);
+  const [stepLoading, setStepLoading] = useState(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -1008,9 +1007,6 @@ export default function Signup() {
           newErrors.street = 'Please select a street';
           isValid = false;
         }
-        break;
-
-      case 4:
         if (!residentType) {
           newErrors.residentType = 'Please select if you are a tenant or homeowner';
           isValid = false;
@@ -1019,6 +1015,14 @@ export default function Signup() {
           newErrors.tenantRelation = 'Please select your relation to the homeowner';
           isValid = false;
         }
+        // Location is only required for homeowners
+        if (residentType === 'homeowner' && !location) {
+          newErrors.location = 'Please pin your location on the map';
+          isValid = false;
+        }
+        break;
+
+      case 4:
         if (!waterBillingDate) {
           newErrors.waterBillingDate = 'Please select your water billing date';
           isValid = false;
@@ -1088,6 +1092,8 @@ export default function Signup() {
       return;
     }
 
+    setStepLoading(true);
+
     // Extra duplicate check on step 1 for email/phone
     if (currentStep === 1 && db) {
       try {
@@ -1106,6 +1112,7 @@ export default function Signup() {
             );
             const [usersSnap, pendingSnap] = await Promise.all([getDocs(usersQ), getDocs(pendingQ)]);
             if (!usersSnap.empty || !pendingSnap.empty) {
+              setStepLoading(false);
               setError('emailOrPhone', 'This email is already registered. Please sign in instead.');
               return;
             }
@@ -1122,6 +1129,7 @@ export default function Signup() {
             );
             const [usersSnap, pendingSnap] = await Promise.all([getDocs(usersQ), getDocs(pendingQ)]);
             if (!usersSnap.empty || !pendingSnap.empty) {
+              setStepLoading(false);
               setError('emailOrPhone', 'This phone number is already registered. Please sign in instead.');
               return;
             }
@@ -1129,13 +1137,69 @@ export default function Signup() {
         }
       } catch (err) {
         console.warn('Duplicate email/phone check failed', err);
+        setStepLoading(false);
+        return;
+      }
+    }
+
+    // Check if homeowner exists at the address when tenant is registering (step 3)
+    if (currentStep === 3 && residentType === 'tenant' && db && block && lot && street) {
+      try {
+        // Check for approved homeowners in users collection
+        const homeownersQuery = query(
+          collection(db, 'users'),
+          where('address.block', '==', block),
+          where('address.lot', '==', lot),
+          where('address.street', '==', street),
+          where('residentType', '==', 'homeowner'),
+          where('status', '==', 'approved'),
+          limit(1)
+        );
+        
+        const homeownersSnapshot = await getDocs(homeownersQuery);
+        
+        if (homeownersSnapshot.empty) {
+          // Also check pendingUsers for homeowners at this address
+          const pendingHomeownersQuery = query(
+            collection(db, 'pendingUsers'),
+            where('address.block', '==', block),
+            where('address.lot', '==', lot),
+            where('address.street', '==', street),
+            where('residentType', '==', 'homeowner'),
+            limit(1)
+          );
+          
+          const pendingHomeownersSnapshot = await getDocs(pendingHomeownersQuery);
+          
+          if (pendingHomeownersSnapshot.empty) {
+            setStepLoading(false);
+            setError('general', `No homeowner found at this address (Block ${block}, Lot ${lot}, ${street}). Tenants can only register at addresses occupied by approved homeowners.`);
+            Alert.alert(
+              'Registration Not Allowed',
+              `No homeowner found at this address.\n\nBlock: ${block}\nLot: ${lot}\nStreet: ${street}\n\nTenants can only register at addresses occupied by approved homeowners.`,
+              [{ text: 'OK' }]
+            );
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Error checking for homeowner:', err);
+        setStepLoading(false);
+        setError('general', 'Unable to verify homeowner at this address. Please try again.');
+        Alert.alert(
+          'Verification Error',
+          'Unable to verify if a homeowner exists at this address. Please try again.',
+          [{ text: 'OK' }]
+        );
+        return;
       }
     }
 
     // Clear errors when moving to next step
     setErrors({});
+    setStepLoading(false);
     nextStep();
-  }, [currentStep, db, emailOrPhone, isEmail, validateStep, nextStep, setError]);
+  }, [currentStep, db, emailOrPhone, isEmail, validateStep, nextStep, setError, residentType, block, lot, street]);
 
   const handlePrev = useCallback(() => {
     // Clear errors when going back
@@ -1202,6 +1266,52 @@ export default function Signup() {
     setErrors({}); // Clear previous errors
     
     try {
+      // If tenant, check if homeowner exists at the same address
+      if (residentType === 'tenant' && db) {
+        try {
+          const homeownersQuery = query(
+            collection(db, 'users'),
+            where('address.block', '==', block),
+            where('address.lot', '==', lot),
+            where('address.street', '==', street),
+            where('residentType', '==', 'homeowner'),
+            where('status', '==', 'approved'),
+            limit(1)
+          );
+          
+          const homeownersSnapshot = await getDocs(homeownersQuery);
+          
+          if (homeownersSnapshot.empty) {
+            // Also check pendingUsers for homeowners at this address
+            const pendingHomeownersQuery = query(
+              collection(db, 'pendingUsers'),
+              where('address.block', '==', block),
+              where('address.lot', '==', lot),
+              where('address.street', '==', street),
+              where('residentType', '==', 'homeowner'),
+              limit(1)
+            );
+            
+            const pendingHomeownersSnapshot = await getDocs(pendingHomeownersQuery);
+            
+            if (pendingHomeownersSnapshot.empty) {
+              setError('general', 'No homeowner found at this address. Tenants can only register at addresses occupied by approved homeowners.');
+              Alert.alert(
+                'Registration Not Allowed',
+                'No homeowner found at this address (Block ' + block + ', Lot ' + lot + ', ' + street + ').\n\nTenants can only register at addresses occupied by approved homeowners.',
+                [{ text: 'OK' }]
+              );
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (error: any) {
+          console.error('Error checking for homeowner:', error);
+          // If query fails, allow registration but log the error
+          // This prevents blocking registration due to query errors
+        }
+      }
+      
       // Generate a unique ID for the pending user (using timestamp + random)
       const pendingUserId = `pending_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
       const username = isEmail ? emailOrPhone.trim() : `${emailOrPhone.trim()}@subdibuddy.local`;
@@ -1412,9 +1522,16 @@ export default function Signup() {
               <TouchableOpacity
                 style={[styles.nextButtonInline, styles.nextButtonInlineFull]}
                 onPress={handleNext}
-                disabled={loading}
+                disabled={loading || stepLoading}
               >
-                <Text style={styles.nextButtonTextInline}>Next</Text>
+                {stepLoading ? (
+                  <View style={styles.buttonContentInline}>
+                    <ActivityIndicator size="small" color="#ffffff" />
+                    <Text style={styles.nextButtonTextInline}>Checking...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.nextButtonTextInline}>Next</Text>
+                )}
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.signInLinkInline}
@@ -1546,9 +1663,16 @@ export default function Signup() {
               <TouchableOpacity
                 style={styles.nextButtonInline}
                 onPress={handleNext}
-                disabled={loading}
+                disabled={loading || stepLoading}
               >
-                <Text style={styles.nextButtonTextInline}>Next</Text>
+                {stepLoading ? (
+                  <View style={styles.buttonContentInline}>
+                    <ActivityIndicator size="small" color="#ffffff" />
+                    <Text style={styles.nextButtonTextInline}>Checking...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.nextButtonTextInline}>Next</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -1557,8 +1681,16 @@ export default function Signup() {
       case 3:
         return (
           <View style={styles.stepContent}>
-            <Text style={styles.stepTitle}>Address</Text>
+            <Text style={styles.stepTitle}>Address & Resident Type</Text>
             <Text style={styles.stepSubtitle}>Step 3 of {TOTAL_STEPS}</Text>
+
+            {errors.general && (
+              <View style={styles.formGroup}>
+                <View style={styles.generalErrorContainer}>
+                  <Text style={styles.generalErrorText}>{errors.general}</Text>
+                </View>
+              </View>
+            )}
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Block</Text>
@@ -1567,6 +1699,7 @@ export default function Signup() {
                 onPress={() => {
                   setShowBlockPicker(true);
                   clearError('block');
+                  clearError('general');
                 }}
                 disabled={loading}
               >
@@ -1587,6 +1720,7 @@ export default function Signup() {
                 onPress={() => {
                   setShowLotPicker(true);
                   clearError('lot');
+                  clearError('general');
                 }}
                 disabled={loading}
               >
@@ -1607,6 +1741,7 @@ export default function Signup() {
                 onPress={() => {
                   setShowStreetPicker(true);
                   clearError('street');
+                  clearError('general');
                 }}
                 disabled={loading}
               >
@@ -1621,65 +1756,18 @@ export default function Signup() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Pin Your Location on Map</Text>
-              <Text style={styles.subLabel}>Tap on the map to mark your exact location</Text>
-              <TouchableOpacity
-                style={[styles.mapButton, errors.location && styles.inputError]}
-                onPress={() => {
-                  setShowMapModal(true);
-                  clearError('location');
-                }}
-                disabled={loading}
-              >
-                {location ? (
-                  <Text style={styles.mapButtonText}>
-                    Location: {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-                  </Text>
-                ) : (
-                  <Text style={[styles.mapButtonText, styles.mapButtonPlaceholder]}>
-                    Tap to pin your location on map
-                  </Text>
-                )}
-              </TouchableOpacity>
-              {errors.location && (
-                <Text style={styles.errorText}>{errors.location}</Text>
-              )}
-            </View>
-
-            {/* Navigation Buttons */}
-            <View style={styles.formNavigationButtons}>
-              <TouchableOpacity
-                style={styles.backButtonInline}
-                onPress={handlePrev}
-                disabled={loading}
-              >
-                <Text style={styles.backButtonTextInline}>Back</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.nextButtonInline}
-                onPress={handleNext}
-                disabled={loading}
-              >
-                <Text style={styles.nextButtonTextInline}>Next</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        );
-
-      case 4:
-        return (
-          <View style={styles.stepContent}>
-            <Text style={styles.stepTitle}>Resident Type & Documents</Text>
-            <Text style={styles.stepSubtitle}>Step 4 of {TOTAL_STEPS}</Text>
-
-            <View style={styles.formGroup}>
               <Text style={styles.label}>I am a</Text>
-              <View style={styles.radioGroup}>
+              <View style={[styles.radioGroup, errors.residentType && styles.radioGroupError]}>
                 <TouchableOpacity
                   style={styles.radioContainer}
                   onPress={() => {
                     setResidentType('homeowner');
                     clearError('residentType');
+                    clearError('general');
+                    // Clear location error when switching to tenant
+                    if (errors.location) {
+                      clearError('location');
+                    }
                   }}
                   disabled={loading}
                 >
@@ -1693,7 +1781,10 @@ export default function Signup() {
                   style={styles.radioContainer}
                   onPress={() => {
                     setResidentType('tenant');
+                    setLocation(null); // Clear location when switching to tenant
                     clearError('residentType');
+                    clearError('location');
+                    clearError('general');
                   }}
                   disabled={loading}
                 >
@@ -1728,6 +1819,69 @@ export default function Signup() {
                 </>
               )}
             </View>
+
+            {/* Map location pinning - only for homeowners */}
+            {residentType === 'homeowner' && (
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Pin Your Location on Map</Text>
+                <Text style={styles.subLabel}>Tap on the map to mark your exact location</Text>
+                <TouchableOpacity
+                  style={[styles.mapButton, errors.location && styles.inputError]}
+                  onPress={() => {
+                    setShowMapModal(true);
+                    clearError('location');
+                  }}
+                  disabled={loading}
+                >
+                  {location ? (
+                    <Text style={styles.mapButtonText}>
+                      Location: {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+                    </Text>
+                  ) : (
+                    <Text style={[styles.mapButtonText, styles.mapButtonPlaceholder]}>
+                      Tap to pin your location on map
+                    </Text>
+                  )}
+                </TouchableOpacity>
+                {errors.location && (
+                  <Text style={styles.errorText}>{errors.location}</Text>
+                )}
+              </View>
+            )}
+
+            {/* Navigation Buttons */}
+            <View style={styles.formNavigationButtons}>
+              <TouchableOpacity
+                style={styles.backButtonInline}
+                onPress={handlePrev}
+                disabled={loading}
+              >
+                <Text style={styles.backButtonTextInline}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.nextButtonInline}
+                onPress={handleNext}
+                disabled={loading || stepLoading}
+              >
+                {stepLoading ? (
+                  <View style={styles.buttonContentInline}>
+                    <ActivityIndicator size="small" color="#ffffff" />
+                    <Text style={styles.nextButtonTextInline}>Checking...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.nextButtonTextInline}>Next</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+
+
+      case 4:
+        return (
+          <View style={styles.stepContent}>
+            <Text style={styles.stepTitle}>Billing Dates & Documents</Text>
+            <Text style={styles.stepSubtitle}>Step 4 of {TOTAL_STEPS}</Text>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Billing Dates</Text>
@@ -1806,94 +1960,101 @@ export default function Signup() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Valid ID</Text>
-              <Text style={styles.subLabel}>Upload front and back of your valid ID</Text>
-              
-              <View style={styles.idContainer}>
-                <View style={styles.idItem}>
-                  <Text style={styles.idLabel}>Front</Text>
-                  {idImages.front ? (
-                    <Image source={{ uri: idImages.front }} style={styles.idImage} />
-                  ) : (
-                    <TouchableOpacity
-                      style={[styles.idUploadButton, errors.idFront && styles.idUploadButtonError]}
-                      onPress={() => {
-                        showImageSourcePicker('front');
-                        clearError('idFront');
-                      }}
-                      disabled={loading}
-                    >
-                      <Text style={styles.idUploadText}>Upload Front</Text>
-                    </TouchableOpacity>
-                  )}
-                  {errors.idFront && (
-                    <Text style={styles.errorText}>{errors.idFront}</Text>
-                  )}
+              <Text style={styles.label}>Deed of Sale</Text>
+              <Text style={styles.subLabel}>Upload the Deed of Sale document</Text>
+              {documentImages['deedOfSale'] ? (
+                <View style={styles.documentImageContainer}>
+                  <Image source={{ uri: documentImages['deedOfSale'] }} style={styles.documentImage} />
+                  <TouchableOpacity
+                    style={styles.removeDocumentButton}
+                    onPress={() => {
+                      setDocumentImages(prev => ({ ...prev, deedOfSale: null }));
+                    }}
+                    disabled={loading}
+                  >
+                    <Text style={styles.removeDocumentText}>Replace</Text>
+                  </TouchableOpacity>
                 </View>
-
-                <View style={styles.idItem}>
-                  <Text style={styles.idLabel}>Back</Text>
-                  {idImages.back ? (
-                    <Image source={{ uri: idImages.back }} style={styles.idImage} />
-                  ) : (
-                    <TouchableOpacity
-                      style={[styles.idUploadButton, errors.idBack && styles.idUploadButtonError]}
-                      onPress={() => {
-                        showImageSourcePicker('back');
-                        clearError('idBack');
-                      }}
-                      disabled={loading}
-                    >
-                      <Text style={styles.idUploadText}>Upload Back</Text>
-                    </TouchableOpacity>
-                  )}
-                  {errors.idBack && (
-                    <Text style={styles.errorText}>{errors.idBack}</Text>
-                  )}
-                </View>
-              </View>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.documentUploadButton, errors.deedOfSale && styles.idUploadButtonError]}
+                  onPress={() => {
+                    showDocumentSourcePicker('deedOfSale');
+                    clearError('deedOfSale');
+                  }}
+                  disabled={loading}
+                >
+                  <Text style={styles.documentUploadText}>Upload Deed of Sale</Text>
+                </TouchableOpacity>
+              )}
+              {errors.deedOfSale && (
+                <Text style={styles.errorText}>{errors.deedOfSale}</Text>
+              )}
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Deed of Sale</Text>
-              <Text style={styles.subLabel}>Upload a photo of the Deed of Sale</Text>
+              <Text style={styles.label}>Valid ID</Text>
+              <Text style={styles.subLabel}>Upload both front and back of your valid ID</Text>
               
-              <View style={styles.documentsContainer}>
-                <View style={styles.documentItem}>
-                  <Text style={styles.documentLabel}>Upload Image</Text>
-                  {documentImages['deedOfSale'] ? (
-                    <View style={styles.documentImageContainer}>
-                      <Image source={{ uri: documentImages['deedOfSale']! }} style={styles.documentImage} />
-                      <TouchableOpacity
-                        style={styles.removeDocumentButton}
-                        onPress={() => {
-                          setDocumentImages(prev => {
-                            const newDocs = { ...prev };
-                            delete newDocs['deedOfSale'];
-                            return newDocs;
-                          });
-                        }}
-                        disabled={loading}
-                      >
-                        <Text style={styles.removeDocumentText}>Remove</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={[styles.documentUploadButton, errors.deedOfSale && styles.idUploadButtonError]}
-                      onPress={() => {
-                        showDocumentSourcePicker('deedOfSale');
-                      }}
-                      disabled={loading}
-                    >
-                      <Text style={styles.documentUploadText}>Upload Deed of Sale</Text>
-                    </TouchableOpacity>
-                  )}
+              <Text style={[styles.subLabel, { marginTop: 8 }]}>Front</Text>
+              {idImages.front ? (
+                <View style={styles.documentImageContainer}>
+                  <Image source={{ uri: idImages.front }} style={styles.documentImage} />
+                  <TouchableOpacity
+                    style={styles.removeDocumentButton}
+                    onPress={() => {
+                      setIdImages(prev => ({ ...prev, front: null }));
+                    }}
+                    disabled={loading}
+                  >
+                    <Text style={styles.removeDocumentText}>Replace</Text>
+                  </TouchableOpacity>
                 </View>
-                {errors.deedOfSale && (
-                  <Text style={styles.errorText}>{errors.deedOfSale}</Text>
-                )}
-              </View>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.idUploadButton, errors.idFront && styles.idUploadButtonError]}
+                  onPress={() => {
+                    showImageSourcePicker('front');
+                    clearError('idFront');
+                  }}
+                  disabled={loading}
+                >
+                  <Text style={styles.idUploadText}>Upload ID Front</Text>
+                </TouchableOpacity>
+              )}
+              {errors.idFront && (
+                <Text style={styles.errorText}>{errors.idFront}</Text>
+              )}
+
+              <Text style={[styles.subLabel, { marginTop: 12 }]}>Back</Text>
+              {idImages.back ? (
+                <View style={styles.documentImageContainer}>
+                  <Image source={{ uri: idImages.back }} style={styles.documentImage} />
+                  <TouchableOpacity
+                    style={styles.removeDocumentButton}
+                    onPress={() => {
+                      setIdImages(prev => ({ ...prev, back: null }));
+                    }}
+                    disabled={loading}
+                  >
+                    <Text style={styles.removeDocumentText}>Replace</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.idUploadButton, errors.idBack && styles.idUploadButtonError]}
+                  onPress={() => {
+                    showImageSourcePicker('back');
+                    clearError('idBack');
+                  }}
+                  disabled={loading}
+                >
+                  <Text style={styles.idUploadText}>Upload ID Back</Text>
+                </TouchableOpacity>
+              )}
+              {errors.idBack && (
+                <Text style={styles.errorText}>{errors.idBack}</Text>
+              )}
             </View>
 
             {/* Navigation Buttons */}
@@ -1908,9 +2069,16 @@ export default function Signup() {
               <TouchableOpacity
                 style={styles.nextButtonInline}
                 onPress={handleNext}
-                disabled={loading}
+                disabled={loading || stepLoading}
               >
-                <Text style={styles.nextButtonTextInline}>Next</Text>
+                {stepLoading ? (
+                  <View style={styles.buttonContentInline}>
+                    <ActivityIndicator size="small" color="#ffffff" />
+                    <Text style={styles.nextButtonTextInline}>Checking...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.nextButtonTextInline}>Next</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -2806,6 +2974,20 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     marginTop: 4,
   },
+  generalErrorContainer: {
+    padding: 12,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1.5,
+    borderColor: '#ef4444',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  generalErrorText: {
+    fontSize: Math.max(12, Math.min(width * 0.033, 14)),
+    color: '#ef4444',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
   datePickerButton: {
     padding: 12,
     borderWidth: 1,
@@ -2920,6 +3102,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 16,
     marginTop: 8,
+  },
+  radioGroupError: {
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: '#ef4444',
+    borderRadius: 8,
+    backgroundColor: '#fef2f2',
   },
   radioContainer: {
     flexDirection: 'row',

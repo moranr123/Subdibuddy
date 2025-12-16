@@ -88,3 +88,4 @@ The code includes fallback values (hardcoded defaults) for development purposes.
 - Environment variables must start with `EXPO_PUBLIC_` to be accessible
 - For production builds, you may need to rebuild the app
 
+

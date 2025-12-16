@@ -1,17 +1,25 @@
-import { View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity, Alert, Linking, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { MaterialIcons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import Constants from 'expo-constants';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { getAuthService, db } from '../firebase/config';
 
 export default function Settings() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isDarkMode, toggleDarkMode, theme } = useTheme();
   const [appVersion] = useState(Constants.expoConfig?.version || '1.0.0');
+  const [user, setUser] = useState<any>(null);
+  const [userData, setUserData] = useState<any>(null);
+  const [isHomeowner, setIsHomeowner] = useState(false);
+  const [availabilityStatus, setAvailabilityStatus] = useState<'available' | 'unavailable'>('unavailable');
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
 
   const dynamicStyles = useMemo(() => StyleSheet.create({
     container: {
@@ -94,6 +102,56 @@ export default function Settings() {
     },
   }), [theme, isDarkMode]);
 
+  // Fetch user data and check if homeowner
+  useEffect(() => {
+    const authInstance = getAuthService();
+    if (authInstance) {
+      const unsubscribe = onAuthStateChanged(authInstance, async (currentUser) => {
+        setUser(currentUser);
+        if (currentUser && db) {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+            if (userDoc.exists()) {
+              const data = userDoc.data();
+              setUserData(data);
+              // Check if user is a homeowner (not a tenant)
+              const isTenant = data.residentType === 'tenant' || data.isTenant === true;
+              setIsHomeowner(!isTenant);
+              // Get availability status (default to 'unavailable' if not set)
+              setAvailabilityStatus(data.availabilityStatus || 'unavailable');
+            }
+          } catch (error) {
+            console.error('Error fetching user data:', error);
+          }
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, []);
+
+  const handleToggleAvailability = async (value: boolean) => {
+    if (!user || !db || loadingAvailability) return;
+
+    const newStatus: 'available' | 'unavailable' = value ? 'available' : 'unavailable';
+    setLoadingAvailability(true);
+
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        availabilityStatus: newStatus,
+      });
+      setAvailabilityStatus(newStatus);
+      Alert.alert(
+        'Status Updated',
+        `Your marker is now ${newStatus === 'available' ? 'green (available)' : 'blue (unavailable)'} on the map.`
+      );
+    } catch (error) {
+      console.error('Error updating availability status:', error);
+      Alert.alert('Error', 'Failed to update availability status. Please try again.');
+    } finally {
+      setLoadingAvailability(false);
+    }
+  };
+
   const handleOpenLink = (url: string) => {
     Linking.openURL(url).catch((err) => {
       console.error('Error opening link:', err);
@@ -161,6 +219,42 @@ export default function Settings() {
             />
           </View>
         </View>
+
+        {/* Availability Section - Only for Homeowners */}
+        {isHomeowner && (
+          <View style={dynamicStyles.section}>
+            <Text style={dynamicStyles.sectionTitle}>Map Availability</Text>
+            
+            <View style={dynamicStyles.settingItem}>
+              <View style={dynamicStyles.settingItemLeft}>
+                <MaterialIcons 
+                  name={availabilityStatus === 'available' ? 'location-on' : 'location-off'} 
+                  size={24} 
+                  color={availabilityStatus === 'available' ? '#4CAF50' : '#2196F3'} 
+                  style={dynamicStyles.settingIcon}
+                />
+                <View style={dynamicStyles.settingText}>
+                  <Text style={dynamicStyles.settingTitle}>Available on Map</Text>
+                  <Text style={dynamicStyles.settingDescription}>
+                    {availabilityStatus === 'available' 
+                      ? 'Green marker (available)' 
+                      : 'Blue marker (unavailable)'}
+                  </Text>
+                </View>
+              </View>
+              {loadingAvailability ? (
+                <ActivityIndicator size="small" color={theme.text} />
+              ) : (
+                <Switch
+                  value={availabilityStatus === 'available'}
+                  onValueChange={handleToggleAvailability}
+                  trackColor={{ false: '#d1d5db', true: '#4CAF50' }}
+                  thumbColor={availabilityStatus === 'available' ? '#ffffff' : '#ffffff'}
+                />
+              )}
+            </View>
+          </View>
+        )}
 
         {/* Privacy & Security Section */}
         <View style={dynamicStyles.section}>
