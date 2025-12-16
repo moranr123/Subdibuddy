@@ -285,7 +285,7 @@ export default function History() {
       }, (error: any) => {
         console.error('Error fetching visitor registrations:', error);
         // If error is about missing index, try without orderBy
-        if (error.code === 'failed-precondition' || error.message?.includes('index')) {
+        if ((error.code === 'failed-precondition' || error.message?.includes('index')) && db) {
           const q2 = query(
             collection(db, 'visitors'),
             where('residentId', '==', user.uid)

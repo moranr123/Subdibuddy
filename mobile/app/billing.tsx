@@ -522,9 +522,9 @@ export default function Billing() {
       } else {
         dueDate = new Date(billing.dueDate);
       }
-      if (Number.isNaN(dueDate.getTime())) {
+      if (dueDate && Number.isNaN(dueDate.getTime())) {
         dueDate = null;
-      } else {
+      } else if (dueDate) {
         dueDate.setHours(0, 0, 0, 0);
       }
     } catch {
@@ -535,8 +535,8 @@ export default function Billing() {
 
     if (billing.status === 'overdue' || dueDate < today) {
       return (
-        <View style={[styles.riskChip, styles.riskChipOverdue]}>
-          <Text style={styles.riskChipText}>Overdue</Text>
+        <View style={[dynamicStyles.riskChip, dynamicStyles.riskChipOverdue]}>
+          <Text style={dynamicStyles.riskChipText}>Overdue</Text>
         </View>
       );
     }
@@ -545,8 +545,8 @@ export default function Billing() {
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
     if (diffDays >= 0 && diffDays <= 7) {
       return (
-        <View style={[styles.riskChip, styles.riskChipSoon]}>
-          <Text style={styles.riskChipText}>Due soon</Text>
+        <View style={[dynamicStyles.riskChip, dynamicStyles.riskChipSoon]}>
+          <Text style={dynamicStyles.riskChipText}>Due soon</Text>
         </View>
       );
     }
@@ -587,9 +587,9 @@ export default function Billing() {
         } else {
           dueDate = new Date(b.dueDate);
         }
-        if (Number.isNaN(dueDate.getTime())) {
+        if (dueDate && Number.isNaN(dueDate.getTime())) {
           dueDate = null;
-        } else {
+        } else if (dueDate) {
           dueDate.setHours(0, 0, 0, 0);
         }
       } catch {
