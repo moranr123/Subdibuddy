@@ -1,7 +1,7 @@
 import { useEffect, useState, memo, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs, query, orderBy, addDoc, updateDoc, doc, Timestamp, onSnapshot, where } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, addDoc, updateDoc, doc, Timestamp, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
@@ -44,6 +44,7 @@ interface Billing {
   createdAt: any;
   updatedAt?: any;
   userProofDetails?: string;
+  userProofImageUrl?: string;
   userProofStatus?: 'pending' | 'verified' | 'rejected';
   userProofSubmittedAt?: any;
   nextBillingDate?: string;
@@ -398,7 +399,7 @@ function BillingPayment() {
       
       console.log('Billing created successfully');
       
-      setFormData({ residentId: '', billingCycle: '', dueDate: '', amount: '', description: '' });
+      setFormData({ residentId: '', billingCycle: '', dueDate: '', amount: '', description: '', billingType: '' });
       setShowForm(false);
       await fetchBillings();
     } catch (error) {
@@ -576,20 +577,21 @@ function BillingPayment() {
     searchTerm,
   ]);
 
-  const summaryForUtility = useMemo(() => {
-    if (!isWaterView && !isElectricView) {
-      return { total: 0, withDate: 0, withoutDate: 0 };
-    }
-    const total = filteredResidentsForUtility.length;
-    let withDate = 0;
-    let withoutDate = 0;
-    filteredResidentsForUtility.forEach((resident) => {
-      const date = getDateFromResident(resident, !!isWaterView);
-      if (date) withDate += 1;
-      else withoutDate += 1;
-    });
-    return { total, withDate, withoutDate };
-  }, [filteredResidentsForUtility, isWaterView, isElectricView]);
+  // Unused - commented out to fix build error
+  // const summaryForUtility = useMemo(() => {
+  //   if (!isWaterView && !isElectricView) {
+  //     return { total: 0, withDate: 0, withoutDate: 0 };
+  //   }
+  //   const total = filteredResidentsForUtility.length;
+  //   let withDate = 0;
+  //   let withoutDate = 0;
+  //   filteredResidentsForUtility.forEach((resident) => {
+  //     const date = getDateFromResident(resident, !!isWaterView);
+  //     if (date) withDate += 1;
+  //     else withoutDate += 1;
+  //   });
+  //   return { total, withDate, withoutDate };
+  // }, [filteredResidentsForUtility, isWaterView, isElectricView]);
 
   const latestBillingByResidentId = useMemo(() => {
     const map = new Map<string, Billing>();
@@ -1026,7 +1028,7 @@ function BillingPayment() {
                           className="bg-gray-800 text-white border border-gray-600 px-5 py-2.5 rounded-md text-sm font-medium cursor-pointer transition-all hover:border-gray-500 hover:bg-gray-700"
                           onClick={() => {
                             setShowForm(false);
-                            setFormData({ residentId: '', billingCycle: '', dueDate: '', amount: '', description: '' });
+                            setFormData({ residentId: '', billingCycle: '', dueDate: '', amount: '', description: '', billingType: '' });
                           }}
                         >
                           Cancel

@@ -80,12 +80,12 @@ function Dashboard() {
   const [barChartYearFilter, setBarChartYearFilter] = useState<string>('')
   const [monthlyActivityYearFilter, setMonthlyActivityYearFilter] = useState<string>('')
   const [availableYears, setAvailableYears] = useState<number[]>([])
-  const [allTenantsCount, setAllTenantsCount] = useState(0)
-  const [allHomeownersCount, setAllHomeownersCount] = useState(0)
+  const [_allTenantsCount, setAllTenantsCount] = useState(0)
+  const [_allHomeownersCount, setAllHomeownersCount] = useState(0)
   const [tenantsByYear, setTenantsByYear] = useState<Map<number, { tenants: number; homeowners: number }>>(new Map())
   const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; data: ResidentGrowthData } | null>(null)
   const [monthlyActivityData, setMonthlyActivityData] = useState<MonthlyActivityData[]>([])
-  const [resolutionTimeData, setResolutionTimeData] = useState<ResolutionTimeData>({
+  const [_resolutionTimeData, setResolutionTimeData] = useState<ResolutionTimeData>({
     averageComplaintResolutionDays: 0,
     averageMaintenanceResolutionDays: 0,
     totalResolvedComplaints: 0,
@@ -948,7 +948,7 @@ function Dashboard() {
                   <div className="flex flex-col sm:flex-row items-center gap-6">
                     <svg width="240" height="240" viewBox="0 0 240 240" className="flex-shrink-0">
                       {pieData.map((segment, index) => {
-                        const percentage = (segment.value / total) * 100;
+                        // const percentage = (segment.value / total) * 100; // Unused variable
                         const angle = (segment.value / total) * 360;
                         const startAngle = currentAngle;
                         const endAngle = currentAngle + angle;

@@ -1086,43 +1086,44 @@ function Archived() {
     setFilteredArchivedComplaints(filtered);
   }, [filterDate, searchQuery, complaintUserNames]);
 
-  const applyDateFilterAnnouncements = useCallback((announcementsList: ArchivedAnnouncement[]) => {
-    let filtered = [...announcementsList];
+  // Unused - commented out to fix build error
+  // const applyDateFilterAnnouncements = useCallback((announcementsList: ArchivedAnnouncement[]) => {
+  //   let filtered = [...announcementsList];
 
-    // Apply date filter
-    if (filterDate) {
-      const filterDateObj = new Date(filterDate);
-      filterDateObj.setHours(0, 0, 0, 0);
-      const nextDay = new Date(filterDateObj);
-      nextDay.setDate(nextDay.getDate() + 1);
+  //   // Apply date filter
+  //   if (filterDate) {
+  //     const filterDateObj = new Date(filterDate);
+  //     filterDateObj.setHours(0, 0, 0, 0);
+  //     const nextDay = new Date(filterDateObj);
+  //     nextDay.setDate(nextDay.getDate() + 1);
 
-      filtered = filtered.filter((announcement) => {
-        const archivedDate = announcement.archivedAt?.toDate 
-          ? announcement.archivedAt.toDate()
-          : announcement.archivedAt 
-          ? new Date(announcement.archivedAt)
-          : null;
+  //     filtered = filtered.filter((announcement) => {
+  //       const archivedDate = announcement.archivedAt?.toDate 
+  //         ? announcement.archivedAt.toDate()
+  //         : announcement.archivedAt 
+  //         ? new Date(announcement.archivedAt)
+  //         : null;
         
-        if (!archivedDate) return false;
+  //       if (!archivedDate) return false;
         
-        archivedDate.setHours(0, 0, 0, 0);
-        return archivedDate >= filterDateObj && archivedDate < nextDay;
-      });
-    }
+  //       archivedDate.setHours(0, 0, 0, 0);
+  //       return archivedDate >= filterDateObj && archivedDate < nextDay;
+  //     });
+  //   }
 
-    // Apply search query filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      filtered = filtered.filter((announcement) => {
-        return (
-          announcement.title?.toLowerCase().includes(query) ||
-          announcement.content?.toLowerCase().includes(query)
-        );
-      });
-    }
+  //   // Apply search query filter
+  //   if (searchQuery.trim()) {
+  //     const query = searchQuery.toLowerCase().trim();
+  //     filtered = filtered.filter((announcement) => {
+  //       return (
+  //         announcement.title?.toLowerCase().includes(query) ||
+  //         announcement.content?.toLowerCase().includes(query)
+  //       );
+  //     });
+  //   }
 
-    setFilteredArchivedAnnouncements(filtered);
-  }, [filterDate, searchQuery]);
+  //   setFilteredArchivedAnnouncements(filtered);
+  // }, [filterDate, searchQuery]);
 
   const applyDateFilterVisitors = useCallback((visitorsList: ArchivedVisitor[]) => {
     let filtered = visitorsList;
