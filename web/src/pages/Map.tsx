@@ -214,6 +214,14 @@ function Map() {
       let totalUsers = 0;
       let usersWithLocation = 0;
 
+      // Group residents by address (block, lot, street)
+      // Using plain object instead of Map to avoid naming conflicts
+      const addressGroups: Record<string, {
+        homeowner: any | null;
+        tenants: any[];
+        location: { lat: number; lng: number } | null;
+      }> = {};
+
       snapshot.forEach((doc: any) => {
         totalUsers++;
         const data = doc.data();
@@ -230,8 +238,11 @@ function Map() {
           return;
         }
 
-        // Only add marker if resident has location
-        // Check for both possible location formats: {latitude, longitude} or {lat, lng}
+        // Determine if homeowner or tenant
+        const isTenant = data.residentType === 'tenant' || data.isTenant === true;
+        const isHomeowner = !isTenant;
+
+        // Get location (only homeowners have location)
         const location = data.location;
         let lat: number | null = null;
         let lng: number | null = null;
@@ -250,6 +261,15 @@ function Map() {
           `${data.firstName || ''} ${data.middleName || ''} ${data.lastName || ''}`.trim() ||
           'Resident';
 
+        // Create address key
+        const addressKey = data.address 
+          ? `${data.address.block || ''}_${data.address.lot || ''}_${data.address.street || ''}`
+          : null;
+
+        if (!addressKey) {
+          return; // Skip residents without address
+        }
+
         // Store resident data for search
         const availabilityStatus = data.availabilityStatus || 'unavailable';
         const residentInfo = {
@@ -266,195 +286,106 @@ function Map() {
         };
         residents.push(residentInfo);
 
-        if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
-          usersWithLocation++;
-          
-          // Determine if homeowner or tenant
-          // A user is a tenant if: residentType === 'tenant' OR isTenant === true
-          // Otherwise, they are a homeowner
-          const isTenant = data.residentType === 'tenant' || data.isTenant === true;
-          const isHomeowner = !isTenant;
-          
-          // Skip creating markers for tenants - only show homeowners on map
-          if (isTenant) {
-            console.log(`Skipping marker for tenant ${fullName} at ${lat}, ${lng}`);
-            return; // Skip marker creation for tenants
-          }
-          
-          // Only create markers for homeowners
-          // For homeowners: blue = unavailable (default), green = available
-          const availabilityStatus = data.availabilityStatus || 'unavailable';
-          let markerIcon;
-          if (availabilityStatus === 'available') {
-            // Green marker for available homeowners
-            markerIcon = {
-              url: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png',
-              scaledSize: new window.google.maps.Size(32, 32),
-            };
-          } else {
-            // Blue marker for unavailable homeowners (default)
-            markerIcon = {
-              url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
-              scaledSize: new window.google.maps.Size(32, 32),
-            };
-          }
-          
-          const markerColor = availabilityStatus === 'available' ? 'green' : 'blue';
-          console.log(`Adding marker for ${fullName} at ${lat}, ${lng} (${markerColor}, residentType: ${data.residentType}, isHomeowner: ${isHomeowner}, availabilityStatus: ${availabilityStatus})`);
-          
-          try {
-            const marker = new window.google.maps.Marker({
-              position: {
-                lat: lat,
-                lng: lng,
-              },
-              map: map,
-              title: fullName,
-              icon: markerIcon,
-              visible: true,
-              zIndex: 1000,
-              animation: window.google.maps.Animation.DROP,
-            });
+        // Group by address
+        if (!addressGroups[addressKey]) {
+          addressGroups[addressKey] = {
+            homeowner: null,
+            tenants: [],
+            location: null,
+          };
+        }
 
-            // Verify marker is on the map
-            const markerPosition = marker.getPosition();
-            const markerMap = marker.getMap();
-            console.log(`Marker created successfully for ${fullName}`, {
-              position: markerPosition ? { lat: markerPosition.lat(), lng: markerPosition.lng() } : null,
-              map: markerMap ? 'attached' : 'not attached',
-              visible: marker.getVisible(),
-              iconType: markerColor,
-              isHomeowner: isHomeowner,
-              availabilityStatus: availabilityStatus,
-            });
-            
-            // Force marker to be visible
-            if (!markerMap) {
-              console.warn(`Marker for ${fullName} is not attached to map, attempting to fix...`);
-              marker.setMap(map);
-            }
+        const group = addressGroups[addressKey];
 
-            // Add info window with resident details
-            const availabilityText = availabilityStatus === 'available' ? 'Available (Green)' : 'Unavailable (Blue)';
-            
-            // Create info window with async content loading for tenants
-            const infoWindow = new window.google.maps.InfoWindow({
-              content: `
-                <div style="padding: 8px; min-width: 200px;">
-                  <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">${fullName}</h3>
-                  <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                    <strong>Type:</strong> Homeowner
-                  </p>
-                  <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                    <strong>Status:</strong> ${availabilityText}
-                  </p>
-                  ${data.address ? `
-                    <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                      <strong>Address:</strong> ${data.address.block || ''}, ${data.address.lot || ''}, ${data.address.street || ''}
-                    </p>
-                  ` : ''}
-                  <div id="tenants-${doc.id}" style="margin-top: 8px;">
-                    <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                      <strong>Tenants:</strong> <span style="color: #9ca3af;">Loading...</span>
-                    </p>
-                  </div>
-                </div>
-              `,
-            });
-
-            // Function to load and update tenant names
-            const loadTenantNames = async () => {
-              if (!data.address || !db) return;
-              
-              try {
-                const tenantsQuery = query(
-                  collection(db, 'users'),
-                  where('address.block', '==', data.address.block),
-                  where('address.lot', '==', data.address.lot),
-                  where('address.street', '==', data.address.street),
-                  where('residentType', '==', 'tenant'),
-                  where('status', '==', 'approved')
-                );
-                
-                const tenantsSnapshot = await getDocs(tenantsQuery);
-                const tenantNames: string[] = [];
-                
-                tenantsSnapshot.forEach((tenantDoc) => {
-                  const tenantData = tenantDoc.data();
-                  const tenantName = tenantData.fullName || 
-                    `${tenantData.firstName || ''} ${tenantData.middleName || ''} ${tenantData.lastName || ''}`.trim() ||
-                    'Unknown Tenant';
-                  tenantNames.push(tenantName);
-                });
-                
-                // Update info window content with tenant names
-                const tenantList = tenantNames.length > 0 
-                  ? tenantNames.join(', ')
-                  : 'None';
-                
-                const updatedContent = `
-                  <div style="padding: 8px; min-width: 200px;">
-                    <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">${fullName}</h3>
-                    <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                      <strong>Type:</strong> Homeowner
-                    </p>
-                    <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                      <strong>Status:</strong> ${availabilityText}
-                    </p>
-                    ${data.address ? `
-                      <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                        <strong>Address:</strong> ${data.address.block || ''}, ${data.address.lot || ''}, ${data.address.street || ''}
-                      </p>
-                    ` : ''}
-                    <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                      <strong>Tenants:</strong> ${tenantList}
-                    </p>
-                  </div>
-                `;
-                
-                infoWindow.setContent(updatedContent);
-              } catch (error) {
-                console.error('Error loading tenant names:', error);
-                // Update with error message
-                const updatedContent = `
-                  <div style="padding: 8px; min-width: 200px;">
-                    <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">${fullName}</h3>
-                    <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                      <strong>Type:</strong> Homeowner
-                    </p>
-                    <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                      <strong>Status:</strong> ${availabilityText}
-                    </p>
-                    ${data.address ? `
-                      <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                        <strong>Address:</strong> ${data.address.block || ''}, ${data.address.lot || ''}, ${data.address.street || ''}
-                      </p>
-                    ` : ''}
-                    <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                      <strong>Tenants:</strong> <span style="color: #ef4444;">Error loading tenants</span>
-                    </p>
-                  </div>
-                `;
-                infoWindow.setContent(updatedContent);
-              }
-            };
-
-            marker.addListener('click', () => {
-              infoWindow.open(map, marker);
-              // Load tenant names when info window is opened
-              loadTenantNames();
-            });
-
-            // Store resident info with marker for search functionality
-            (marker as any).residentInfo = residentInfo;
-            (marker as any).infoWindow = infoWindow;
-
-            markers.push(marker);
-          } catch (markerError) {
-            console.error(`Error creating marker for ${fullName}:`, markerError);
+        if (isHomeowner) {
+          group.homeowner = { doc, data, residentInfo, lat, lng };
+          if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
+            group.location = { lat, lng };
+            usersWithLocation++;
           }
         } else {
-          console.log(`User ${doc.id} has no valid location data:`, data.location, { lat, lng });
+          group.tenants.push({ doc, data, residentInfo });
+        }
+      });
+
+      // Create one marker per address group
+      Object.entries(addressGroups).forEach(([addressKey, group]) => {
+        // Only create marker if there's a homeowner with location
+        if (!group.homeowner || !group.location) {
+          return;
+        }
+
+        const homeowner = group.homeowner;
+        const homeownerData = homeowner.data;
+        const homeownerInfo = homeowner.residentInfo;
+        const availabilityStatus = homeownerData.availabilityStatus || 'unavailable';
+
+        // Determine marker color based on homeowner availability
+        let markerIcon;
+        if (availabilityStatus === 'available') {
+          markerIcon = {
+            url: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png',
+            scaledSize: new window.google.maps.Size(32, 32),
+          };
+        } else {
+          markerIcon = {
+            url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+            scaledSize: new window.google.maps.Size(32, 32),
+          };
+        }
+
+        try {
+          const marker = new window.google.maps.Marker({
+            position: group.location,
+            map: map,
+            title: homeownerInfo.fullName,
+            icon: markerIcon,
+            visible: true,
+            zIndex: 1000,
+            animation: window.google.maps.Animation.DROP,
+          });
+
+          // Create info window with homeowner and tenant information
+          const availabilityText = availabilityStatus === 'available' ? 'Available (Green)' : 'Unavailable (Blue)';
+          
+          // Build tenant names list
+          const tenantNames = group.tenants.map(tenant => tenant.residentInfo.fullName);
+          const tenantList = tenantNames.length > 0 ? tenantNames.join(', ') : 'None';
+
+          const infoWindow = new window.google.maps.InfoWindow({
+            content: `
+              <div style="padding: 8px; min-width: 200px;">
+                <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">${homeownerInfo.fullName}</h3>
+                <p style="margin: 4px 0; font-size: 12px; color: #666;">
+                  <strong>Type:</strong> Homeowner
+                </p>
+                <p style="margin: 4px 0; font-size: 12px; color: #666;">
+                  <strong>Status:</strong> ${availabilityText}
+                </p>
+                ${homeownerData.address ? `
+                  <p style="margin: 4px 0; font-size: 12px; color: #666;">
+                    <strong>Address:</strong> ${homeownerData.address.block || ''}, ${homeownerData.address.lot || ''}, ${homeownerData.address.street || ''}
+                  </p>
+                ` : ''}
+                <p style="margin: 4px 0; font-size: 12px; color: #666;">
+                  <strong>Tenants:</strong> ${tenantList}
+                </p>
+              </div>
+            `,
+          });
+
+          marker.addListener('click', () => {
+            infoWindow.open(map, marker);
+          });
+
+          // Store resident info with marker for search functionality
+          (marker as any).residentInfo = homeownerInfo;
+          (marker as any).infoWindow = infoWindow;
+          (marker as any).addressKey = addressKey;
+
+          markers.push(marker);
+        } catch (markerError) {
+          console.error(`Error creating marker for address ${addressKey}:`, markerError);
         }
       });
 
@@ -675,10 +606,11 @@ function Map() {
 
   // Filter markers based on resident search query and availability filter
   useEffect(() => {
-    if (!map || residentMarkers.length === 0) return;
+    if (!map || residentMarkers.length === 0 || !residentData.length) return;
 
     const query = residentSearchQuery.toLowerCase().trim();
     
+    // If there's a search query, check if any resident (homeowner or tenant) at that address matches
     residentMarkers.forEach((marker) => {
       const residentInfo = (marker as any).residentInfo;
       if (!residentInfo) {
@@ -686,14 +618,45 @@ function Map() {
         return;
       }
 
-      // Check if matches search query
-      const matchesSearch = 
+      // Check if homeowner matches search query
+      let matchesSearch = 
         !query ||
         residentInfo.fullName.toLowerCase().includes(query) ||
         residentInfo.firstName.toLowerCase().includes(query) ||
         residentInfo.lastName.toLowerCase().includes(query) ||
         residentInfo.email.toLowerCase().includes(query) ||
         residentInfo.address.toLowerCase().includes(query);
+
+      // If homeowner doesn't match, check if any tenant at this address matches
+      if (!matchesSearch && query) {
+        const addressKey = (marker as any).addressKey;
+        if (addressKey) {
+          // Find tenants at this address by matching address key
+          const tenantsAtAddress = residentData.filter((resident) => {
+            const isTenant = resident.data?.isTenant === true || resident.data?.residentType === 'tenant';
+            if (!isTenant) return false;
+            
+            // Create address key for resident
+            if (resident.data?.address) {
+              const residentAddressKey = `${resident.data.address.block || ''}_${resident.data.address.lot || ''}_${resident.data.address.street || ''}`;
+              return residentAddressKey === addressKey;
+            }
+            
+            // Fallback: match by address string
+            const residentAddress = resident.address || '';
+            const markerAddress = residentInfo.address || '';
+            return residentAddress === markerAddress;
+          });
+
+          matchesSearch = tenantsAtAddress.some((tenant) => 
+            tenant.fullName.toLowerCase().includes(query) ||
+            tenant.firstName.toLowerCase().includes(query) ||
+            tenant.lastName.toLowerCase().includes(query) ||
+            tenant.email.toLowerCase().includes(query) ||
+            tenant.address.toLowerCase().includes(query)
+          );
+        }
+      }
 
       // Check if matches availability filter
       const matchesAvailability = 
@@ -703,7 +666,7 @@ function Map() {
 
       marker.setVisible(matchesSearch && matchesAvailability);
     });
-  }, [residentSearchQuery, availabilityFilter, residentMarkers, map]);
+  }, [residentSearchQuery, availabilityFilter, residentMarkers, residentData, map]);
 
   // Generate resident search suggestions
   useEffect(() => {
@@ -732,26 +695,91 @@ function Map() {
 
   // Handle selecting a resident from suggestions
   const handleSelectResident = useCallback((resident: any) => {
-    if (!map || !resident.lat || !resident.lng) return;
+    if (!map) return;
 
     setResidentSearchQuery(resident.fullName);
     setShowResidentSuggestions(false);
 
-    // Find the marker for this resident
-    const marker = residentMarkers.find((m) => {
-      const info = (m as any).residentInfo;
-      return info && info.id === resident.id;
-    });
+    const isTenant = resident.data?.isTenant === true || resident.data?.residentType === 'tenant';
+    
+    let marker: any = null;
+    
+    if (isTenant) {
+      // For tenants, find the homeowner's marker at the same address using addressKey
+      // Create addressKey from tenant's address data
+      let tenantAddressKey = '';
+      if (resident.data?.address) {
+        tenantAddressKey = `${resident.data.address.block || ''}_${resident.data.address.lot || ''}_${resident.data.address.street || ''}`;
+      } else {
+        // Fallback: try to extract from address string
+        // The address format is "block lot street"
+        const addressParts = (resident.address || '').trim().split(/\s+/);
+        if (addressParts.length >= 3) {
+          tenantAddressKey = `${addressParts[0]}_${addressParts[1]}_${addressParts.slice(2).join('_')}`;
+        }
+      }
+      
+      // Find marker with matching addressKey
+      if (tenantAddressKey) {
+        marker = residentMarkers.find((m) => {
+          const markerAddressKey = (m as any).addressKey;
+          return markerAddressKey === tenantAddressKey;
+        });
+      }
+      
+      // If still not found, try matching by address components
+      if (!marker && resident.data?.address) {
+        marker = residentMarkers.find((m) => {
+          const info = (m as any).residentInfo;
+          if (!info || !info.data?.address) return false;
+          
+          const markerAddr = info.data.address;
+          const tenantAddr = resident.data.address;
+          
+          return (
+            String(markerAddr.block || '').trim() === String(tenantAddr.block || '').trim() &&
+            String(markerAddr.lot || '').trim() === String(tenantAddr.lot || '').trim() &&
+            String(markerAddr.street || '').trim() === String(tenantAddr.street || '').trim()
+          );
+        });
+      }
+    } else {
+      // For homeowners, match by ID
+      marker = residentMarkers.find((m) => {
+        const info = (m as any).residentInfo;
+        return info && info.id === resident.id;
+      });
+    }
 
     if (marker) {
-      // Center map on resident location
-      map.setCenter({ lat: resident.lat, lng: resident.lng });
-      map.setZoom(18);
+      // Ensure marker is visible (override any filters)
+      marker.setVisible(true);
+      
+      // Get position from marker
+      const position = marker.getPosition();
+      if (position) {
+        const lat = typeof position.lat === 'function' ? position.lat() : position.lat;
+        const lng = typeof position.lng === 'function' ? position.lng() : position.lng;
+        
+        // Center map on marker location with smooth animation
+        map.panTo({ lat, lng });
+        map.setZoom(18);
 
-      // Open info window
-      const infoWindow = (marker as any).infoWindow;
-      if (infoWindow) {
-        infoWindow.open(map, marker);
+        // Small delay to ensure map has panned before opening info window
+        setTimeout(() => {
+          // Open info window
+          const infoWindow = (marker as any).infoWindow;
+          if (infoWindow) {
+            infoWindow.open(map, marker);
+          }
+        }, 300);
+      }
+    } else {
+      console.warn('Marker not found for resident:', resident.fullName, isTenant ? '(tenant)' : '(homeowner)');
+      // Fallback: if marker not found but we have coordinates, just center the map
+      if (resident.lat && resident.lng) {
+        map.panTo({ lat: resident.lat, lng: resident.lng });
+        map.setZoom(18);
       }
     }
   }, [map, residentMarkers]);
@@ -966,21 +994,41 @@ function Map() {
                       ref={residentSuggestionsRef}
                       className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto z-20"
                     >
-                      {residentSearchSuggestions.map((resident) => (
-                        <div
-                          key={resident.id}
-                          onClick={() => handleSelectResident(resident)}
-                          className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
-                        >
-                          <div className="font-medium text-gray-900 text-sm">{resident.fullName}</div>
-                          {resident.email && (
-                            <div className="text-xs text-gray-500 mt-1">{resident.email}</div>
-                          )}
-                          {resident.address && (
-                            <div className="text-xs text-gray-500">{resident.address}</div>
-                          )}
-                        </div>
-                      ))}
+                      {residentSearchSuggestions.map((resident) => {
+                        // Determine if tenant or homeowner
+                        const isTenant = resident.data?.isTenant === true || resident.data?.residentType === 'tenant';
+                        const residentType = isTenant ? 'Tenant' : 'Homeowner';
+                        
+                        return (
+                          <div
+                            key={resident.id}
+                            onClick={() => {
+                              // Tenants share the same marker as their homeowner
+                              handleSelectResident(resident);
+                            }}
+                            className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="font-medium text-gray-900 text-sm flex-1">{resident.fullName}</div>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap ${
+                                  isTenant
+                                    ? 'bg-orange-100 text-orange-800'
+                                    : 'bg-blue-100 text-blue-800'
+                                }`}
+                              >
+                                {residentType}
+                              </span>
+                            </div>
+                            {resident.email && (
+                              <div className="text-xs text-gray-500 mt-1">{resident.email}</div>
+                            )}
+                            {resident.address && (
+                              <div className="text-xs text-gray-500">{resident.address}</div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

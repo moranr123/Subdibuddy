@@ -1158,7 +1158,28 @@ export default function Signup() {
         
         const homeownersSnapshot = await getDocs(homeownersQuery);
         
-        if (homeownersSnapshot.empty) {
+        if (!homeownersSnapshot.empty) {
+          // Homeowner found - automatically set their location for the tenant
+          const homeownerData = homeownersSnapshot.docs[0].data();
+          if (homeownerData.location) {
+            // Copy homeowner's location to tenant
+            const homeownerLocation = homeownerData.location;
+            if (homeownerLocation.latitude !== undefined && homeownerLocation.longitude !== undefined) {
+              setLocation({
+                latitude: typeof homeownerLocation.latitude === 'number' 
+                  ? homeownerLocation.latitude 
+                  : parseFloat(homeownerLocation.latitude),
+                longitude: typeof homeownerLocation.longitude === 'number' 
+                  ? homeownerLocation.longitude 
+                  : parseFloat(homeownerLocation.longitude),
+              });
+              console.log('Tenant location automatically set from homeowner:', {
+                latitude: homeownerLocation.latitude,
+                longitude: homeownerLocation.longitude,
+              });
+            }
+          }
+        } else {
           // Also check pendingUsers for homeowners at this address
           const pendingHomeownersQuery = query(
             collection(db, 'pendingUsers'),
@@ -1171,7 +1192,29 @@ export default function Signup() {
           
           const pendingHomeownersSnapshot = await getDocs(pendingHomeownersQuery);
           
-          if (pendingHomeownersSnapshot.empty) {
+          if (!pendingHomeownersSnapshot.empty) {
+            // Pending homeowner found - automatically set their location for the tenant
+            const pendingHomeownerData = pendingHomeownersSnapshot.docs[0].data();
+            if (pendingHomeownerData.location) {
+              // Copy homeowner's location to tenant
+              const homeownerLocation = pendingHomeownerData.location;
+              if (homeownerLocation.latitude !== undefined && homeownerLocation.longitude !== undefined) {
+                setLocation({
+                  latitude: typeof homeownerLocation.latitude === 'number' 
+                    ? homeownerLocation.latitude 
+                    : parseFloat(homeownerLocation.latitude),
+                  longitude: typeof homeownerLocation.longitude === 'number' 
+                    ? homeownerLocation.longitude 
+                    : parseFloat(homeownerLocation.longitude),
+                });
+                console.log('Tenant location automatically set from pending homeowner:', {
+                  latitude: homeownerLocation.latitude,
+                  longitude: homeownerLocation.longitude,
+                });
+              }
+            }
+          } else {
+            // No homeowner found
             setStepLoading(false);
             setError('general', `No homeowner found at this address (Block ${block}, Lot ${lot}, ${street}). Tenants can only register at addresses occupied by approved homeowners.`);
             Alert.alert(
@@ -1333,7 +1376,7 @@ export default function Signup() {
     setErrors({}); // Clear previous errors
     
     try {
-      // If tenant, check if homeowner exists at the same address
+      // If tenant, check if homeowner exists at the same address and get their location
       if (residentType === 'tenant' && db) {
         try {
           const homeownersQuery = query(
@@ -1348,7 +1391,25 @@ export default function Signup() {
           
           const homeownersSnapshot = await getDocs(homeownersQuery);
           
-          if (homeownersSnapshot.empty) {
+          if (!homeownersSnapshot.empty) {
+            // Homeowner found - automatically set their location for the tenant if not already set
+            const homeownerData = homeownersSnapshot.docs[0].data();
+            if (homeownerData.location && !location) {
+              const homeownerLocation = homeownerData.location;
+              if (homeownerLocation.latitude !== undefined && homeownerLocation.longitude !== undefined) {
+                const tenantLocation = {
+                  latitude: typeof homeownerLocation.latitude === 'number' 
+                    ? homeownerLocation.latitude 
+                    : parseFloat(homeownerLocation.latitude),
+                  longitude: typeof homeownerLocation.longitude === 'number' 
+                    ? homeownerLocation.longitude 
+                    : parseFloat(homeownerLocation.longitude),
+                };
+                setLocation(tenantLocation);
+                console.log('Tenant location automatically set from homeowner during submission:', tenantLocation);
+              }
+            }
+          } else {
             // Also check pendingUsers for homeowners at this address
             const pendingHomeownersQuery = query(
               collection(db, 'pendingUsers'),
@@ -1361,7 +1422,26 @@ export default function Signup() {
             
             const pendingHomeownersSnapshot = await getDocs(pendingHomeownersQuery);
             
-            if (pendingHomeownersSnapshot.empty) {
+            if (!pendingHomeownersSnapshot.empty) {
+              // Pending homeowner found - automatically set their location for the tenant if not already set
+              const pendingHomeownerData = pendingHomeownersSnapshot.docs[0].data();
+              if (pendingHomeownerData.location && !location) {
+                const homeownerLocation = pendingHomeownerData.location;
+                if (homeownerLocation.latitude !== undefined && homeownerLocation.longitude !== undefined) {
+                  const tenantLocation = {
+                    latitude: typeof homeownerLocation.latitude === 'number' 
+                      ? homeownerLocation.latitude 
+                      : parseFloat(homeownerLocation.latitude),
+                    longitude: typeof homeownerLocation.longitude === 'number' 
+                      ? homeownerLocation.longitude 
+                      : parseFloat(homeownerLocation.longitude),
+                  };
+                  setLocation(tenantLocation);
+                  console.log('Tenant location automatically set from pending homeowner during submission:', tenantLocation);
+                }
+              }
+            } else {
+              // No homeowner found
               setError('general', 'No homeowner found at this address. Tenants can only register at addresses occupied by approved homeowners.');
               Alert.alert(
                 'Registration Not Allowed',
@@ -1483,7 +1563,7 @@ export default function Signup() {
     }
   }, [
     emailOrPhone, isEmail, password, firstName, middleName, lastName, birthdate, age, sex,
-    block, lot, street, residentType, tenantRelation, waterBillingDate, electricBillingDate, billingProofImage, idImages, documentImages, validateStep, setError, uploadImageToStorage, formatDate
+    block, lot, street, residentType, tenantRelation, waterBillingDate, electricBillingDate, billingProofImage, idImages, documentImages, validateStep, setError, uploadImageToStorage, formatDate, location
   ]);
 
   // Progress bar
