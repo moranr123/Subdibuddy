@@ -6,6 +6,7 @@ import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
 import Header from '../components/Header';
+import EditResidentModal from '../components/EditResidentModal';
 
 interface UserLocation {
   latitude: number;
@@ -51,6 +52,8 @@ function ResidentManagement() {
   const [showMapModal, setShowMapModal] = useState(false);
   const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [editingResident, setEditingResident] = useState<Resident | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [homeownerName, setHomeownerName] = useState<string | null>(null);
   const [tenantNames, setTenantNames] = useState<string[]>([]);
@@ -706,6 +709,39 @@ function ResidentManagement() {
     }
   };
 
+  const handleEdit = useCallback((resident: Resident) => {
+    setEditingResident(resident);
+    setShowEditModal(true);
+  }, []);
+
+  const handleCloseEdit = useCallback(() => {
+    setShowEditModal(false);
+    setEditingResident(null);
+  }, []);
+
+  const handleSaveEdit = useCallback(async (updatedData: Partial<Resident>) => {
+    if (!db || !editingResident) return;
+
+    try {
+      const residentRef = doc(db, 'users', editingResident.id);
+      await updateDoc(residentRef, {
+        ...updatedData,
+        updatedAt: Timestamp.now(),
+      });
+
+      // Update local state
+      setResidents(prev => prev.map(r => 
+        r.id === editingResident.id ? { ...r, ...updatedData } : r
+      ));
+
+      alert('Resident information updated successfully');
+      handleCloseEdit();
+    } catch (error: any) {
+      console.error('Error updating resident:', error);
+      alert(`Failed to update resident: ${error.message}`);
+    }
+  }, [db, editingResident, handleCloseEdit]);
+
   return (
     <Layout>
       <div className="min-h-screen bg-gray-50 w-full">
@@ -890,6 +926,14 @@ function ResidentManagement() {
                           >
                             View Details
                           </button>
+                          {activeView === 'registered' && (
+                            <button
+                              className="w-full bg-blue-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-blue-700"
+                              onClick={() => handleEdit(resident)}
+                            >
+                              Edit
+                            </button>
+                          )}
                           {activeView === 'applications' && (
                             <div className="flex gap-2">
                               <button
@@ -975,6 +1019,14 @@ function ResidentManagement() {
                               >
                                 View Details
                               </button>
+                              {activeView === 'registered' && (
+                                <button
+                                  className="bg-blue-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-blue-700"
+                                  onClick={() => handleEdit(resident)}
+                                >
+                                  Edit
+                                </button>
+                              )}
                               {activeView === 'applications' && (
                                 <>
                                   <button
@@ -1373,6 +1425,15 @@ function ResidentManagement() {
           </div>
         )}
       </div>
+
+      {/* Edit Modal */}
+      {showEditModal && editingResident && (
+        <EditResidentModal
+          resident={editingResident}
+          onClose={handleCloseEdit}
+          onSave={handleSaveEdit}
+        />
+      )}
     </Layout>
   );
 }

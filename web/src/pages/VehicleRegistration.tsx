@@ -6,6 +6,7 @@ import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
 import Header from '../components/Header';
+import EditVehicleModal from '../components/EditVehicleModal';
 
 interface VehicleRegistration {
   id: string;
@@ -32,6 +33,8 @@ function VehicleRegistration() {
   const [loading, setLoading] = useState(false);
   const [viewingRegistration, setViewingRegistration] = useState<VehicleRegistration | null>(null);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [editingRegistration, setEditingRegistration] = useState<VehicleRegistration | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [filterDate, setFilterDate] = useState<string>('');
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -311,6 +314,34 @@ function VehicleRegistration() {
     setViewingRegistration(null);
   }, []);
 
+  const handleEdit = useCallback((registration: VehicleRegistration) => {
+    setEditingRegistration(registration);
+    setShowEditModal(true);
+  }, []);
+
+  const handleCloseEdit = useCallback(() => {
+    setShowEditModal(false);
+    setEditingRegistration(null);
+  }, []);
+
+  const handleSaveEdit = useCallback(async (updatedData: Partial<VehicleRegistration>) => {
+    if (!db || !editingRegistration) return;
+
+    try {
+      const registrationRef = doc(db, 'vehicleRegistrations', editingRegistration.id);
+      await updateDoc(registrationRef, {
+        ...updatedData,
+        updatedAt: Timestamp.now(),
+      });
+
+      alert('Vehicle registration updated successfully');
+      handleCloseEdit();
+    } catch (error: any) {
+      console.error('Error updating vehicle registration:', error);
+      alert(`Failed to update vehicle registration: ${error.message}`);
+    }
+  }, [db, editingRegistration, handleCloseEdit]);
+
   const handleArchive = useCallback(async (registrationId: string) => {
     if (!db || !user) return;
     
@@ -475,11 +506,19 @@ function VehicleRegistration() {
                           )}
                           <div className="flex gap-2">
                             <button
-                              className="flex-1 px-3 py-1.5 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors"
+                              className="flex-1 px-3 py-1.5 bg-gray-900 text-white text-xs rounded hover:bg-gray-800 transition-colors"
                               onClick={() => handleView(registration)}
                             >
                               View
                             </button>
+                            {activeView === 'registered' && (
+                              <button
+                                className="flex-1 px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                                onClick={() => handleEdit(registration)}
+                              >
+                                Edit
+                              </button>
+                            )}
                             {activeView === 'applications' && (
                               <button
                                 className="flex-1 px-3 py-1.5 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors"
@@ -544,11 +583,19 @@ function VehicleRegistration() {
                                   </select>
                                 )}
                                 <button
-                                  className="px-3 py-1.5 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors whitespace-nowrap"
+                                  className="px-3 py-1.5 bg-gray-900 text-white text-xs rounded hover:bg-gray-800 transition-colors whitespace-nowrap"
                                   onClick={() => handleView(registration)}
                                 >
                                   View
                                 </button>
+                                {activeView === 'registered' && (
+                                  <button
+                                    className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors whitespace-nowrap"
+                                    onClick={() => handleEdit(registration)}
+                                  >
+                                    Edit
+                                  </button>
+                                )}
                                 <button
                                   className="px-3 py-1.5 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 transition-colors whitespace-nowrap"
                                   onClick={() => handleArchive(registration.id)}
@@ -680,6 +727,15 @@ function VehicleRegistration() {
           </div>
         )}
       </div>
+
+      {/* Edit Modal */}
+      {showEditModal && editingRegistration && (
+        <EditVehicleModal
+          registration={editingRegistration}
+          onClose={handleCloseEdit}
+          onSave={handleSaveEdit}
+        />
+      )}
     </Layout>
   );
 }
