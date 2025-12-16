@@ -1195,6 +1195,73 @@ export default function Signup() {
       }
     }
 
+    // Check if address is already occupied by another homeowner when homeowner is registering (step 3)
+    if (currentStep === 3 && residentType === 'homeowner' && db && block && lot && street) {
+      try {
+        // Check for approved homeowners in users collection at the same address
+        const existingHomeownersQuery = query(
+          collection(db, 'users'),
+          where('address.block', '==', block),
+          where('address.lot', '==', lot),
+          where('address.street', '==', street),
+          where('residentType', '==', 'homeowner'),
+          where('status', '==', 'approved'),
+          limit(1)
+        );
+        
+        const existingHomeownersSnapshot = await getDocs(existingHomeownersQuery);
+        
+        if (!existingHomeownersSnapshot.empty) {
+          const existingHomeowner = existingHomeownersSnapshot.docs[0].data();
+          const existingHomeownerName = existingHomeowner.fullName || 
+            `${existingHomeowner.firstName || ''} ${existingHomeowner.middleName || ''} ${existingHomeowner.lastName || ''}`.trim() ||
+            'Unknown Homeowner';
+          
+          setStepLoading(false);
+          setError('general', `This address (Block ${block}, Lot ${lot}, ${street}) is already occupied by homeowner ${existingHomeownerName}. Each address can only have one homeowner.`);
+          Alert.alert(
+            'Address Already Occupied',
+            `This address is already occupied by a homeowner.\n\nBlock: ${block}\nLot: ${lot}\nStreet: ${street}\n\nOccupied by: ${existingHomeownerName}\n\nEach address can only have one homeowner. Please select a different address.`,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+
+        // Also check pendingUsers for homeowners at this address
+        const pendingHomeownersQuery = query(
+          collection(db, 'pendingUsers'),
+          where('address.block', '==', block),
+          where('address.lot', '==', lot),
+          where('address.street', '==', street),
+          where('residentType', '==', 'homeowner'),
+          limit(1)
+        );
+        
+        const pendingHomeownersSnapshot = await getDocs(pendingHomeownersQuery);
+        
+        if (!pendingHomeownersSnapshot.empty) {
+          setStepLoading(false);
+          setError('general', `This address (Block ${block}, Lot ${lot}, ${street}) is already occupied by a pending homeowner. Each address can only have one homeowner.`);
+          Alert.alert(
+            'Address Already Occupied',
+            `This address is already occupied by a pending homeowner.\n\nBlock: ${block}\nLot: ${lot}\nStreet: ${street}\n\nEach address can only have one homeowner. Please select a different address.`,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking for existing homeowner:', err);
+        setStepLoading(false);
+        setError('general', 'Unable to verify if address is available. Please try again.');
+        Alert.alert(
+          'Verification Error',
+          'Unable to verify if this address is available. Please try again.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+    }
+
     // Clear errors when moving to next step
     setErrors({});
     setStepLoading(false);
