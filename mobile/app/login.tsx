@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Dimensions, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAuthService, db } from '../firebase/config';
 
@@ -44,6 +44,37 @@ export default function Login() {
         }
       }
       
+      // Check if user is in pendingUsers collection BEFORE attempting authentication
+      // Users in pendingUsers don't have Firebase Auth accounts yet
+      if (db) {
+        let pendingUserQuery;
+        if (hasAtSymbol) {
+          // Check by email
+          pendingUserQuery = query(
+            collection(db, 'pendingUsers'),
+            where('email', '==', trimmedInput)
+          );
+        } else {
+          // Check by phone number
+          const cleanedPhone = trimmedInput.replace(/[\s\-\(\)]/g, '');
+          pendingUserQuery = query(
+            collection(db, 'pendingUsers'),
+            where('phone', '==', cleanedPhone)
+          );
+        }
+        
+        const pendingUserSnapshot = await getDocs(pendingUserQuery);
+        if (!pendingUserSnapshot.empty) {
+          // User is in pendingUsers collection - not approved yet
+          Alert.alert(
+            'Account Pending Approval',
+            'Your account is pending admin approval. Please wait for approval before logging in. You will be notified once your account is approved.'
+          );
+          setLoading(false);
+          return;
+        }
+      }
+      
       // Format the username: if it's a phone number, append @subdibuddy.local
       // This matches the format used during signup
       const username = hasAtSymbol ? trimmedInput : `${trimmedInput}@subdibuddy.local`;
@@ -51,7 +82,7 @@ export default function Login() {
       const userCredential = await signInWithEmailAndPassword(authInstance, username, password);
       const user = userCredential.user;
 
-      // Check if user is in pendingUsers collection (not approved yet)
+      // Additional check: if user somehow has Auth account but is still in pendingUsers
       if (db && user) {
         const pendingUserDoc = await getDoc(doc(db, 'pendingUsers', user.uid));
         if (pendingUserDoc.exists()) {
@@ -64,14 +95,14 @@ export default function Login() {
           return;
         }
         
-        // Check if user exists in users collection (approved)
+        // Check if user exists in users collection (approved/verified)
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (!userDoc.exists()) {
-          // User doesn't exist in either collection (might have been rejected)
+          // User doesn't exist in users collection - not verified/registered yet
           await signOut(authInstance);
           Alert.alert(
-            'Account Not Found',
-            'Your account is not found. Please contact the administrator for assistance.'
+            'Account Not Verified',
+            'Your account has not been verified or registered yet. Please wait for admin approval or contact the administrator if you have already submitted your registration.'
           );
           return;
         }

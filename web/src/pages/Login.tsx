@@ -1,7 +1,8 @@
 import { useState, useCallback, useMemo, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { signInWithEmailAndPassword } from 'firebase/auth'
-import { auth } from '../firebase/config'
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth'
+import { doc, getDoc } from 'firebase/firestore'
+import { auth, db } from '../firebase/config'
 import { isSuperadmin } from '../utils/auth'
 
 const ErrorMessage = memo(({ error }: { error: string }) => {
@@ -43,6 +44,24 @@ function Login() {
       const isAdmin = await isSuperadmin(user)
       
       if (!isAdmin) {
+        // Check if user is verified/registered in users or pendingUsers collection
+        if (db && user) {
+          const userDoc = await getDoc(doc(db, 'users', user.uid))
+          const pendingUserDoc = await getDoc(doc(db, 'pendingUsers', user.uid))
+          
+          if (!userDoc.exists() && !pendingUserDoc.exists()) {
+            // User is not verified or registered
+            await signOut(auth)
+            setError('Your account has not been verified or registered yet. Please wait for admin approval or contact the administrator if you have already submitted your registration.')
+            return
+          } else if (pendingUserDoc.exists()) {
+            // User is pending approval
+            await signOut(auth)
+            setError('Your account is pending admin approval. Please wait for approval before logging in.')
+            return
+          }
+        }
+        
         // User is not a superadmin, sign them out
         await auth.signOut()
         setError('Access denied. Only superadmin accounts can access the admin panel.')
