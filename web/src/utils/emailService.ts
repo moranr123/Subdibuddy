@@ -80,7 +80,7 @@ export const sendEmail = async (emailData: EmailData): Promise<boolean> => {
       to_email: emailData.to,
       subject: emailData.subject,
       message: emailData.html,
-      from_name: emailData.userName || 'Subsibuddy Team',
+      from_name: emailData.userName || 'Subdibuddy Team',
       // Optional variables (will be empty if not provided)
       from_email: '',
       reply_to: '',
@@ -145,7 +145,7 @@ export const sendApprovalEmail = async (
     return false;
   }
 
-  const subject = 'Account Approved - Welcome to Subsibuddy!';
+  const subject = 'Account Approved - Welcome to Subdibuddy!';
   const html = `
     <!DOCTYPE html>
     <html>
@@ -156,21 +156,21 @@ export const sendApprovalEmail = async (
     </head>
     <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="background-color: #1877F2; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-        <h1 style="margin: 0;">Subsibuddy</h1>
+        <h1 style="margin: 0;">Subdibuddy</h1>
       </div>
       <div style="background-color: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #ddd;">
         <h2 style="color: #4CAF50; margin-top: 0;">Account Approved!</h2>
         <p>Dear ${fullName},</p>
         <p>We are pleased to inform you that your account has been approved!</p>
-        <p>You can now log in to the Subsibuddy mobile app using your credentials:</p>
+        <p>You can now log in to the Subdibuddy mobile app using your credentials:</p>
         <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #1877F2;">
           <p style="margin: 5px 0;"><strong>Username:</strong> ${username}</p>
           ${password ? `<p style="margin: 5px 0;"><strong>Password:</strong> ${password}</p>` : ''}
         </div>
         ${password ? '<p><strong>Please remember to change your password after your first login for security reasons.</strong></p>' : ''}
-        <p>Please download the Subsibuddy mobile app and log in to access all features.</p>
+        <p>Please download the Subdibuddy mobile app and log in to access all features.</p>
         <p>If you have any questions or need assistance, please contact your building administrator.</p>
-        <p style="margin-top: 30px;">Best regards,<br>The Subsibuddy Team</p>
+        <p style="margin-top: 30px;">Best regards,<br>The Subdibuddy Team</p>
       </div>
       <div style="text-align: center; margin-top: 20px; color: #666; font-size: 12px;">
         <p>This is an automated message. Please do not reply to this email.</p>
@@ -200,7 +200,7 @@ export const sendRejectionEmail = async (
     return false;
   }
 
-  const subject = 'Account Application Status - Subsibuddy';
+  const subject = 'Account Application Status - Subdibuddy';
   const html = `
     <!DOCTYPE html>
     <html>
@@ -211,7 +211,7 @@ export const sendRejectionEmail = async (
     </head>
     <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="background-color: #1877F2; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-        <h1 style="margin: 0;">Subsibuddy</h1>
+        <h1 style="margin: 0;">Subdibuddy</h1>
       </div>
       <div style="background-color: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #ddd;">
         <h2 style="color: #F44336; margin-top: 0;">Application Status Update</h2>
@@ -224,8 +224,8 @@ export const sendRejectionEmail = async (
         </div>
         ` : ''}
         <p>If you believe this is an error or have additional information to provide, please contact your building administrator for further assistance.</p>
-        <p>Thank you for your interest in Subsibuddy.</p>
-        <p style="margin-top: 30px;">Best regards,<br>The Subsibuddy Team</p>
+        <p>Thank you for your interest in Subdibuddy.</p>
+        <p style="margin-top: 30px;">Best regards,<br>The Subdibuddy Team</p>
       </div>
       <div style="text-align: center; margin-top: 20px; color: #666; font-size: 12px;">
         <p>This is an automated message. Please do not reply to this email.</p>

@@ -81,7 +81,7 @@ export const sendEmail = functions.https.onCall(async (data, context) => {
   }
 
   const mailOptions = {
-    from: 'Subsibuddy <noreply@subsibuddy.com>',
+    from: 'Subdibuddy <noreply@subsibuddy.com>',
     to,
     subject,
     html,
