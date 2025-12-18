@@ -376,6 +376,43 @@ function ResidentManagement() {
       if (!confirmed) {
         return false;
       }
+      
+      // If tenant, check mapPins collection for location status before approval
+      if ((pendingUserData.residentType === 'tenant' || pendingUserData.isTenant === true) && pendingUserData.address) {
+        try {
+          const tenantAddress = pendingUserData.address;
+          if (tenantAddress && tenantAddress.block && tenantAddress.lot) {
+            const mapPinsQuery = query(
+              collection(db, 'mapPins'),
+              where('block', '==', tenantAddress.block),
+              where('lot', '==', tenantAddress.lot),
+              limit(1)
+            );
+            
+            const mapPinsSnapshot = await getDocs(mapPinsQuery);
+            
+            if (!mapPinsSnapshot.empty) {
+              const pinData = mapPinsSnapshot.docs[0].data();
+              const isOccupied = pinData.isOccupied || false;
+              const isAvailable = pinData.isAvailable || false;
+              
+              // Prevent approval if location is unoccupied or unavailable
+              if (!isOccupied) {
+                alert(`Cannot approve tenant registration.\n\nThis location (Block ${tenantAddress.block}, Lot ${tenantAddress.lot}) is marked as unoccupied.\n\nTenants cannot be registered at unoccupied locations.`);
+                return false;
+              }
+              
+              if (!isAvailable) {
+                alert(`Cannot approve tenant registration.\n\nThis location (Block ${tenantAddress.block}, Lot ${tenantAddress.lot}) is marked as unavailable.\n\nTenants cannot be registered at unavailable locations.`);
+                return false;
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error checking mapPins status:', error);
+          // Don't block approval if check fails, but log the error
+        }
+      }
     } catch (error) {
       console.error('Error fetching resident data:', error);
       alert('Error loading application data. Please try again.');

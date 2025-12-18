@@ -117,12 +117,32 @@ export default function Settings() {
               // Check if user is a homeowner (not a tenant)
               const isTenant = data.residentType === 'tenant' || data.isTenant === true;
               setIsHomeowner(!isTenant);
-              // Get availability status (default to 'unavailable' if not set)
-              setAvailabilityStatus(data.availabilityStatus || 'unavailable');
+              // Get availability status from Firestore - preserve the last saved state
+              // Only use default 'unavailable' if the field doesn't exist at all
+              const savedStatus = data.availabilityStatus;
+              if (savedStatus === 'available' || savedStatus === 'unavailable') {
+                setAvailabilityStatus(savedStatus);
+              } else {
+                // If field doesn't exist, default to 'unavailable' but also save it
+                setAvailabilityStatus('unavailable');
+                // Optionally save the default to Firestore for consistency
+                try {
+                  await updateDoc(doc(db, 'users', currentUser.uid), {
+                    availabilityStatus: 'unavailable',
+                  });
+                } catch (updateError) {
+                  console.error('Error setting default availability status:', updateError);
+                }
+              }
             }
           } catch (error) {
             console.error('Error fetching user data:', error);
           }
+        } else {
+          // User logged out - reset state
+          setUserData(null);
+          setIsHomeowner(false);
+          // Don't reset availabilityStatus here - it will be set when user logs back in
         }
       });
       return () => unsubscribe();
@@ -136,10 +156,16 @@ export default function Settings() {
     setLoadingAvailability(true);
 
     try {
+      // Update Firestore first to ensure persistence
       await updateDoc(doc(db, 'users', user.uid), {
         availabilityStatus: newStatus,
       });
+      // Update local state after successful Firestore update
       setAvailabilityStatus(newStatus);
+      // Also update userData to keep it in sync
+      if (userData) {
+        setUserData({ ...userData, availabilityStatus: newStatus });
+      }
       Alert.alert(
         'Status Updated',
         `Your marker is now ${newStatus === 'available' ? 'green (available)' : 'blue (unavailable)'} on the map.`
@@ -147,6 +173,9 @@ export default function Settings() {
     } catch (error) {
       console.error('Error updating availability status:', error);
       Alert.alert('Error', 'Failed to update availability status. Please try again.');
+      // Revert state if update failed
+      const currentStatus = userData?.availabilityStatus || 'unavailable';
+      setAvailabilityStatus(currentStatus);
     } finally {
       setLoadingAvailability(false);
     }

@@ -45,7 +45,7 @@ function Map() {
   const isSyncingRef = useRef(false);
   const lastSyncedResidentsRef = useRef<Record<string, string>>({}); // Track last synced status per resident
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'unoccupied' | 'available' | 'unavailable'>('all');
+  const [statusFilters, setStatusFilters] = useState<Set<'unoccupied' | 'available' | 'unavailable'>>(new Set(['unoccupied', 'available', 'unavailable']));
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapImageRef = useRef<HTMLImageElement>(null);
   
@@ -954,9 +954,7 @@ function Map() {
     
     if (!matchesSearch) return false;
     
-    // Status filter
-    if (statusFilter === 'all') return true;
-    
+    // Status filter - check if any selected filter matches
     // Check if there's a pinned location for this address
     const normalizedBlock = normalizeAddress(lot.block, 'block');
     const normalizedLot = normalizeAddress(lot.lot, 'lot');
@@ -971,26 +969,22 @@ function Map() {
     
     if (matchingPin) {
       // Use pin status
-      if (statusFilter === 'unoccupied') {
-        return !matchingPin.isOccupied;
-      } else if (statusFilter === 'available') {
-        return matchingPin.isOccupied && matchingPin.isAvailable;
-      } else if (statusFilter === 'unavailable') {
-        return matchingPin.isOccupied && !matchingPin.isAvailable;
-      }
+      const isUnoccupied = !matchingPin.isOccupied;
+      const isAvailable = matchingPin.isOccupied && matchingPin.isAvailable;
+      const isUnavailable = matchingPin.isOccupied && !matchingPin.isAvailable;
+      
+      return (statusFilters.has('unoccupied') && isUnoccupied) ||
+             (statusFilters.has('available') && isAvailable) ||
+             (statusFilters.has('unavailable') && isUnavailable);
     } else {
       // Use resident availability status
       const isAvailable = lot.resident?.availabilityStatus === 'available';
-      if (statusFilter === 'unoccupied') {
-        return false; // Resident markers are always occupied
-      } else if (statusFilter === 'available') {
-        return isAvailable;
-      } else if (statusFilter === 'unavailable') {
-        return !isAvailable;
-      }
+      const isUnavailable = !isAvailable;
+      // Resident markers are always occupied, so unoccupied filter doesn't apply
+      
+      return (statusFilters.has('available') && isAvailable) ||
+             (statusFilters.has('unavailable') && isUnavailable);
     }
-    
-    return true;
   });
 
   console.log(`Visible lots (all residents with addresses): ${visibleLots.length}`);
@@ -1021,18 +1015,14 @@ function Map() {
     
     if (!matchesSearch) return false;
     
-    // Status filter
-    if (statusFilter === 'all') return true;
+    // Status filter - check if any selected filter matches
+    const isUnoccupied = !pin.isOccupied;
+    const isAvailable = pin.isOccupied && pin.isAvailable;
+    const isUnavailable = pin.isOccupied && !pin.isAvailable;
     
-    if (statusFilter === 'unoccupied') {
-      return !pin.isOccupied;
-    } else if (statusFilter === 'available') {
-      return pin.isOccupied && pin.isAvailable;
-    } else if (statusFilter === 'unavailable') {
-      return pin.isOccupied && !pin.isAvailable;
-    }
-    
-    return true;
+    return (statusFilters.has('unoccupied') && isUnoccupied) ||
+           (statusFilters.has('available') && isAvailable) ||
+           (statusFilters.has('unavailable') && isUnavailable);
   });
   
   // Debug: Also show unmatched residents
@@ -1173,47 +1163,78 @@ function Map() {
                   className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-32 bg-white text-gray-900"
                 />
                 
-                {/* Filter Buttons - Horizontal */}
-                <button
-                  onClick={() => setStatusFilter('all')}
-                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                    statusFilter === 'all'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-600 text-white hover:bg-gray-500'
-                  }`}
-                >
-                  All
-                </button>
-                <button
-                  onClick={() => setStatusFilter('unoccupied')}
-                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                    statusFilter === 'unoccupied'
-                      ? 'bg-red-500 text-white'
-                      : 'bg-gray-600 text-white hover:bg-gray-500'
-                  }`}
-                >
-                  Unoccupied
-                </button>
-                <button
-                  onClick={() => setStatusFilter('available')}
-                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                    statusFilter === 'available'
-                      ? 'bg-green-500 text-white'
-                      : 'bg-gray-600 text-white hover:bg-gray-500'
-                  }`}
-                >
-                  Available
-                </button>
-                <button
-                  onClick={() => setStatusFilter('unavailable')}
-                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                    statusFilter === 'unavailable'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-600 text-white hover:bg-gray-500'
-                  }`}
-                >
-                  Unavailable
-                </button>
+                {/* Filter Checkboxes - Horizontal */}
+                <div className="flex items-center gap-2 px-2 py-1 border-l border-gray-600">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={statusFilters.size === 3}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setStatusFilters(new Set(['unoccupied', 'available', 'unavailable']));
+                        } else {
+                          setStatusFilters(new Set());
+                        }
+                      }}
+                      className="w-3.5 h-3.5 rounded border-gray-400 text-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <span className="text-xs text-white font-medium">All</span>
+                  </label>
+                  
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={statusFilters.has('unoccupied')}
+                      onChange={(e) => {
+                        const newFilters = new Set(statusFilters);
+                        if (e.target.checked) {
+                          newFilters.add('unoccupied');
+                        } else {
+                          newFilters.delete('unoccupied');
+                        }
+                        setStatusFilters(newFilters);
+                      }}
+                      className="w-3.5 h-3.5 rounded border-gray-400 text-red-500 focus:ring-1 focus:ring-red-500 cursor-pointer"
+                    />
+                    <span className="text-xs text-white font-medium">Unoccupied</span>
+                  </label>
+                  
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={statusFilters.has('available')}
+                      onChange={(e) => {
+                        const newFilters = new Set(statusFilters);
+                        if (e.target.checked) {
+                          newFilters.add('available');
+                        } else {
+                          newFilters.delete('available');
+                        }
+                        setStatusFilters(newFilters);
+                      }}
+                      className="w-3.5 h-3.5 rounded border-gray-400 text-green-500 focus:ring-1 focus:ring-green-500 cursor-pointer"
+                    />
+                    <span className="text-xs text-white font-medium">Available</span>
+                  </label>
+                  
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={statusFilters.has('unavailable')}
+                      onChange={(e) => {
+                        const newFilters = new Set(statusFilters);
+                        if (e.target.checked) {
+                          newFilters.add('unavailable');
+                        } else {
+                          newFilters.delete('unavailable');
+                        }
+                        setStatusFilters(newFilters);
+                      }}
+                      className="w-3.5 h-3.5 rounded border-gray-400 text-blue-400 focus:ring-1 focus:ring-blue-400 cursor-pointer"
+                    />
+                    <span className="text-xs text-white font-medium">Unavailable</span>
+                  </label>
+                </div>
               </div>
             </div>
             

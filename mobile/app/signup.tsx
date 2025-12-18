@@ -630,6 +630,45 @@ export default function Signup() {
     // Check if homeowner exists at the address when tenant is registering (step 3)
     if (currentStep === 3 && residentType === 'tenant' && db && block && lot) {
       try {
+        // First, check mapPins collection for location status
+        const mapPinsQuery = query(
+          collection(db, 'mapPins'),
+          where('block', '==', block),
+          where('lot', '==', lot),
+          limit(1)
+        );
+        
+        const mapPinsSnapshot = await getDocs(mapPinsQuery);
+        
+        if (!mapPinsSnapshot.empty) {
+          const pinData = mapPinsSnapshot.docs[0].data();
+          const isOccupied = pinData.isOccupied || false;
+          const isAvailable = pinData.isAvailable || false;
+          
+          // Prevent registration if location is unoccupied or unavailable
+          if (!isOccupied) {
+            setStepLoading(false);
+            setError('general', `This location (Block ${block}, Lot ${lot}) is marked as unoccupied. Tenants cannot register at unoccupied locations.`);
+            Alert.alert(
+              'Registration Not Allowed',
+              `This location is marked as unoccupied.\n\nBlock: ${block}\nLot: ${lot}\n\nTenants cannot register at unoccupied locations.`,
+              [{ text: 'OK' }]
+            );
+            return;
+          }
+          
+          if (!isAvailable) {
+            setStepLoading(false);
+            setError('general', `This location (Block ${block}, Lot ${lot}) is marked as unavailable. Tenants cannot register at unavailable locations.`);
+            Alert.alert(
+              'Registration Not Allowed',
+              `This location is marked as unavailable.\n\nBlock: ${block}\nLot: ${lot}\n\nTenants cannot register at unavailable locations.`,
+              [{ text: 'OK' }]
+            );
+            return;
+          }
+        }
+        
         // Check for approved homeowners in users collection
         const homeownersQuery = query(
           collection(db, 'users'),
@@ -643,8 +682,22 @@ export default function Signup() {
         const homeownersSnapshot = await getDocs(homeownersQuery);
         
         if (!homeownersSnapshot.empty) {
-          // Homeowner found - automatically set their location for the tenant
+          // Homeowner found - check their availability status
           const homeownerData = homeownersSnapshot.docs[0].data();
+          const homeownerAvailabilityStatus = homeownerData.availabilityStatus || 'unavailable';
+          
+          // Prevent registration if homeowner's availability status is unavailable
+          if (homeownerAvailabilityStatus === 'unavailable') {
+            setStepLoading(false);
+            setError('general', `This location (Block ${block}, Lot ${lot}) is unavailable for tenant registration. The homeowner has marked this location as unavailable.`);
+            Alert.alert(
+              'Registration Not Allowed',
+              `This location is unavailable for tenant registration.\n\nBlock: ${block}\nLot: ${lot}\n\nThe homeowner has marked this location as unavailable.`,
+              [{ text: 'OK' }]
+            );
+            return;
+          }
+          
           if (homeownerData.location) {
             // Copy homeowner's location to tenant
             const homeownerLocation = homeownerData.location;
@@ -652,6 +705,7 @@ export default function Signup() {
             console.log('Homeowner found at this address:', {
               block,
               lot,
+              availabilityStatus: homeownerAvailabilityStatus,
             });
           }
         } else {
@@ -842,6 +896,45 @@ export default function Signup() {
       // If tenant, check if homeowner exists at the same address and get their location
       if (residentType === 'tenant' && db) {
         try {
+          // First, check mapPins collection for location status
+          const mapPinsQuery = query(
+            collection(db, 'mapPins'),
+            where('block', '==', block),
+            where('lot', '==', lot),
+            limit(1)
+          );
+          
+          const mapPinsSnapshot = await getDocs(mapPinsQuery);
+          
+          if (!mapPinsSnapshot.empty) {
+            const pinData = mapPinsSnapshot.docs[0].data();
+            const isOccupied = pinData.isOccupied || false;
+            const isAvailable = pinData.isAvailable || false;
+            
+            // Prevent registration if location is unoccupied or unavailable
+            if (!isOccupied) {
+              setError('general', `This location (Block ${block}, Lot ${lot}) is marked as unoccupied. Tenants cannot register at unoccupied locations.`);
+              Alert.alert(
+                'Registration Not Allowed',
+                `This location is marked as unoccupied.\n\nBlock: ${block}\nLot: ${lot}\n\nTenants cannot register at unoccupied locations.`,
+                [{ text: 'OK' }]
+              );
+              setLoading(false);
+              return;
+            }
+            
+            if (!isAvailable) {
+              setError('general', `This location (Block ${block}, Lot ${lot}) is marked as unavailable. Tenants cannot register at unavailable locations.`);
+              Alert.alert(
+                'Registration Not Allowed',
+                `This location is marked as unavailable.\n\nBlock: ${block}\nLot: ${lot}\n\nTenants cannot register at unavailable locations.`,
+                [{ text: 'OK' }]
+              );
+              setLoading(false);
+              return;
+            }
+          }
+          
         const homeownersQuery = query(
           collection(db, 'users'),
           where('address.block', '==', block),
@@ -854,8 +947,22 @@ export default function Signup() {
           const homeownersSnapshot = await getDocs(homeownersQuery);
           
           if (!homeownersSnapshot.empty) {
-            // Homeowner found - automatically set their location for the tenant if not already set
+            // Homeowner found - check their availability status
             const homeownerData = homeownersSnapshot.docs[0].data();
+            const homeownerAvailabilityStatus = homeownerData.availabilityStatus || 'unavailable';
+            
+            // Prevent registration if homeowner's availability status is unavailable
+            if (homeownerAvailabilityStatus === 'unavailable') {
+              setError('general', `This location (Block ${block}, Lot ${lot}) is unavailable for tenant registration. The homeowner has marked this location as unavailable.`);
+              Alert.alert(
+                'Registration Not Allowed',
+                `This location is unavailable for tenant registration.\n\nBlock: ${block}\nLot: ${lot}\n\nThe homeowner has marked this location as unavailable.`,
+                [{ text: 'OK' }]
+              );
+              setLoading(false);
+              return;
+            }
+            
             if (homeownerData.location) {
               const homeownerLocation = homeownerData.location;
               if (homeownerLocation.latitude !== undefined && homeownerLocation.longitude !== undefined) {
@@ -868,7 +975,7 @@ export default function Signup() {
                     : parseFloat(homeownerLocation.longitude),
                 };
                 // Location will be automatically set when verified based on block/lot
-                console.log('Homeowner found during submission:', { block, lot });
+                console.log('Homeowner found during submission:', { block, lot, availabilityStatus: homeownerAvailabilityStatus });
               }
             }
           } else {
