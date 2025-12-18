@@ -45,7 +45,33 @@ function Map() {
   const isSyncingRef = useRef(false);
   const lastSyncedResidentsRef = useRef<Record<string, string>>({}); // Track last synced status per resident
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilters, setStatusFilters] = useState<Set<'unoccupied' | 'available' | 'unavailable'>>(new Set(['unoccupied', 'available', 'unavailable']));
+  
+  // Load filters from localStorage on mount
+  const loadFiltersFromStorage = (): Set<'unoccupied' | 'available' | 'unavailable'> => {
+    try {
+      const saved = localStorage.getItem('mapStatusFilters');
+      if (saved) {
+        const filtersArray = JSON.parse(saved) as ('unoccupied' | 'available' | 'unavailable')[];
+        return new Set(filtersArray);
+      }
+    } catch (error) {
+      console.warn('Error loading filters from localStorage:', error);
+    }
+    // Default: all filters selected
+    return new Set(['unoccupied', 'available', 'unavailable']);
+  };
+  
+  const [statusFilters, setStatusFilters] = useState<Set<'unoccupied' | 'available' | 'unavailable'>>(loadFiltersFromStorage);
+  
+  // Save filters to localStorage whenever they change
+  useEffect(() => {
+    try {
+      const filtersArray = Array.from(statusFilters);
+      localStorage.setItem('mapStatusFilters', JSON.stringify(filtersArray));
+    } catch (error) {
+      console.warn('Error saving filters to localStorage:', error);
+    }
+  }, [statusFilters]);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapImageRef = useRef<HTMLImageElement>(null);
   
@@ -1395,11 +1421,9 @@ function Map() {
                 if (!lot.resident) return null;
                 
                 // Get saved positions or use defaults
-                const blockKey = `block_${lot.block}`;
                 const lotKey = `lot_${lot.block}_${lot.lot}`;
                 const streetKey = `street_${lot.street}`;
                 
-                const blockPos = markerPositions[blockKey] || { x: lot.x - 5, y: lot.y - 5 };
                 const lotPos = markerPositions[lotKey] || { x: lot.x + lot.width / 2, y: lot.y + lot.height / 2 + 2 };
                 const streetPos = markerPositions[streetKey] || { x: lot.x - 5, y: lot.y + lot.height / 2 };
                 
@@ -1432,32 +1456,6 @@ function Map() {
                       </text>
                     ) : null}
                     
-                    {/* Block label (only show once per block) */}
-                    {lot.lot === '1' && (
-                      <text
-                        x={blockPos.x}
-                        y={blockPos.y}
-                        fontSize="10"
-                        fill="#000"
-                        fontWeight="bold"
-                        textAnchor="start"
-                        pointerEvents={isEditMode ? 'all' : 'none'}
-                        style={{ 
-                          userSelect: 'none',
-                          cursor: isEditMode ? 'pointer' : 'default',
-                          opacity: editingMarker?.type === 'block' && editingMarker?.block === lot.block ? 0.5 : 1
-                        }}
-                        onClick={(e) => {
-                          if (isEditMode) {
-                            e.stopPropagation();
-                            setEditingMarker({ type: 'block', block: lot.block });
-                            alert(`Click on the map to position the Block ${lot.block} label`);
-                          }
-                        }}
-                      >
-                        Block {lot.block}
-                      </text>
-                    )}
                     
                     {/* Street label (only show once per street) */}
                     {lot.lot === '1' && (

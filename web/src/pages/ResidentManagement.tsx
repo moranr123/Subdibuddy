@@ -7,6 +7,7 @@ import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
 import Header from '../components/Header';
 import EditResidentModal from '../components/EditResidentModal';
+import { sendApprovalEmail, sendRejectionEmail } from '../utils/emailService';
 
 interface UserLocation {
   latitude: number;
@@ -582,6 +583,24 @@ function ResidentManagement() {
         }
       }
       
+      // Send approval email notification
+      try {
+        const userEmail = pendingUserData.email;
+        const userName = pendingUserData.fullName || 
+          `${pendingUserData.firstName || ''} ${pendingUserData.lastName || ''}`.trim() || 
+          'User';
+        
+        if (userEmail) {
+          await sendApprovalEmail(userEmail, userName, username, password);
+          console.log(`Approval email sent to: ${userEmail}`);
+        } else {
+          console.warn('No email address found for pending user, skipping email notification');
+        }
+      } catch (emailError) {
+        console.error('Error sending approval email:', emailError);
+        // Don't fail the approval if email fails
+      }
+      
       // Delete from pendingUsers collection
       console.log(`Deleting pending user document: ${residentId}`);
       await deleteDoc(pendingUserRef);
@@ -657,8 +676,37 @@ function ResidentManagement() {
     
     setProcessingStatus(residentId);
     try {
+      // Get pending user data before deletion to send email notification
+      const pendingUserRef = doc(db, 'pendingUsers', residentId);
+      const pendingUserSnap = await getDoc(pendingUserRef);
+      
+      if (!pendingUserSnap.exists()) {
+        alert('Pending user not found');
+        return false;
+      }
+      
+      const pendingUserData = pendingUserSnap.data();
+      
+      // Send rejection email notification
+      try {
+        const userEmail = pendingUserData.email;
+        const userName = pendingUserData.fullName || 
+          `${pendingUserData.firstName || ''} ${pendingUserData.lastName || ''}`.trim() || 
+          'User';
+        
+        if (userEmail) {
+          await sendRejectionEmail(userEmail, userName, reason.trim());
+          console.log(`Rejection email sent to: ${userEmail}`);
+        } else {
+          console.warn('No email address found for pending user, skipping email notification');
+        }
+      } catch (emailError) {
+        console.error('Error sending rejection email:', emailError);
+        // Don't fail the rejection if email fails
+      }
+      
       // Delete from pendingUsers collection (rejected applications are removed)
-      await deleteDoc(doc(db, 'pendingUsers', residentId));
+      await deleteDoc(pendingUserRef);
       
       // Update local state - remove from list
       setResidents(prev => prev.filter(r => r.id !== residentId));

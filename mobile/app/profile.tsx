@@ -1,9 +1,9 @@
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Image, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { getAuthService, db } from '../firebase/config';
 import { useTheme } from '../contexts/ThemeContext';
@@ -41,6 +41,47 @@ export default function Profile() {
   const [user, setUser] = useState<any>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [saving, setSaving] = useState(false);
+  
+  // Edit form state
+  const [editFirstName, setEditFirstName] = useState('');
+  const [editMiddleName, setEditMiddleName] = useState('');
+  const [editLastName, setEditLastName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editSex, setEditSex] = useState<'male' | 'female' | ''>('');
+  const [editBirthdate, setEditBirthdate] = useState<Date | null>(null);
+  const [tempDate, setTempDate] = useState<Date>(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showSexPicker, setShowSexPicker] = useState(false);
+
+  // Calculate age from birthdate
+  const calculateAge = useCallback((date: Date) => {
+    const today = new Date();
+    let age = today.getFullYear() - date.getFullYear();
+    const monthDiff = today.getMonth() - date.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < date.getDate())) {
+      age--;
+    }
+    return age;
+  }, []);
+
+  // Parse birthdate from Firestore timestamp
+  const parseBirthdate = useCallback((timestamp: any): Date | null => {
+    if (!timestamp) return null;
+    try {
+      if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+        return timestamp.toDate();
+      }
+      if (timestamp instanceof Date) {
+        return timestamp;
+      }
+      return new Date(timestamp);
+    } catch (error) {
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
     const authInstance = getAuthService();
@@ -52,10 +93,24 @@ export default function Profile() {
             setLoading(true);
             const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
             if (userDoc.exists()) {
+              const data = userDoc.data();
               setUserData({
                 id: userDoc.id,
-                ...userDoc.data(),
+                ...data,
               } as UserData);
+              
+              // Initialize edit form with current data
+              setEditFirstName(data.firstName || '');
+              setEditMiddleName(data.middleName || '');
+              setEditLastName(data.lastName || '');
+              setEditPhone(data.phone || '');
+              setEditEmail(data.email || '');
+              setEditSex((data.sex as 'male' | 'female' | '') || '');
+              const bdate = parseBirthdate(data.birthdate);
+              setEditBirthdate(bdate);
+              if (bdate) {
+                setTempDate(bdate);
+              }
             }
           } catch (error) {
             console.error('Error fetching user data:', error);
@@ -69,7 +124,7 @@ export default function Profile() {
       });
       return () => unsubscribe();
     }
-  }, []);
+  }, [parseBirthdate]);
 
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'N/A';
@@ -101,6 +156,119 @@ export default function Profile() {
     ].filter(Boolean);
     return parts.length > 0 ? parts.join(', ') : 'N/A';
   };
+
+  // Date picker helpers
+  const getMonthOptions = () => {
+    return ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  };
+
+  const getYearOptions = () => {
+    const currentYear = new Date().getFullYear();
+    const years = [];
+    for (let i = currentYear; i >= currentYear - 100; i--) {
+      years.push(i);
+    }
+    return years;
+  };
+
+  const getDaysInMonth = (year: number, month: number) => {
+    return new Date(year, month + 1, 0).getDate();
+  };
+
+  const handleDatePickerConfirm = useCallback(() => {
+    setEditBirthdate(new Date(tempDate));
+    setShowDatePicker(false);
+  }, [tempDate]);
+
+  // Save profile changes
+  const handleSave = useCallback(async () => {
+    if (!user || !db || !userData) return;
+
+    // Validation
+    if (!editFirstName.trim()) {
+      Alert.alert('Validation Error', 'First name is required');
+      return;
+    }
+    if (!editLastName.trim()) {
+      Alert.alert('Validation Error', 'Last name is required');
+      return;
+    }
+    if (editPhone && editPhone.trim()) {
+      const cleanedPhone = editPhone.replace(/[\s\-\(\)]/g, '');
+      if (!/^\d{10,11}$/.test(cleanedPhone)) {
+        Alert.alert('Validation Error', 'Please enter a valid phone number (10-11 digits)');
+        return;
+      }
+    }
+    if (editEmail && editEmail.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(editEmail.trim())) {
+        Alert.alert('Validation Error', 'Please enter a valid email address');
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      const updateData: any = {
+        firstName: editFirstName.trim(),
+        middleName: editMiddleName.trim() || null,
+        lastName: editLastName.trim(),
+        fullName: `${editFirstName.trim()} ${editMiddleName.trim() ? editMiddleName.trim() + ' ' : ''}${editLastName.trim()}`.trim(),
+        updatedAt: Timestamp.now(),
+      };
+
+      if (editPhone.trim()) {
+        updateData.phone = editPhone.trim();
+      }
+      if (editEmail.trim()) {
+        updateData.email = editEmail.trim();
+      }
+      if (editSex) {
+        updateData.sex = editSex;
+      }
+      if (editBirthdate) {
+        updateData.birthdate = Timestamp.fromDate(editBirthdate);
+        updateData.age = calculateAge(editBirthdate);
+      }
+
+      await updateDoc(doc(db, 'users', user.uid), updateData);
+      
+      // Update local state
+      setUserData({
+        ...userData,
+        ...updateData,
+        birthdate: editBirthdate ? Timestamp.fromDate(editBirthdate) : userData.birthdate,
+        age: editBirthdate ? calculateAge(editBirthdate) : userData.age,
+      });
+
+      setIsEditMode(false);
+      Alert.alert('Success', 'Profile updated successfully');
+    } catch (error: any) {
+      console.error('Error updating profile:', error);
+      Alert.alert('Error', `Failed to update profile: ${error.message || 'Unknown error'}`);
+    } finally {
+      setSaving(false);
+    }
+  }, [user, db, userData, editFirstName, editMiddleName, editLastName, editPhone, editEmail, editSex, editBirthdate, calculateAge]);
+
+  const handleCancel = useCallback(() => {
+    // Reset form to original values
+    if (userData) {
+      setEditFirstName(userData.firstName || '');
+      setEditMiddleName(userData.middleName || '');
+      setEditLastName(userData.lastName || '');
+      setEditPhone(userData.phone || '');
+      setEditEmail(userData.email || '');
+      setEditSex((userData.sex as 'male' | 'female' | '') || '');
+      const bdate = parseBirthdate(userData.birthdate);
+      setEditBirthdate(bdate);
+      if (bdate) {
+        setTempDate(bdate);
+      }
+    }
+    setIsEditMode(false);
+  }, [userData, parseBirthdate]);
 
   const dynamicStyles = useMemo(() => StyleSheet.create({
     container: {
@@ -199,7 +367,7 @@ export default function Profile() {
 
   return (
     <View style={dynamicStyles.container}>
-      {/* Back Button */}
+      {/* Header */}
       <View style={[dynamicStyles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity 
           onPress={() => router.back()}
@@ -209,7 +377,39 @@ export default function Profile() {
           <FontAwesome5 name="arrow-left" size={20} color="#ffffff" />
         </TouchableOpacity>
         <Text style={dynamicStyles.headerTitle}>Profile</Text>
-        <View style={styles.headerSpacer} />
+        {userData && !isEditMode && (
+          <TouchableOpacity 
+            onPress={() => setIsEditMode(true)}
+            style={styles.editButton}
+            activeOpacity={0.7}
+          >
+            <FontAwesome5 name="edit" size={18} color="#ffffff" />
+          </TouchableOpacity>
+        )}
+        {isEditMode && (
+          <View style={styles.headerActions}>
+            <TouchableOpacity 
+              onPress={handleCancel}
+              style={styles.cancelButton}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={handleSave}
+              style={styles.saveButton}
+              activeOpacity={0.7}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text style={styles.saveButtonText}>Save</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+        {!isEditMode && !userData && <View style={styles.headerSpacer} />}
       </View>
 
       <ScrollView style={dynamicStyles.content} contentContainerStyle={styles.contentContainer}>
@@ -221,65 +421,163 @@ export default function Profile() {
               <View style={dynamicStyles.sectionCard}>
                 <Text style={dynamicStyles.sectionTitle}>Personal Information</Text>
                 
-                <View style={styles.infoRow}>
-                  <Text style={dynamicStyles.label}>Full Name:</Text>
-                  <Text style={dynamicStyles.value}>{getFullName()}</Text>
-                </View>
+                {!isEditMode ? (
+                  <>
+                    <View style={styles.infoRow}>
+                      <Text style={dynamicStyles.label}>Full Name:</Text>
+                      <Text style={dynamicStyles.value}>{getFullName()}</Text>
+                    </View>
 
-                {userData.firstName && (
-                  <View style={styles.infoRow}>
-                    <Text style={dynamicStyles.label}>First Name:</Text>
-                    <Text style={dynamicStyles.value}>{userData.firstName}</Text>
-                  </View>
-                )}
+                    {userData.firstName && (
+                      <View style={styles.infoRow}>
+                        <Text style={dynamicStyles.label}>First Name:</Text>
+                        <Text style={dynamicStyles.value}>{userData.firstName}</Text>
+                      </View>
+                    )}
 
-                {userData.middleName && (
-                  <View style={styles.infoRow}>
-                    <Text style={dynamicStyles.label}>Middle Name:</Text>
-                    <Text style={dynamicStyles.value}>{userData.middleName}</Text>
-                  </View>
-                )}
+                    {userData.middleName && (
+                      <View style={styles.infoRow}>
+                        <Text style={dynamicStyles.label}>Middle Name:</Text>
+                        <Text style={dynamicStyles.value}>{userData.middleName}</Text>
+                      </View>
+                    )}
 
-                {userData.lastName && (
-                  <View style={styles.infoRow}>
-                    <Text style={dynamicStyles.label}>Last Name:</Text>
-                    <Text style={dynamicStyles.value}>{userData.lastName}</Text>
-                  </View>
-                )}
+                    {userData.lastName && (
+                      <View style={styles.infoRow}>
+                        <Text style={dynamicStyles.label}>Last Name:</Text>
+                        <Text style={dynamicStyles.value}>{userData.lastName}</Text>
+                      </View>
+                    )}
 
-                {userData.email && (
-                  <View style={styles.infoRow}>
-                    <Text style={dynamicStyles.label}>Email:</Text>
-                    <Text style={dynamicStyles.value}>{userData.email}</Text>
-                  </View>
-                )}
+                    {userData.email && (
+                      <View style={styles.infoRow}>
+                        <Text style={dynamicStyles.label}>Email:</Text>
+                        <Text style={dynamicStyles.value}>{userData.email}</Text>
+                      </View>
+                    )}
 
-                {userData.phone && (
-                  <View style={styles.infoRow}>
-                    <Text style={dynamicStyles.label}>Phone:</Text>
-                    <Text style={dynamicStyles.value}>{userData.phone}</Text>
-                  </View>
-                )}
+                    {userData.phone && (
+                      <View style={styles.infoRow}>
+                        <Text style={dynamicStyles.label}>Phone:</Text>
+                        <Text style={dynamicStyles.value}>{userData.phone}</Text>
+                      </View>
+                    )}
 
-                {userData.birthdate && (
-                  <View style={styles.infoRow}>
-                    <Text style={dynamicStyles.label}>Birthdate:</Text>
-                    <Text style={dynamicStyles.value}>{formatDate(userData.birthdate)}</Text>
-                  </View>
-                )}
+                    {userData.birthdate && (
+                      <View style={styles.infoRow}>
+                        <Text style={dynamicStyles.label}>Birthdate:</Text>
+                        <Text style={dynamicStyles.value}>{formatDate(userData.birthdate)}</Text>
+                      </View>
+                    )}
 
-                {userData.age && (
-                  <View style={styles.infoRow}>
-                    <Text style={dynamicStyles.label}>Age:</Text>
-                    <Text style={dynamicStyles.value}>{userData.age}</Text>
-                  </View>
-                )}
+                    {userData.age && (
+                      <View style={styles.infoRow}>
+                        <Text style={dynamicStyles.label}>Age:</Text>
+                        <Text style={dynamicStyles.value}>{userData.age}</Text>
+                      </View>
+                    )}
 
-                {userData.sex && (
-                  <View style={styles.infoRow}>
-                    <Text style={dynamicStyles.label}>Sex:</Text>
-                    <Text style={dynamicStyles.value}>{userData.sex}</Text>
-                  </View>
+                    {userData.sex && (
+                      <View style={styles.infoRow}>
+                        <Text style={dynamicStyles.label}>Sex:</Text>
+                        <Text style={dynamicStyles.value}>{userData.sex}</Text>
+                      </View>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.editFormGroup}>
+                      <Text style={styles.editLabel}>First Name *</Text>
+                      <TextInput
+                        style={styles.editInput}
+                        value={editFirstName}
+                        onChangeText={setEditFirstName}
+                        placeholder="Enter first name"
+                        placeholderTextColor="#999"
+                      />
+                    </View>
+
+                    <View style={styles.editFormGroup}>
+                      <Text style={styles.editLabel}>Middle Name</Text>
+                      <TextInput
+                        style={styles.editInput}
+                        value={editMiddleName}
+                        onChangeText={setEditMiddleName}
+                        placeholder="Enter middle name (optional)"
+                        placeholderTextColor="#999"
+                      />
+                    </View>
+
+                    <View style={styles.editFormGroup}>
+                      <Text style={styles.editLabel}>Last Name *</Text>
+                      <TextInput
+                        style={styles.editInput}
+                        value={editLastName}
+                        onChangeText={setEditLastName}
+                        placeholder="Enter last name"
+                        placeholderTextColor="#999"
+                      />
+                    </View>
+
+                    <View style={styles.editFormGroup}>
+                      <Text style={styles.editLabel}>Email</Text>
+                      <TextInput
+                        style={styles.editInput}
+                        value={editEmail}
+                        onChangeText={setEditEmail}
+                        placeholder="Enter email address"
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        placeholderTextColor="#999"
+                      />
+                    </View>
+
+                    <View style={styles.editFormGroup}>
+                      <Text style={styles.editLabel}>Phone</Text>
+                      <TextInput
+                        style={styles.editInput}
+                        value={editPhone}
+                        onChangeText={setEditPhone}
+                        placeholder="Enter phone number"
+                        keyboardType="phone-pad"
+                        placeholderTextColor="#999"
+                      />
+                    </View>
+
+                    <View style={styles.editFormGroup}>
+                      <Text style={styles.editLabel}>Sex</Text>
+                      <TouchableOpacity
+                        style={styles.editPickerButton}
+                        onPress={() => setShowSexPicker(true)}
+                      >
+                        <Text style={[styles.editPickerText, !editSex && styles.editPickerPlaceholder]}>
+                          {editSex ? editSex.charAt(0).toUpperCase() + editSex.slice(1) : 'Select sex'}
+                        </Text>
+                        <Text style={styles.pickerIcon}>▼</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.editFormGroup}>
+                      <Text style={styles.editLabel}>Birthdate</Text>
+                      <TouchableOpacity
+                        style={styles.editPickerButton}
+                        onPress={() => {
+                          if (editBirthdate) {
+                            setTempDate(editBirthdate);
+                          }
+                          setShowDatePicker(true);
+                        }}
+                      >
+                        <Text style={[styles.editPickerText, !editBirthdate && styles.editPickerPlaceholder]}>
+                          {editBirthdate ? editBirthdate.toLocaleDateString() : 'Select birthdate'}
+                        </Text>
+                        <Text style={styles.pickerIcon}>▼</Text>
+                      </TouchableOpacity>
+                      {editBirthdate && (
+                        <Text style={styles.ageText}>Age: {calculateAge(editBirthdate)}</Text>
+                      )}
+                    </View>
+                  </>
                 )}
               </View>
 
@@ -429,6 +727,168 @@ export default function Profile() {
           )}
         </View>
       </ScrollView>
+
+      {/* Date Picker Modal */}
+      <Modal
+        visible={showDatePicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDatePicker(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowDatePicker(false)}
+        >
+          <View style={styles.datePickerModalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Birthdate</Text>
+              <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.datePickerContainer}>
+              <View style={styles.datePickerColumn}>
+                <Text style={styles.datePickerLabel}>Month</Text>
+                <ScrollView style={styles.datePickerScroll}>
+                  {getMonthOptions().map((month, index) => (
+                    <TouchableOpacity
+                      key={month}
+                      style={[
+                        styles.datePickerOption,
+                        tempDate.getMonth() === index && styles.datePickerOptionSelected
+                      ]}
+                      onPress={() => {
+                        const newDate = new Date(tempDate);
+                        newDate.setMonth(index);
+                        const daysInMonth = getDaysInMonth(newDate.getFullYear(), index);
+                        if (newDate.getDate() > daysInMonth) {
+                          newDate.setDate(daysInMonth);
+                        }
+                        setTempDate(newDate);
+                      }}
+                    >
+                      <Text style={[
+                        styles.datePickerOptionText,
+                        tempDate.getMonth() === index && styles.datePickerOptionTextSelected
+                      ]}>
+                        {month}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.datePickerColumn}>
+                <Text style={styles.datePickerLabel}>Day</Text>
+                <ScrollView style={styles.datePickerScroll}>
+                  {Array.from({ length: getDaysInMonth(tempDate.getFullYear(), tempDate.getMonth()) }, (_, i) => i + 1).map((day) => (
+                    <TouchableOpacity
+                      key={day}
+                      style={[
+                        styles.datePickerOption,
+                        tempDate.getDate() === day && styles.datePickerOptionSelected
+                      ]}
+                      onPress={() => {
+                        const newDate = new Date(tempDate);
+                        newDate.setDate(day);
+                        setTempDate(newDate);
+                      }}
+                    >
+                      <Text style={[
+                        styles.datePickerOptionText,
+                        tempDate.getDate() === day && styles.datePickerOptionTextSelected
+                      ]}>
+                        {day}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.datePickerColumn}>
+                <Text style={styles.datePickerLabel}>Year</Text>
+                <ScrollView style={styles.datePickerScroll}>
+                  {getYearOptions().map((year) => (
+                    <TouchableOpacity
+                      key={year}
+                      style={[
+                        styles.datePickerOption,
+                        tempDate.getFullYear() === year && styles.datePickerOptionSelected
+                      ]}
+                      onPress={() => {
+                        const newDate = new Date(tempDate);
+                        newDate.setFullYear(year);
+                        const daysInMonth = getDaysInMonth(year, newDate.getMonth());
+                        if (newDate.getDate() > daysInMonth) {
+                          newDate.setDate(daysInMonth);
+                        }
+                        setTempDate(newDate);
+                      }}
+                    >
+                      <Text style={[
+                        styles.datePickerOptionText,
+                        tempDate.getFullYear() === year && styles.datePickerOptionTextSelected
+                      ]}>
+                        {year}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={handleDatePickerConfirm}
+              >
+                <Text style={styles.modalButtonText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Sex Picker Modal */}
+      <Modal
+        visible={showSexPicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSexPicker(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowSexPicker(false)}
+        >
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Sex</Text>
+              <TouchableOpacity onPress={() => setShowSexPicker(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScrollView}>
+              <TouchableOpacity
+                style={styles.modalOption}
+                onPress={() => {
+                  setEditSex('male');
+                  setShowSexPicker(false);
+                }}
+              >
+                <Text style={styles.modalOptionText}>Male</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalOption}
+                onPress={() => {
+                  setEditSex('female');
+                  setShowSexPicker(false);
+                }}
+              >
+                <Text style={styles.modalOptionText}>Female</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -439,6 +899,37 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 36,
+  },
+  editButton: {
+    padding: 8,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cancelButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  cancelButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  saveButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    backgroundColor: '#4CAF50',
+    borderRadius: 6,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   contentContainer: {
     paddingBottom: 20,
@@ -479,6 +970,154 @@ const styles = StyleSheet.create({
   emptyContainer: {
     padding: 40,
     alignItems: 'center',
+  },
+  // Edit form styles
+  editFormGroup: {
+    marginBottom: 16,
+  },
+  editLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+    marginBottom: 8,
+  },
+  editInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: '#fff',
+    color: '#000',
+  },
+  editPickerButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#fff',
+  },
+  editPickerText: {
+    fontSize: 16,
+    color: '#000',
+  },
+  editPickerPlaceholder: {
+    color: '#999',
+  },
+  pickerIcon: {
+    fontSize: 12,
+    color: '#666',
+  },
+  ageText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    width: '80%',
+    maxHeight: '70%',
+    overflow: 'hidden',
+  },
+  datePickerModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    width: '90%',
+    maxHeight: '80%',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000',
+  },
+  modalCloseText: {
+    fontSize: 24,
+    color: '#666',
+  },
+  modalScrollView: {
+    maxHeight: 300,
+  },
+  modalOption: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  modalOptionText: {
+    fontSize: 16,
+    color: '#000',
+  },
+  datePickerContainer: {
+    flexDirection: 'row',
+    height: 300,
+  },
+  datePickerColumn: {
+    flex: 1,
+    borderRightWidth: 1,
+    borderRightColor: '#eee',
+  },
+  datePickerLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    textAlign: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  datePickerScroll: {
+    flex: 1,
+  },
+  datePickerOption: {
+    padding: 12,
+    alignItems: 'center',
+  },
+  datePickerOptionSelected: {
+    backgroundColor: '#1877F2',
+  },
+  datePickerOptionText: {
+    fontSize: 14,
+    color: '#000',
+  },
+  datePickerOptionTextSelected: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  modalFooter: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  modalButton: {
+    backgroundColor: '#1877F2',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

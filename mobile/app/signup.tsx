@@ -560,7 +560,6 @@ export default function Signup() {
     sex,
     block,
     lot,
-    location,
     residentType,
     tenantRelation,
     waterBillingDate,
