@@ -1,13 +1,11 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Modal, Dimensions, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Modal, Dimensions, Image, KeyboardAvoidingView, Platform, ImageSourcePropType } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { doc, setDoc, Timestamp, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
 import * as ImagePicker from 'expo-image-picker';
-import * as Location from 'expo-location';
-import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
@@ -51,13 +49,8 @@ export default function Signup() {
   // Step 3: Address and Resident Type (combined)
   const [block, setBlock] = useState('');
   const [lot, setLot] = useState('');
-  const [street, setStreet] = useState('');
   const [showBlockPicker, setShowBlockPicker] = useState(false);
   const [showLotPicker, setShowLotPicker] = useState(false);
-  const [showStreetPicker, setShowStreetPicker] = useState(false);
-  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [showMapModal, setShowMapModal] = useState(false);
-  const mapWebViewRef = useRef<WebView>(null);
   const [residentType, setResidentType] = useState<'tenant' | 'homeowner' | null>(null);
   const [tenantRelation, setTenantRelation] = useState('');
   const [showRelationPicker, setShowRelationPicker] = useState(false);
@@ -123,33 +116,6 @@ export default function Signup() {
     handleBillingDateChange(tempBillingDate);
   }, [tempBillingDate, handleBillingDateChange]);
 
-  // Fetch device location when map opens
-  useEffect(() => {
-    const fetchLocation = async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          console.warn('Location permission not granted');
-          return;
-        }
-        const position = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        if (position?.coords) {
-          setLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
-        }
-      } catch (err) {
-        console.warn('Failed to fetch location', err);
-      }
-    };
-
-    if (showMapModal) {
-      fetchLocation();
-    }
-  }, [showMapModal]);
 
   const getDaysInMonth = useCallback((year: number, month: number) => {
     return new Date(year, month + 1, 0).getDate();
@@ -258,477 +224,7 @@ export default function Signup() {
     );
   }, [pickImage]);
 
-  // Generate map HTML with same view as admin map
-  const generateMapHTML = useCallback((currentLocation: { latitude: number; longitude: number } | null) => {
-    // Default to Manila, will try to get from AsyncStorage (matching admin map localStorage)
-    let mapCenter = { lat: 14.5995, lng: 120.9842 };
-    let mapZoom = 15;
-
-    // Use current location if available
-    if (currentLocation) {
-      mapCenter = { lat: currentLocation.latitude, lng: currentLocation.longitude };
-    }
-
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          * { box-sizing: border-box; }
-          body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-          #searchContainer {
-            position: absolute;
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 90%;
-            max-width: 400px;
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-          }
-          @media (max-width: 480px) {
-            #searchContainer {
-              width: 85%;
-              max-width: 350px;
-            }
-          }
-          @media (max-width: 360px) {
-            #searchContainer {
-              width: 80%;
-              max-width: 300px;
-            }
-          }
-          #searchInputWrapper {
-            display: flex;
-            gap: 8px;
-          }
-          #searchInput {
-            flex: 1;
-            padding: 10px 14px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-size: 14px;
-            background: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            min-width: 0;
-          }
-          @media (max-width: 480px) {
-            #searchInput {
-              padding: 8px 12px;
-              font-size: 13px;
-            }
-          }
-          #searchButton {
-            padding: 10px 16px;
-            background: #1877F2;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            white-space: nowrap;
-            flex-shrink: 0;
-          }
-          @media (max-width: 480px) {
-            #searchButton {
-              padding: 8px 14px;
-              font-size: 13px;
-            }
-          }
-          #searchButton:active {
-            background: #1565C0;
-          }
-          #suggestionsContainer {
-            background: white;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            max-height: 200px;
-            overflow-y: auto;
-            display: none;
-            width: 100%;
-          }
-          .suggestionItem {
-            padding: 12px 16px;
-            border-bottom: 1px solid #e5e7eb;
-            cursor: pointer;
-            font-size: 14px;
-            color: #111827;
-          }
-          .suggestionItem:hover,
-          .suggestionItem:active {
-            background: #f3f4f6;
-          }
-          .suggestionItem:last-child {
-            border-bottom: none;
-          }
-          .suggestionMain {
-            font-weight: 500;
-            color: #111827;
-          }
-          .suggestionSecondary {
-            font-size: 12px;
-            color: #6b7280;
-            margin-top: 2px;
-          }
-          #map { width: 100%; height: 100vh; }
-          #confirmButton {
-            position: absolute;
-            bottom: 72px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 90%;
-            max-width: 400px;
-            padding: 14px;
-            background: #111827;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-          }
-          @media (max-width: 480px) {
-            #confirmButton {
-              width: 85%;
-              max-width: 350px;
-              padding: 12px;
-              font-size: 13px;
-            }
-          }
-          @media (max-width: 360px) {
-            #confirmButton {
-              width: 80%;
-              max-width: 300px;
-            }
-          }
-          #confirmButton:active {
-            background: #0f172a;
-          }
-        </style>
-      </head>
-      <body>
-        <div id="searchContainer">
-          <div id="searchInputWrapper">
-            <input 
-              type="text" 
-              id="searchInput" 
-              placeholder="Search for a place..."
-              autocomplete="off"
-            />
-            <button id="searchButton">Search</button>
-          </div>
-          <div id="suggestionsContainer"></div>
-        </div>
-        <div id="map"></div>
-        <button id="confirmButton">Confirm Location</button>
-        <script>
-          let map;
-          let marker = null;
-          let geocoder = null;
-          let autocompleteService = null;
-          let suggestionsContainer = null;
-          let searchInput = null;
-          let searchTimeout = null;
-          
-          let currentLatLng = { lat: ${mapCenter.lat}, lng: ${mapCenter.lng} };
-
-          function initMap() {
-            // Try to get saved center and zoom from localStorage (admin map settings)
-            let center = { lat: ${mapCenter.lat}, lng: ${mapCenter.lng} };
-            let zoom = ${mapZoom};
-            
-            try {
-              const savedCenter = localStorage.getItem('mapCenter');
-              const savedZoom = localStorage.getItem('mapZoom');
-              if (savedCenter) {
-                center = JSON.parse(savedCenter);
-              }
-              if (savedZoom) {
-                zoom = parseInt(savedZoom, 10);
-              }
-            } catch (e) {
-              console.error('Error loading saved map settings:', e);
-            }
-            
-            map = new google.maps.Map(document.getElementById('map'), {
-              center: center,
-              zoom: zoom,
-              mapTypeId: google.maps.MapTypeId.ROADMAP,
-              mapTypeControl: true,
-              streetViewControl: true,
-              fullscreenControl: true,
-              zoomControl: true,
-            });
-
-            geocoder = new google.maps.Geocoder();
-            autocompleteService = new google.maps.places.AutocompleteService();
-            suggestionsContainer = document.getElementById('suggestionsContainer');
-            searchInput = document.getElementById('searchInput');
-
-            ${currentLocation ? `
-            // Add existing marker if location is already set
-            marker = new google.maps.Marker({
-              position: { lat: ${currentLocation.latitude}, lng: ${currentLocation.longitude} },
-              map: map,
-              draggable: true,
-              icon: {
-                url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
-              },
-            });
-            ` : ''}
-            ${currentLocation ? `currentLatLng = { lat: ${currentLocation.latitude}, lng: ${currentLocation.longitude} };` : ''}
-
-            // Search functionality with autocomplete
-            const searchButton = document.getElementById('searchButton');
-            const confirmButton = document.getElementById('confirmButton');
-            
-            function showSuggestions(suggestions) {
-              suggestionsContainer.innerHTML = '';
-              if (suggestions && suggestions.length > 0) {
-                suggestionsContainer.style.display = 'block';
-                suggestions.forEach((suggestion) => {
-                  const item = document.createElement('div');
-                  item.className = 'suggestionItem';
-                  item.innerHTML = \`
-                    <div class="suggestionMain">\${suggestion.description}</div>
-                    \${suggestion.structured_formatting?.secondary_text ? 
-                      '<div class="suggestionSecondary">' + suggestion.structured_formatting.secondary_text + '</div>' : ''}
-                  \`;
-                  item.addEventListener('click', () => {
-                    selectPlace(suggestion.place_id, suggestion.description);
-                  });
-                  suggestionsContainer.appendChild(item);
-                });
-              } else {
-                suggestionsContainer.style.display = 'none';
-              }
-            }
-            
-            function selectPlace(placeId, description) {
-              searchInput.value = description;
-              suggestionsContainer.style.display = 'none';
-              
-              const service = new google.maps.places.PlacesService(map);
-              service.getDetails(
-                {
-                  placeId: placeId,
-                  fields: ['geometry', 'formatted_address', 'name'],
-                },
-                (place, status) => {
-                  if (status === google.maps.places.PlacesServiceStatus.OK && place) {
-                    const location = place.geometry.location;
-                    const lat = typeof location.lat === 'function' ? location.lat() : location.lat;
-                    const lng = typeof location.lng === 'function' ? location.lng() : location.lng;
-                    
-                    // Center map on searched location
-                    map.setCenter({ lat, lng });
-                    map.setZoom(17);
-                    
-                    // Remove existing marker
-                    if (marker) {
-                      marker.setMap(null);
-                    }
-                    
-                    // Add new marker
-                    marker = new google.maps.Marker({
-                      position: { lat, lng },
-                      map: map,
-                      draggable: true,
-                      icon: {
-                        url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
-                      },
-                    });
-                    
-                    currentLatLng = { lat, lng };
-
-                    // Send location to React Native
-                    if (window.ReactNativeWebView) {
-                      window.ReactNativeWebView.postMessage(JSON.stringify({
-                        type: 'searchLocation',
-                        latitude: lat,
-                        longitude: lng,
-                      }));
-                    }
-                  } else {
-                    // Fallback to geocoding
-                    performSearch(description);
-                  }
-                }
-              );
-            }
-            
-            function performSearch(address) {
-              const searchAddress = address || searchInput.value.trim();
-              if (!searchAddress) return;
-              
-              geocoder.geocode(
-                { address: searchAddress + ', Philippines', region: 'ph' },
-                (results, status) => {
-                  if (status === 'OK' && results && results.length > 0) {
-                    const result = results[0];
-                    const location = result.geometry.location;
-                    const lat = typeof location.lat === 'function' ? location.lat() : location.lat;
-                    const lng = typeof location.lng === 'function' ? location.lng() : location.lng;
-                    
-                    // Center map on searched location
-                    map.setCenter({ lat, lng });
-                    map.setZoom(17);
-                    
-                    // Remove existing marker
-                    if (marker) {
-                      marker.setMap(null);
-                    }
-                    
-                    // Add new marker
-                    marker = new google.maps.Marker({
-                      position: { lat, lng },
-                      map: map,
-                      draggable: true,
-                      icon: {
-                        url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
-                      },
-                    });
-                    
-                    currentLatLng = { lat, lng };
-
-                    // Send location to React Native
-                    if (window.ReactNativeWebView) {
-                      window.ReactNativeWebView.postMessage(JSON.stringify({
-                        type: 'searchLocation',
-                        latitude: lat,
-                        longitude: lng,
-                      }));
-                    }
-                  } else {
-                    alert('No results found. Please try a different location.');
-                  }
-                }
-              );
-            }
-            
-            // Autocomplete suggestions as user types
-            searchInput.addEventListener('input', (e) => {
-              const query = e.target.value.trim();
-              
-              if (searchTimeout) {
-                clearTimeout(searchTimeout);
-              }
-              
-              if (query.length < 2) {
-                suggestionsContainer.style.display = 'none';
-                return;
-              }
-              
-              searchTimeout = setTimeout(() => {
-                autocompleteService.getPlacePredictions(
-                  {
-                    input: query,
-                    componentRestrictions: { country: 'ph' },
-                    types: ['geocode', 'establishment'],
-                  },
-                  (predictions, status) => {
-                    if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
-                      showSuggestions(predictions);
-                    } else {
-                      suggestionsContainer.style.display = 'none';
-                    }
-                  }
-                );
-              }, 300);
-            });
-            
-            // Close suggestions when clicking outside
-            document.addEventListener('click', (e) => {
-              if (!searchInput.contains(e.target) && !suggestionsContainer.contains(e.target)) {
-                suggestionsContainer.style.display = 'none';
-              }
-            });
-            
-            searchButton.addEventListener('click', () => performSearch());
-            searchInput.addEventListener('keypress', (e) => {
-              if (e.key === 'Enter') {
-                suggestionsContainer.style.display = 'none';
-                performSearch();
-              }
-            });
-
-            // Add click listener to pin location
-            map.addListener('click', (e) => {
-              const lat = e.latLng.lat();
-              const lng = e.latLng.lng();
-              
-              // Remove existing marker
-              if (marker) {
-                marker.setMap(null);
-              }
-              
-              // Add new marker
-              marker = new google.maps.Marker({
-                position: { lat, lng },
-                map: map,
-                draggable: true,
-                icon: {
-                  url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
-                },
-              });
-              
-              currentLatLng = { lat, lng };
-
-              // Send location to React Native
-              if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                  type: 'locationPinned',
-                  latitude: lat,
-                  longitude: lng,
-                }));
-              }
-            });
-
-            // Allow dragging marker
-            if (marker) {
-              marker.addListener('dragend', (e) => {
-                const lat = e.latLng.lat();
-                const lng = e.latLng.lng();
-                currentLatLng = { lat, lng };
-                if (window.ReactNativeWebView) {
-                  window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: 'locationPinned',
-                    latitude: lat,
-                    longitude: lng,
-                  }));
-                }
-              });
-            }
-
-            confirmButton.addEventListener('click', () => {
-              const position = marker ? marker.getPosition() : map.getCenter();
-              const lat = typeof position.lat === 'function' ? position.lat() : position.lat;
-              const lng = typeof position.lng === 'function' ? position.lng() : position.lng;
-              currentLatLng = { lat, lng };
-              if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                  type: 'confirmLocation',
-                  latitude: lat,
-                  longitude: lng,
-                }));
-              }
-            });
-          }
-        </script>
-        <script async defer
-          src="https://maps.googleapis.com/maps/api/js?key=AIzaSyByXb-FgYHiNhVIsK00kM1jdXYr_OerV7Q&libraries=places&callback=initMap">
-        </script>
-      </body>
-      </html>
-    `;
-  }, []);
+  // Map feature removed - location will be automatically set when verified based on block/lot
 
   const pickDocument = useCallback(async (docKey: string, source: 'camera' | 'gallery') => {
     try {
@@ -865,9 +361,8 @@ export default function Signup() {
   }, [pickBillingProof]);
 
   // Address options
-  const blockOptions = ['Block 1', 'Block 2', 'Block 3', 'Block 4', 'Block 5', 'Block 6', 'Block 7', 'Block 8', 'Block 9', 'Block 10'];
+  const blockOptions = ['Block 1', 'Block 2', 'Block 3', 'Block 4', 'Block 5', 'Block 6', 'Block 7', 'Block 8', 'Block 9', 'Block 10', 'Block 11', 'Block 12', 'Block 13', 'Block 14', 'Block 15', 'Block 16', 'Block 17', 'Block 18', 'Block 19', 'Block 20'];
   const lotOptions = ['Lot 1', 'Lot 2', 'Lot 3', 'Lot 4', 'Lot 5', 'Lot 6', 'Lot 7', 'Lot 8', 'Lot 9', 'Lot 10'];
-  const streetOptions = ['Main Street', 'First Street', 'Second Street', 'Third Street', 'Fourth Street', 'Fifth Street'];
   const relationOptions = ['Son', 'Daughter', 'Spouse', 'Parent', 'Sibling', 'Relative', 'Friend', 'Other'];
 
   // Navigation
@@ -1003,21 +498,12 @@ export default function Signup() {
           newErrors.lot = 'Please select a lot';
           isValid = false;
         }
-        if (!street) {
-          newErrors.street = 'Please select a street';
-          isValid = false;
-        }
         if (!residentType) {
           newErrors.residentType = 'Please select if you are a tenant or homeowner';
           isValid = false;
         }
         if (residentType === 'tenant' && !tenantRelation) {
           newErrors.tenantRelation = 'Please select your relation to the homeowner';
-          isValid = false;
-        }
-        // Location is only required for homeowners
-        if (residentType === 'homeowner' && !location) {
-          newErrors.location = 'Please pin your location on the map';
           isValid = false;
         }
         break;
@@ -1074,7 +560,6 @@ export default function Signup() {
     sex,
     block,
     lot,
-    street,
     location,
     residentType,
     tenantRelation,
@@ -1143,14 +628,13 @@ export default function Signup() {
     }
 
     // Check if homeowner exists at the address when tenant is registering (step 3)
-    if (currentStep === 3 && residentType === 'tenant' && db && block && lot && street) {
+    if (currentStep === 3 && residentType === 'tenant' && db && block && lot) {
       try {
         // Check for approved homeowners in users collection
         const homeownersQuery = query(
           collection(db, 'users'),
           where('address.block', '==', block),
           where('address.lot', '==', lot),
-          where('address.street', '==', street),
           where('residentType', '==', 'homeowner'),
           where('status', '==', 'approved'),
           limit(1)
@@ -1164,20 +648,11 @@ export default function Signup() {
           if (homeownerData.location) {
             // Copy homeowner's location to tenant
             const homeownerLocation = homeownerData.location;
-            if (homeownerLocation.latitude !== undefined && homeownerLocation.longitude !== undefined) {
-              setLocation({
-                latitude: typeof homeownerLocation.latitude === 'number' 
-                  ? homeownerLocation.latitude 
-                  : parseFloat(homeownerLocation.latitude),
-                longitude: typeof homeownerLocation.longitude === 'number' 
-                  ? homeownerLocation.longitude 
-                  : parseFloat(homeownerLocation.longitude),
-              });
-              console.log('Tenant location automatically set from homeowner:', {
-                latitude: homeownerLocation.latitude,
-                longitude: homeownerLocation.longitude,
-              });
-            }
+            // Location will be automatically set when verified based on block/lot
+            console.log('Homeowner found at this address:', {
+              block,
+              lot,
+            });
           }
         } else {
           // Also check pendingUsers for homeowners at this address
@@ -1185,7 +660,6 @@ export default function Signup() {
             collection(db, 'pendingUsers'),
             where('address.block', '==', block),
             where('address.lot', '==', lot),
-            where('address.street', '==', street),
             where('residentType', '==', 'homeowner'),
             limit(1)
           );
@@ -1198,28 +672,19 @@ export default function Signup() {
             if (pendingHomeownerData.location) {
               // Copy homeowner's location to tenant
               const homeownerLocation = pendingHomeownerData.location;
-              if (homeownerLocation.latitude !== undefined && homeownerLocation.longitude !== undefined) {
-                setLocation({
-                  latitude: typeof homeownerLocation.latitude === 'number' 
-                    ? homeownerLocation.latitude 
-                    : parseFloat(homeownerLocation.latitude),
-                  longitude: typeof homeownerLocation.longitude === 'number' 
-                    ? homeownerLocation.longitude 
-                    : parseFloat(homeownerLocation.longitude),
-                });
-                console.log('Tenant location automatically set from pending homeowner:', {
-                  latitude: homeownerLocation.latitude,
-                  longitude: homeownerLocation.longitude,
-                });
-              }
+              // Location will be automatically set when verified based on block/lot
+              console.log('Pending homeowner found at this address:', {
+                block,
+                lot,
+              });
             }
           } else {
             // No homeowner found
             setStepLoading(false);
-            setError('general', `No homeowner found at this address (Block ${block}, Lot ${lot}, ${street}). Tenants can only register at addresses occupied by approved homeowners.`);
+            setError('general', `No homeowner found at this address (Block ${block}, Lot ${lot}). Tenants can only register at addresses occupied by approved homeowners.`);
             Alert.alert(
               'Registration Not Allowed',
-              `No homeowner found at this address.\n\nBlock: ${block}\nLot: ${lot}\nStreet: ${street}\n\nTenants can only register at addresses occupied by approved homeowners.`,
+              `No homeowner found at this address.\n\nBlock: ${block}\nLot: ${lot}\n\nTenants can only register at addresses occupied by approved homeowners.`,
               [{ text: 'OK' }]
             );
             return;
@@ -1239,14 +704,13 @@ export default function Signup() {
     }
 
     // Check if address is already occupied by another homeowner when homeowner is registering (step 3)
-    if (currentStep === 3 && residentType === 'homeowner' && db && block && lot && street) {
+    if (currentStep === 3 && residentType === 'homeowner' && db && block && lot) {
       try {
         // Check for approved homeowners in users collection at the same address
         const existingHomeownersQuery = query(
           collection(db, 'users'),
           where('address.block', '==', block),
           where('address.lot', '==', lot),
-          where('address.street', '==', street),
           where('residentType', '==', 'homeowner'),
           where('status', '==', 'approved'),
           limit(1)
@@ -1261,10 +725,10 @@ export default function Signup() {
             'Unknown Homeowner';
           
           setStepLoading(false);
-          setError('general', `This address (Block ${block}, Lot ${lot}, ${street}) is already occupied by homeowner ${existingHomeownerName}. Each address can only have one homeowner.`);
-          Alert.alert(
-            'Address Already Occupied',
-            `This address is already occupied by a homeowner.\n\nBlock: ${block}\nLot: ${lot}\nStreet: ${street}\n\nOccupied by: ${existingHomeownerName}\n\nEach address can only have one homeowner. Please select a different address.`,
+          setError('general', `This address (Block ${block}, Lot ${lot}) is already occupied by homeowner ${existingHomeownerName}. Each address can only have one homeowner.`);
+            Alert.alert(
+              'Address Already Occupied',
+              `This address is already occupied by a homeowner.\n\nBlock: ${block}\nLot: ${lot}\n\nOccupied by: ${existingHomeownerName}\n\nEach address can only have one homeowner. Please select a different address.`,
             [{ text: 'OK' }]
           );
           return;
@@ -1275,7 +739,6 @@ export default function Signup() {
           collection(db, 'pendingUsers'),
           where('address.block', '==', block),
           where('address.lot', '==', lot),
-          where('address.street', '==', street),
           where('residentType', '==', 'homeowner'),
           limit(1)
         );
@@ -1284,10 +747,10 @@ export default function Signup() {
         
         if (!pendingHomeownersSnapshot.empty) {
           setStepLoading(false);
-          setError('general', `This address (Block ${block}, Lot ${lot}, ${street}) is already occupied by a pending homeowner. Each address can only have one homeowner.`);
-          Alert.alert(
-            'Address Already Occupied',
-            `This address is already occupied by a pending homeowner.\n\nBlock: ${block}\nLot: ${lot}\nStreet: ${street}\n\nEach address can only have one homeowner. Please select a different address.`,
+          setError('general', `This address (Block ${block}, Lot ${lot}) is already occupied by a pending homeowner. Each address can only have one homeowner.`);
+            Alert.alert(
+              'Address Already Occupied',
+              `This address is already occupied by a pending homeowner.\n\nBlock: ${block}\nLot: ${lot}\n\nEach address can only have one homeowner. Please select a different address.`,
             [{ text: 'OK' }]
           );
           return;
@@ -1309,7 +772,7 @@ export default function Signup() {
     setErrors({});
     setStepLoading(false);
     nextStep();
-  }, [currentStep, db, emailOrPhone, isEmail, validateStep, nextStep, setError, residentType, block, lot, street]);
+  }, [currentStep, db, emailOrPhone, isEmail, validateStep, nextStep, setError, residentType, block, lot]);
 
   const handlePrev = useCallback(() => {
     // Clear errors when going back
@@ -1379,22 +842,21 @@ export default function Signup() {
       // If tenant, check if homeowner exists at the same address and get their location
       if (residentType === 'tenant' && db) {
         try {
-          const homeownersQuery = query(
-            collection(db, 'users'),
-            where('address.block', '==', block),
-            where('address.lot', '==', lot),
-            where('address.street', '==', street),
-            where('residentType', '==', 'homeowner'),
-            where('status', '==', 'approved'),
-            limit(1)
-          );
+        const homeownersQuery = query(
+          collection(db, 'users'),
+          where('address.block', '==', block),
+          where('address.lot', '==', lot),
+          where('residentType', '==', 'homeowner'),
+          where('status', '==', 'approved'),
+          limit(1)
+        );
           
           const homeownersSnapshot = await getDocs(homeownersQuery);
           
           if (!homeownersSnapshot.empty) {
             // Homeowner found - automatically set their location for the tenant if not already set
             const homeownerData = homeownersSnapshot.docs[0].data();
-            if (homeownerData.location && !location) {
+            if (homeownerData.location) {
               const homeownerLocation = homeownerData.location;
               if (homeownerLocation.latitude !== undefined && homeownerLocation.longitude !== undefined) {
                 const tenantLocation = {
@@ -1405,8 +867,8 @@ export default function Signup() {
                     ? homeownerLocation.longitude 
                     : parseFloat(homeownerLocation.longitude),
                 };
-                setLocation(tenantLocation);
-                console.log('Tenant location automatically set from homeowner during submission:', tenantLocation);
+                // Location will be automatically set when verified based on block/lot
+                console.log('Homeowner found during submission:', { block, lot });
               }
             }
           } else {
@@ -1415,7 +877,6 @@ export default function Signup() {
               collection(db, 'pendingUsers'),
               where('address.block', '==', block),
               where('address.lot', '==', lot),
-              where('address.street', '==', street),
               where('residentType', '==', 'homeowner'),
               limit(1)
             );
@@ -1425,7 +886,7 @@ export default function Signup() {
             if (!pendingHomeownersSnapshot.empty) {
               // Pending homeowner found - automatically set their location for the tenant if not already set
               const pendingHomeownerData = pendingHomeownersSnapshot.docs[0].data();
-              if (pendingHomeownerData.location && !location) {
+              if (pendingHomeownerData.location) {
                 const homeownerLocation = pendingHomeownerData.location;
                 if (homeownerLocation.latitude !== undefined && homeownerLocation.longitude !== undefined) {
                   const tenantLocation = {
@@ -1436,8 +897,8 @@ export default function Signup() {
                       ? homeownerLocation.longitude 
                       : parseFloat(homeownerLocation.longitude),
                   };
-                  setLocation(tenantLocation);
-                  console.log('Tenant location automatically set from pending homeowner during submission:', tenantLocation);
+                  // Location will be automatically set when verified based on block/lot
+                  console.log('Pending homeowner found during submission:', { block, lot });
                 }
               }
             } else {
@@ -1445,7 +906,7 @@ export default function Signup() {
               setError('general', 'No homeowner found at this address. Tenants can only register at addresses occupied by approved homeowners.');
               Alert.alert(
                 'Registration Not Allowed',
-                'No homeowner found at this address (Block ' + block + ', Lot ' + lot + ', ' + street + ').\n\nTenants can only register at addresses occupied by approved homeowners.',
+                'No homeowner found at this address (Block ' + block + ', Lot ' + lot + ').\n\nTenants can only register at addresses occupied by approved homeowners.',
                 [{ text: 'OK' }]
               );
               setLoading(false);
@@ -1513,12 +974,8 @@ export default function Signup() {
         address: {
           block: block,
           lot: lot,
-          street: street,
         },
-        location: location ? {
-          latitude: location.latitude,
-          longitude: location.longitude,
-        } : null,
+        location: null, // Location will be automatically set when verified based on block/lot
         email: isEmail ? emailOrPhone.trim() : null,
         phone: !isEmail ? emailOrPhone.trim() : null,
         isTenant: residentType === 'tenant',
@@ -1563,7 +1020,7 @@ export default function Signup() {
     }
   }, [
     emailOrPhone, isEmail, password, firstName, middleName, lastName, birthdate, age, sex,
-    block, lot, street, residentType, tenantRelation, waterBillingDate, electricBillingDate, billingProofImage, idImages, documentImages, validateStep, setError, uploadImageToStorage, formatDate, location
+    block, lot, residentType, tenantRelation, waterBillingDate, electricBillingDate, billingProofImage, idImages, documentImages, validateStep, setError, uploadImageToStorage, formatDate
   ]);
 
   // Progress bar
@@ -1881,26 +1338,6 @@ export default function Signup() {
               )}
             </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Street</Text>
-              <TouchableOpacity
-                style={[styles.pickerButton, errors.street && styles.inputError]}
-                onPress={() => {
-                  setShowStreetPicker(true);
-                  clearError('street');
-                  clearError('general');
-                }}
-                disabled={loading}
-              >
-                <Text style={[styles.pickerText, !street && styles.pickerPlaceholder]}>
-                  {street || 'Select Street'}
-                </Text>
-                <Text style={styles.pickerIcon}>▼</Text>
-              </TouchableOpacity>
-              {errors.street && (
-                <Text style={styles.errorText}>{errors.street}</Text>
-              )}
-            </View>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>I am a</Text>
@@ -1911,10 +1348,6 @@ export default function Signup() {
                     setResidentType('homeowner');
                     clearError('residentType');
                     clearError('general');
-                    // Clear location error when switching to tenant
-                    if (errors.location) {
-                      clearError('location');
-                    }
                   }}
                   disabled={loading}
                 >
@@ -1928,9 +1361,7 @@ export default function Signup() {
                   style={styles.radioContainer}
                   onPress={() => {
                     setResidentType('tenant');
-                    setLocation(null); // Clear location when switching to tenant
                     clearError('residentType');
-                    clearError('location');
                     clearError('general');
                   }}
                   disabled={loading}
@@ -1967,34 +1398,6 @@ export default function Signup() {
               )}
             </View>
 
-            {/* Map location pinning - only for homeowners */}
-            {residentType === 'homeowner' && (
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Pin Your Location on Map</Text>
-                <Text style={styles.subLabel}>Tap on the map to mark your exact location</Text>
-                <TouchableOpacity
-                  style={[styles.mapButton, errors.location && styles.inputError]}
-                  onPress={() => {
-                    setShowMapModal(true);
-                    clearError('location');
-                  }}
-                  disabled={loading}
-                >
-                  {location ? (
-                    <Text style={styles.mapButtonText}>
-                      Location: {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-                    </Text>
-                  ) : (
-                    <Text style={[styles.mapButtonText, styles.mapButtonPlaceholder]}>
-                      Tap to pin your location on map
-                    </Text>
-                  )}
-                </TouchableOpacity>
-                {errors.location && (
-                  <Text style={styles.errorText}>{errors.location}</Text>
-                )}
-              </View>
-            )}
 
             {/* Navigation Buttons */}
             <View style={styles.formNavigationButtons}>
@@ -2296,12 +1699,8 @@ export default function Signup() {
                 <Text style={styles.reviewValue}>{lot || 'N/A'}</Text>
               </View>
               <View style={styles.reviewSection}>
-                <Text style={styles.reviewLabel}>Street:</Text>
-                <Text style={styles.reviewValue}>{street || 'N/A'}</Text>
-              </View>
-              <View style={styles.reviewSection}>
                 <Text style={styles.reviewLabel}>Full Address:</Text>
-                <Text style={styles.reviewValue}>{block}, {lot}, {street}</Text>
+                <Text style={styles.reviewValue}>{block}, {lot}</Text>
               </View>
 
               <Text style={styles.reviewSectionTitle}>Resident Information</Text>
@@ -2844,124 +2243,7 @@ export default function Signup() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Street Picker Modal */}
-      <Modal
-        visible={showStreetPicker}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowStreetPicker(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowStreetPicker(false)}
-        >
-          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Street</Text>
-              <TouchableOpacity onPress={() => setShowStreetPicker(false)}>
-                <Text style={styles.modalCloseText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalScrollView}>
-              {streetOptions.map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={styles.modalOption}
-                  onPress={() => {
-                    setStreet(option);
-                    setShowStreetPicker(false);
-                  }}
-                >
-                  <Text style={styles.modalOptionText}>{option}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
 
-      {/* Map Modal for Location Pinning */}
-      <Modal
-        visible={showMapModal}
-        transparent={false}
-        animationType="slide"
-        onRequestClose={() => setShowMapModal(false)}
-      >
-        <View style={[styles.mapModalContainer, { paddingTop: insets.top }]}>
-          <View style={styles.mapModalHeader}>
-            <Text style={styles.mapModalTitle}>Pin Your Location</Text>
-            <TouchableOpacity onPress={() => setShowMapModal(false)}>
-              <Text style={styles.modalCloseText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.mapModalSubtitle}>Tap on the map to mark your exact location</Text>
-          <WebView
-            ref={mapWebViewRef}
-            source={{ html: generateMapHTML(location) }}
-            style={styles.mapWebView}
-            onMessage={(event) => {
-              try {
-                const data = JSON.parse(event.nativeEvent.data);
-                if (data.type === 'locationPinned' || data.type === 'searchLocation') {
-                  // Update location but keep modal open
-                  setLocation({
-                    latitude: data.latitude,
-                    longitude: data.longitude,
-                  });
-                  // Don't close modal - let user continue adjusting or close manually
-                } else if (data.type === 'confirmLocation') {
-                  setLocation({
-                    latitude: data.latitude,
-                    longitude: data.longitude,
-                  });
-                  clearError('location');
-                  setShowMapModal(false);
-                }
-              } catch (error) {
-                console.error('Error parsing map message:', error);
-              }
-            }}
-            onLoadEnd={() => {
-              // If location exists, update marker after map loads
-              if (location && mapWebViewRef.current) {
-                const updateMarkerScript = `
-                  if (typeof map !== 'undefined' && map) {
-                    if (marker) {
-                      marker.setMap(null);
-                    }
-                    marker = new google.maps.Marker({
-                      position: { lat: ${location.latitude}, lng: ${location.longitude} },
-                      map: map,
-                      draggable: true,
-                      icon: {
-                        url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
-                      },
-                    });
-                    map.setCenter({ lat: ${location.latitude}, lng: ${location.longitude} });
-                    map.setZoom(17);
-                    
-                    marker.addListener('dragend', (e) => {
-                      const lat = e.latLng.lat();
-                      const lng = e.latLng.lng();
-                      if (window.ReactNativeWebView) {
-                        window.ReactNativeWebView.postMessage(JSON.stringify({
-                          type: 'locationPinned',
-                          latitude: lat,
-                          longitude: lng,
-                        }));
-                      }
-                    });
-                  }
-                `;
-                mapWebViewRef.current.injectJavaScript(updateMarkerScript);
-              }
-            }}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-          />
-        </View>
-      </Modal>
 
       {/* Relation Picker Modal */}
       <Modal

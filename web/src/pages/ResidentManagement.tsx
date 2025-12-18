@@ -452,24 +452,71 @@ function ResidentManagement() {
         isTenant: userData.isTenant,
         fullName: userData.fullName,
       });
-      await setDoc(doc(db, 'users', user.uid), {
+      // Set default availability status for homeowners (unavailable)
+      const userDataWithDefaults = {
         ...userData,
         status: 'approved',
+        // Set homeowners to unavailable by default if not already set
+        availabilityStatus: (userData.residentType === 'homeowner' || !userData.isTenant) && !userData.availabilityStatus
+          ? 'unavailable'
+          : (userData.availabilityStatus || 'unavailable'),
         updatedAt: Timestamp.now(),
-      });
+      };
+      
+      await setDoc(doc(db, 'users', user.uid), userDataWithDefaults);
       console.log('User saved to users collection successfully');
+      
+      // Update matching unoccupied pin markers to occupied when resident is approved
+      try {
+        const residentAddress = userData.address;
+        if (residentAddress && residentAddress.block && residentAddress.lot) {
+          // Check if there's a matching unoccupied pin for this address
+          const mapPinsQuery = query(
+            collection(db, 'mapPins'),
+            where('block', '==', residentAddress.block),
+            where('lot', '==', residentAddress.lot)
+          );
+          
+          const mapPinsSnapshot = await getDocs(mapPinsQuery);
+          
+          if (!mapPinsSnapshot.empty) {
+            // Update all matching pins to occupied
+            // Use the availabilityStatus from userDataWithDefaults (homeowners default to unavailable)
+            const availabilityStatus = userDataWithDefaults.availabilityStatus || 'unavailable';
+            const isAvailable = availabilityStatus === 'available';
+            
+            const updatePromises = mapPinsSnapshot.docs.map(async (pinDoc) => {
+              const pinData = pinDoc.data();
+              // Only update if currently unoccupied
+              if (!pinData.isOccupied) {
+                await updateDoc(doc(db, 'mapPins', pinDoc.id), {
+                  isOccupied: true,
+                  isAvailable: isAvailable,
+                  updatedAt: Timestamp.now(),
+                });
+                console.log(`Updated pin ${pinDoc.id} to occupied (available: ${isAvailable})`);
+              }
+            });
+            
+            await Promise.all(updatePromises);
+            console.log(`Updated ${mapPinsSnapshot.docs.length} pin(s) for Block ${residentAddress.block}, Lot ${residentAddress.lot}`);
+          }
+        }
+      } catch (error) {
+        console.error('Error updating pin markers:', error);
+        // Don't fail the approval if this update fails
+      }
       
       // If tenant is approved, set homeowner's availability status to unavailable
       if (userData.residentType === 'tenant' || userData.isTenant === true) {
         try {
           const tenantAddress = userData.address;
-          if (tenantAddress && tenantAddress.block && tenantAddress.lot && tenantAddress.street) {
+          if (tenantAddress && tenantAddress.block && tenantAddress.lot) {
             // Find homeowner at the same address
             const homeownersQuery = query(
               collection(db, 'users'),
               where('address.block', '==', tenantAddress.block),
               where('address.lot', '==', tenantAddress.lot),
-              where('address.street', '==', tenantAddress.street),
               where('residentType', '==', 'homeowner'),
               where('status', '==', 'approved'),
               limit(1)
@@ -489,7 +536,7 @@ function ResidentManagement() {
               
               console.log(`Updated homeowner ${homeownerId} availability status to unavailable`);
             } else {
-              console.warn(`No homeowner found at address Block ${tenantAddress.block}, Lot ${tenantAddress.lot}, ${tenantAddress.street}`);
+              console.warn(`No homeowner found at address Block ${tenantAddress.block}, Lot ${tenantAddress.lot}`);
             }
           }
         } catch (error) {

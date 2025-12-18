@@ -1,47 +1,57 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, getDoc, QueryDocumentSnapshot, updateDoc, Timestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
-import Header from '../components/Header';
+import mapsImage from '../assets/maps2.png';
 
-declare global {
-  interface Window {
-    google: any;
-    initMap: () => void;
-  }
+interface Lot {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  block: string;
+  lot: string;
+  street?: string; // Optional for backward compatibility
+  resident?: any;
 }
 
 function Map() {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const [map, setMap] = useState<any>(null);
-  const [selectedPlace, setSelectedPlace] = useState<string>('');
-  const [isViewLocked, setIsViewLocked] = useState(() => {
-    // Restore lock state from localStorage
-    const saved = localStorage.getItem('mapViewLocked');
-    return saved === 'true';
-  });
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [isSearching, setIsSearching] = useState(false);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const suggestionsRef = useRef<HTMLDivElement>(null);
-  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
-  const [residentMarkers, setResidentMarkers] = useState<any[]>([]);
   const [residentData, setResidentData] = useState<any[]>([]);
-  const [residentSearchQuery, setResidentSearchQuery] = useState<string>('');
-  const [residentSearchSuggestions, setResidentSearchSuggestions] = useState<any[]>([]);
-  const [showResidentSuggestions, setShowResidentSuggestions] = useState(false);
-  const residentSearchInputRef = useRef<HTMLInputElement>(null);
-  const residentSuggestionsRef = useRef<HTMLDivElement>(null);
-  const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'available' | 'unavailable'>('all');
-  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
-  const filterDropdownRef = useRef<HTMLDivElement>(null);
+  const [selectedLot, setSelectedLot] = useState<Lot | null>(null);
+  const [selectedLotPosition, setSelectedLotPosition] = useState<{ x: number; y: number } | null>(null);
+  const [selectedPin, setSelectedPin] = useState<{ id: string; x: number; y: number; block: string; lot: string; street?: string; isOccupied?: boolean; isAvailable?: boolean } | null>(null);
+  const [selectedPinPosition, setSelectedPinPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingMarker, setEditingMarker] = useState<{ type: 'block' | 'lot' | 'street'; block?: string; lot?: string; street?: string } | null>(null);
+  const [markerPositions, setMarkerPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [isPinMode, setIsPinMode] = useState(false);
+  const [pinnedLocations, setPinnedLocations] = useState<Array<{ id: string; x: number; y: number; block: string; lot: string; street?: string; isOccupied?: boolean; isAvailable?: boolean }>>([]);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [newPinPosition, setNewPinPosition] = useState<{ x: number; y: number } | null>(null);
+  const [pinFormData, setPinFormData] = useState({ block: '', lot: '', isOccupied: false, isAvailable: false });
+  const [draggingPin, setDraggingPin] = useState<string | null>(null);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
+  const [hasDragged, setHasDragged] = useState(false);
+  const [draggingLot, setDraggingLot] = useState<string | null>(null);
+  const [residentMarkerPositions, setResidentMarkerPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
+  const [isLongPress, setIsLongPress] = useState(false);
+  const isSyncingRef = useRef(false);
+  const lastSyncedResidentsRef = useRef<Record<string, string>>({}); // Track last synced status per resident
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'unoccupied' | 'available' | 'unavailable'>('all');
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapImageRef = useRef<HTMLImageElement>(null);
+  
+  // Address options matching mobile signup form
+  const blockOptions = ['Block 1', 'Block 2', 'Block 3', 'Block 4', 'Block 5', 'Block 6', 'Block 7', 'Block 8', 'Block 9', 'Block 10', 'Block 11', 'Block 12', 'Block 13', 'Block 14', 'Block 15', 'Block 16', 'Block 17', 'Block 18', 'Block 19', 'Block 20'];
+  const lotOptions = ['Lot 1', 'Lot 2', 'Lot 3', 'Lot 4', 'Lot 5', 'Lot 6', 'Lot 7', 'Lot 8', 'Lot 9', 'Lot 10'];
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -60,167 +70,19 @@ function Map() {
     return () => unsubscribe();
   }, [navigate]);
 
-  useEffect(() => {
-    if (isLoading || !mapRef.current) return;
 
-    // Check if Google Maps script is already loaded
-    if (window.google && window.google.maps) {
-      initializeMap();
-      return;
-    }
 
-    // Load Google Maps script with Places library for autocomplete
-    const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyByXb-FgYHiNhVIsK00kM1jdXYr_OerV7Q";
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places`;
-    script.async = true;
-    script.defer = true;
-    
-    script.onload = () => {
-      initializeMap();
-    };
-
-    script.onerror = () => {
-      console.error('Failed to load Google Maps script');
-      alert('Failed to load Google Maps. Please check your API key configuration.');
-    };
-
-    document.head.appendChild(script);
-
-    return () => {
-      // Cleanup: remove script if component unmounts
-      const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
-      if (existingScript) {
-        existingScript.remove();
-      }
-    };
-  }, [isLoading]);
-
-  const initializeMap = () => {
-    if (!mapRef.current || !window.google || !window.google.maps) {
-      console.error('Google Maps not loaded');
-      return;
-    }
-
-    // Get saved map state from localStorage
-    const savedLockState = localStorage.getItem('mapViewLocked') === 'true';
-    const savedCenter = localStorage.getItem('mapCenter');
-    const savedZoom = localStorage.getItem('mapZoom');
-    const savedPlace = localStorage.getItem('selectedPlace');
-    
-    // Use saved location or default to Manila
-    let initialCenter = { lat: 14.5995, lng: 120.9842 };
-    let initialZoom = 15;
-    
-    if (savedCenter) {
-      try {
-        const center = JSON.parse(savedCenter);
-        initialCenter = { lat: center.lat, lng: center.lng };
-      } catch (e) {
-        console.error('Error parsing saved center:', e);
-      }
-    }
-    
-    if (savedZoom) {
-      try {
-        initialZoom = parseInt(savedZoom, 10);
-      } catch (e) {
-        console.error('Error parsing saved zoom:', e);
-      }
-    }
-    
-    if (savedPlace) {
-      setSelectedPlace(savedPlace);
-    }
-    
-    const mapInstance = new window.google.maps.Map(mapRef.current, {
-      center: initialCenter,
-      zoom: initialZoom,
-      mapTypeControl: true,
-      streetViewControl: true,
-      fullscreenControl: true,
-      zoomControl: true,
-      zoomControlOptions: {
-        position: window.google.maps.ControlPosition.LEFT_CENTER,
-      },
-      mapTypeId: window.google.maps.MapTypeId.SATELLITE,
-      disableDefaultUI: false,
-      gestureHandling: savedLockState ? 'none' : 'auto',
-      draggable: !savedLockState,
-    });
-
-    // Store current map center for location bias
-    setCurrentLocation(initialCenter);
-    
-    // Update location when map center changes and save to localStorage
-    mapInstance.addListener('center_changed', () => {
-      const center = mapInstance.getCenter();
-      if (center) {
-        const lat = typeof center.lat === 'function' ? center.lat() : center.lat;
-        const lng = typeof center.lng === 'function' ? center.lng() : center.lng;
-        const location = { lat, lng };
-        setCurrentLocation(location);
-        // Save center to localStorage
-        localStorage.setItem('mapCenter', JSON.stringify(location));
-      }
-    });
-    
-    // Save zoom when it changes
-    mapInstance.addListener('zoom_changed', () => {
-      const zoom = mapInstance.getZoom();
-      if (zoom !== undefined) {
-        localStorage.setItem('mapZoom', String(zoom));
-      }
-    });
-
-    // Only add marker if locked to a specific place
-    if (savedLockState && savedPlace) {
-      new window.google.maps.Marker({
-        position: initialCenter,
-        map: mapInstance,
-        title: savedPlace,
-        icon: {
-          url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
-        },
-      });
-    }
-
-    // User location detection removed - do not display admin location on map
-
-    setMap(mapInstance);
-    
-    // Restore lock state after map is initialized (savedLockState already declared above)
-    if (savedLockState) {
-      setIsViewLocked(true);
-      // Lock state is already applied in map initialization, but ensure it's set
-      mapInstance.setOptions({
-        gestureHandling: 'none',
-        draggable: false,
-      });
-    }
-  };
-
-  // Fetch verified residents and display markers
+  // Fetch verified residents
   const fetchAndDisplayResidents = useCallback((snapshot: any) => {
-    if (!map || !db || !window.google) {
-      console.log('Map, db, or google not ready:', { map: !!map, db: !!db, google: !!window.google });
+    if (!db) {
+      console.log('Database not ready');
       return;
     }
 
     try {
       console.log('Processing residents from users collection...');
-      const markers: any[] = [];
       const residents: any[] = [];
       let totalUsers = 0;
-      let usersWithLocation = 0;
-
-      // Group residents by address (block, lot, street)
-      // Using plain object instead of Map to avoid naming conflicts
-      const addressGroups: Record<string, {
-        homeowner: any | null;
-        tenants: any[];
-        location: { lat: number; lng: number } | null;
-      }> = {};
 
       snapshot.forEach((doc: any) => {
         totalUsers++;
@@ -237,10 +99,6 @@ function Map() {
         if (status === 'archived' || status === 'rejected' || status === 'pending' || status === 'deactivated') {
           return;
         }
-
-        // Determine if homeowner or tenant
-        const isTenant = data.residentType === 'tenant' || data.isTenant === true;
-        const isHomeowner = !isTenant;
 
         // Get location (only homeowners have location)
         const location = data.location;
@@ -261,14 +119,24 @@ function Map() {
           `${data.firstName || ''} ${data.middleName || ''} ${data.lastName || ''}`.trim() ||
           'Resident';
 
-        // Create address key
-        const addressKey = data.address 
-          ? `${data.address.block || ''}_${data.address.lot || ''}_${data.address.street || ''}`
-          : null;
+        // Check if address exists and has all required fields
+        const hasAddress = data.address && 
+          data.address.block && 
+          data.address.lot &&
+          String(data.address.block).trim() !== '' &&
+          String(data.address.lot).trim() !== '';
 
-        if (!addressKey) {
-          return; // Skip residents without address
+        if (!hasAddress) {
+          console.log('Skipping resident without complete address:', {
+            id: doc.id,
+            name: fullName,
+            address: data.address
+          });
+          return; // Skip residents without complete address
         }
+
+        // Create address key
+        const addressKey = `${data.address.block}_${data.address.lot}`;
 
         // Store resident data for search
         const availabilityStatus = data.availabilityStatus || 'unavailable';
@@ -278,146 +146,44 @@ function Map() {
           firstName: data.firstName || '',
           lastName: data.lastName || '',
           email: data.email || '',
-          address: data.address ? `${data.address.block || ''} ${data.address.lot || ''} ${data.address.street || ''}`.trim() : '',
+          address: data.address ? `${data.address.block || ''} ${data.address.lot || ''}`.trim() : '',
           lat,
           lng,
           availabilityStatus,
           data,
+          addressKey,
         };
         residents.push(residentInfo);
-
-        // Group by address
-        if (!addressGroups[addressKey]) {
-          addressGroups[addressKey] = {
-            homeowner: null,
-            tenants: [],
-            location: null,
-          };
-        }
-
-        const group = addressGroups[addressKey];
-
-        if (isHomeowner) {
-          group.homeowner = { doc, data, residentInfo, lat, lng };
-          if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
-            group.location = { lat, lng };
-            usersWithLocation++;
-          }
-        } else {
-          group.tenants.push({ doc, data, residentInfo });
-        }
       });
 
-      // Create one marker per address group
-      Object.entries(addressGroups).forEach(([addressKey, group]) => {
-        // Only create marker if there's a homeowner with location
-        if (!group.homeowner || !group.location) {
-          return;
-        }
-
-        const homeowner = group.homeowner;
-        const homeownerData = homeowner.data;
-        const homeownerInfo = homeowner.residentInfo;
-        const availabilityStatus = homeownerData.availabilityStatus || 'unavailable';
-
-        // Determine marker color based on homeowner availability
-        let markerIcon;
-        if (availabilityStatus === 'available') {
-          markerIcon = {
-            url: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png',
-            scaledSize: new window.google.maps.Size(32, 32),
-          };
-        } else {
-          markerIcon = {
-            url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
-            scaledSize: new window.google.maps.Size(32, 32),
-          };
-        }
-
-        try {
-          const marker = new window.google.maps.Marker({
-            position: group.location,
-            map: map,
-            title: homeownerInfo.fullName,
-            icon: markerIcon,
-            visible: true,
-            zIndex: 1000,
-            animation: window.google.maps.Animation.DROP,
-          });
-
-          // Create info window with homeowner and tenant information
-          const availabilityText = availabilityStatus === 'available' ? 'Available (Green)' : 'Unavailable (Blue)';
-          
-          // Build tenant names list
-          const tenantNames = group.tenants.map(tenant => tenant.residentInfo.fullName);
-          const tenantList = tenantNames.length > 0 ? tenantNames.join(', ') : 'None';
-
-          const infoWindow = new window.google.maps.InfoWindow({
-            content: `
-              <div style="padding: 8px; min-width: 200px;">
-                <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">${homeownerInfo.fullName}</h3>
-                <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                  <strong>Type:</strong> Homeowner
-                </p>
-                <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                  <strong>Status:</strong> ${availabilityText}
-                </p>
-                ${homeownerData.address ? `
-                  <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                    <strong>Address:</strong> ${homeownerData.address.block || ''}, ${homeownerData.address.lot || ''}, ${homeownerData.address.street || ''}
-                  </p>
-                ` : ''}
-                <p style="margin: 4px 0; font-size: 12px; color: #666;">
-                  <strong>Tenants:</strong> ${tenantList}
-                </p>
-              </div>
-            `,
-          });
-
-          marker.addListener('click', () => {
-            infoWindow.open(map, marker);
-          });
-
-          // Store resident info with marker for search functionality
-          (marker as any).residentInfo = homeownerInfo;
-          (marker as any).infoWindow = infoWindow;
-          (marker as any).addressKey = addressKey;
-
-          markers.push(marker);
-        } catch (markerError) {
-          console.error(`Error creating marker for address ${addressKey}:`, markerError);
-        }
-      });
-
-      console.log(`Total users: ${totalUsers}, Users with location: ${usersWithLocation}, Markers created: ${markers.length}`);
+      console.log(`Total users: ${totalUsers}, Residents loaded: ${residents.length}`);
+      console.log('Residents with addresses:', residents.map(r => ({
+        name: r.fullName,
+        address: r.data?.address,
+        residentType: r.data?.residentType,
+        isTenant: r.data?.isTenant
+      })));
 
       setResidentData(residents);
-      setResidentMarkers(prevMarkers => {
-        // Clear previous markers
-        prevMarkers.forEach(marker => {
-          marker.setMap(null);
-        });
-        return markers;
-      });
     } catch (error) {
       console.error('Error processing residents:', error);
     }
-  }, [map, db]);
+  }, [db]);
 
-  // Set up real-time listener for residents when map is ready
+  // Set up real-time listener for residents
   useEffect(() => {
-    if (!map || isLoading || !db) {
+    if (isLoading || !db) {
       return;
     }
 
-    console.log('Map is ready, setting up real-time listener for residents...');
+    console.log('Setting up real-time listener for residents...');
     
     // Set up real-time listener for users collection
     const usersCollection = collection(db, 'users');
     const unsubscribe = onSnapshot(
       usersCollection,
       (snapshot) => {
-        console.log('Users collection updated, refreshing markers...');
+        console.log('Users collection updated, refreshing residents...');
         fetchAndDisplayResidents(snapshot);
       },
       (error) => {
@@ -430,418 +196,910 @@ function Map() {
       console.log('Cleaning up real-time listener');
       unsubscribe();
     };
-  }, [map, isLoading, db, fetchAndDisplayResidents]);
+  }, [isLoading, db, fetchAndDisplayResidents]);
 
-  // Clean up markers when component unmounts
+  // Load marker positions from Firestore
   useEffect(() => {
-    return () => {
-      residentMarkers.forEach(marker => {
-        marker.setMap(null);
-      });
+    if (isLoading || !db) return;
+
+    const loadMarkerPositions = async () => {
+      try {
+        const markerPositionsDoc = await getDoc(doc(db, 'mapSettings', 'markerPositions'));
+        if (markerPositionsDoc.exists()) {
+          setMarkerPositions(markerPositionsDoc.data() || {});
+        }
+      } catch (error) {
+        console.error('Error loading marker positions:', error);
+      }
     };
-  }, [residentMarkers]);
 
-  // Search using Geocoding API (fallback)
-  const handleSearchWithGeocoding = useCallback((query: string) => {
-    if (!map) return;
+    loadMarkerPositions();
+  }, [isLoading, db]);
 
-    setIsSearching(true);
+  // Save marker position
+  const saveMarkerPosition = useCallback(async (key: string, position: { x: number; y: number }) => {
+    if (!db) return;
+
     try {
-      const geocoder = new window.google.maps.Geocoder();
-      const request = {
-        address: query + ', Philippines',
-        region: 'ph',
-      };
-
-      geocoder.geocode(request, (results: any[], status: string) => {
-        setIsSearching(false);
-        
-        if (status === 'OK' && results && results.length > 0) {
-          const result = results[0];
-          const location = result.geometry.location;
-          const lat = typeof location.lat === 'function' ? location.lat() : location.lat;
-          const lng = typeof location.lng === 'function' ? location.lng() : location.lng;
-
-          // Center map on searched location
-          map.setCenter({ lat, lng });
-          map.setZoom(17);
-          
-          // Save center and zoom to localStorage
-          localStorage.setItem('mapCenter', JSON.stringify({ lat, lng }));
-          localStorage.setItem('mapZoom', '17');
-
-          // Don't add marker - just center the map
-
-          // Don't set selectedPlace since we're not locking the view
-          // Save place to localStorage for reference but don't show unlock button
-          localStorage.setItem('selectedPlace', result.formatted_address);
-          // Don't lock the view - allow user to pan and zoom
-        } else if (status === 'ZERO_RESULTS') {
-          alert('No results found for your search. Please try a different location.');
-        } else {
-          console.error('Geocoding error:', status);
-          alert('Search failed. Please try again.');
-        }
-      });
+      const newPositions = { ...markerPositions, [key]: position };
+      await setDoc(doc(db, 'mapSettings', 'markerPositions'), newPositions, { merge: true });
+      setMarkerPositions(newPositions);
+      console.log('Marker position saved:', key, position);
+      alert('Marker position saved successfully!');
     } catch (error) {
-      setIsSearching(false);
-      console.error('Error searching:', error);
-      alert('Search failed. Please try again.');
+      console.error('Error saving marker position:', error);
+      alert('Failed to save marker position');
     }
-  }, [map]);
+  }, [db, markerPositions]);
 
-  // Handle selecting a suggestion
-  const handleSelectSuggestion = useCallback((placeId: string, description: string) => {
-    if (!map || !window.google?.maps?.places) return;
+  // Handle marker position click in edit mode
+  const handleMarkerPositionClick = useCallback((e: React.MouseEvent<SVGElement>, type: 'block' | 'lot' | 'street', block?: string, lot?: string, street?: string) => {
+    if (!isEditMode || !mapContainerRef.current) return;
 
-    setSearchQuery(description);
-    setShowSuggestions(false);
-    setIsSearching(true);
-
-    const service = new window.google.maps.places.PlacesService(map);
-    service.getDetails(
-      {
-        placeId: placeId,
-        fields: ['geometry', 'formatted_address', 'name'],
-      },
-      (place: any, status: string) => {
-        setIsSearching(false);
-        
-        if (status === window.google.maps.places.PlacesServiceStatus.OK && place) {
-          const location = place.geometry.location;
-          const lat = typeof location.lat === 'function' ? location.lat() : location.lat;
-          const lng = typeof location.lng === 'function' ? location.lng() : location.lng;
-
-          // Center map on searched location
-          map.setCenter({ lat, lng });
-          map.setZoom(17);
-          
-          // Save center and zoom to localStorage
-          localStorage.setItem('mapCenter', JSON.stringify({ lat, lng }));
-          localStorage.setItem('mapZoom', '17');
-
-          // Don't add marker - just center the map
-
-          const placeName = place.formatted_address || place.name || description;
-          // Don't set selectedPlace since we're not locking the view
-          // Save place to localStorage for reference but don't show unlock button
-          localStorage.setItem('selectedPlace', placeName);
-          // Don't lock the view - allow user to pan and zoom
-        } else {
-          // Fallback to Geocoding API if Places API fails
-          handleSearchWithGeocoding(description);
-        }
-      }
-    );
-  }, [map, handleSearchWithGeocoding]);
-
-  // Search using Geocoding API (alternative to Places Autocomplete)
-  const handleSearch = useCallback(async () => {
-    if (!map || !searchQuery.trim()) return;
-    handleSearchWithGeocoding(searchQuery);
-  }, [map, searchQuery, handleSearchWithGeocoding]);
-
-  // Get autocomplete suggestions as user types
-  useEffect(() => {
-    if (!window.google?.maps?.places?.AutocompleteService || !searchQuery.trim() || searchQuery.length < 2) {
-      setSuggestions([]);
-      setShowSuggestions(false);
-      return;
-    }
-
-    const autocompleteService = new window.google.maps.places.AutocompleteService();
-    const timer = setTimeout(() => {
-      const request: any = {
-        input: searchQuery,
-        componentRestrictions: { country: 'ph' },
-        types: ['geocode', 'establishment'],
-      };
-
-      // Add location bias to prioritize nearest places
-      if (currentLocation) {
-        // Create a circle around current location for bias
-        const circle = new window.google.maps.Circle({
-          center: currentLocation,
-          radius: 50000, // 50km radius
-        });
-        request.locationBias = circle.getBounds();
-      } else if (map) {
-        // Fallback to map bounds if current location not available
-        const bounds = map.getBounds();
-        if (bounds) {
-          request.locationBias = bounds;
-        }
-      }
-
-      autocompleteService.getPlacePredictions(
-        request,
-        (predictions: any[], status: string) => {
-          if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
-            // Sort predictions by distance if we have a current location
-            let sortedPredictions = predictions;
-            if (currentLocation && predictions.length > 0) {
-              sortedPredictions = [...predictions].sort((a, b) => {
-                // Calculate approximate distance (Haversine formula simplified)
-                const getDistance = (_prediction: any) => {
-                  // Try to extract location from prediction if available
-                  // Since we don't have coordinates in predictions, we'll use the order from Google
-                  // which already prioritizes by location bias
-                  return 0; // Google already sorts by relevance and location bias
-                };
-                return getDistance(a) - getDistance(b);
-              });
-            }
-            setSuggestions(sortedPredictions);
-            setShowSuggestions(true);
-          } else {
-            setSuggestions([]);
-            setShowSuggestions(false);
-          }
-        }
-      );
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery, currentLocation, map]);
-
-  // Filter markers based on resident search query and availability filter
-  useEffect(() => {
-    if (!map || residentMarkers.length === 0 || !residentData.length) return;
-
-    const query = residentSearchQuery.toLowerCase().trim();
+    e.stopPropagation();
+    const svgElement = e.currentTarget.closest('svg');
     
-    // If there's a search query, check if any resident (homeowner or tenant) at that address matches
-    residentMarkers.forEach((marker) => {
-      const residentInfo = (marker as any).residentInfo;
-      if (!residentInfo) {
-        marker.setVisible(false);
+    if (svgElement) {
+      const svgRect = svgElement.getBoundingClientRect();
+      const viewBox = svgElement.viewBox.baseVal;
+      const clickX = e.clientX - svgRect.left;
+      const clickY = e.clientY - svgRect.top;
+      
+      // Convert screen coordinates to SVG coordinates
+      const scaleX = viewBox.width / svgRect.width;
+      const scaleY = viewBox.height / svgRect.height;
+      
+      const svgX = clickX * scaleX;
+      const svgY = clickY * scaleY;
+      
+      // Create key for this marker
+      let key = '';
+      if (type === 'block' && block) {
+        key = `block_${block}`;
+      } else if (type === 'lot' && block && lot) {
+        key = `lot_${block}_${lot}`;
+      } else if (type === 'street' && street) {
+        key = `street_${street}`;
+      }
+      
+      if (key) {
+        saveMarkerPosition(key, { x: svgX, y: svgY });
+        setEditingMarker(null);
+      }
+    }
+  }, [isEditMode, saveMarkerPosition]);
+
+  // Load pinned locations from Firestore with real-time updates
+  useEffect(() => {
+    if (isLoading || !db) return;
+
+    const mapPinsCollection = collection(db, 'mapPins');
+    const unsubscribe = onSnapshot(mapPinsCollection, (snapshot) => {
+      try {
+        const pins: Array<{ id: string; x: number; y: number; block: string; lot: string; street?: string; isOccupied?: boolean; isAvailable?: boolean }> = [];
+        const seenAddresses = new Set<string>();
+        
+        snapshot.forEach((docSnap: QueryDocumentSnapshot) => {
+          const data = docSnap.data();
+          
+          // Create a unique key for this address combination
+          const addressKey = `${data.block || ''}_${data.lot || ''}`;
+          
+          // Skip if we've already seen this address (keep the first one)
+          if (seenAddresses.has(addressKey)) {
+            console.warn(`Duplicate pin found for ${addressKey}, skipping...`);
+            return;
+          }
+          
+          seenAddresses.add(addressKey);
+          pins.push({
+            id: docSnap.id,
+            x: data.x,
+            y: data.y,
+            block: data.block,
+            lot: data.lot,
+            street: data.street, // Optional, for backward compatibility
+            isOccupied: data.isOccupied || false,
+            isAvailable: data.isAvailable || false,
+          });
+        });
+        setPinnedLocations(pins);
+      } catch (error) {
+        console.error('Error loading pinned locations:', error);
+      }
+    }, (error) => {
+      console.error('Error in pinned locations snapshot:', error);
+    });
+
+    return () => unsubscribe();
+  }, [isLoading, db]);
+
+
+  // Save pinned location
+  const savePinnedLocation = useCallback(async (position: { x: number; y: number }, block: string, lot: string, isOccupied: boolean, isAvailable: boolean) => {
+    if (!db) return;
+
+    try {
+      // Check for duplicate pin (same block, lot)
+      const existingPin = pinnedLocations.find(pin => 
+        pin.block === block && pin.lot === lot
+      );
+      
+      if (existingPin) {
+        const confirmUpdate = window.confirm(
+          `A pin already exists for ${block} ${lot}. Do you want to update its position and status?`
+        );
+        
+        if (confirmUpdate) {
+          // Update existing pin
+          const pinRef = doc(db, 'mapPins', existingPin.id);
+          await setDoc(pinRef, {
+            x: position.x,
+            y: position.y,
+            block,
+            lot,
+            isOccupied,
+            isAvailable,
+            updatedAt: new Date(),
+          }, { merge: true });
+          
+          // Update local state
+          setPinnedLocations(prev => prev.map(pin => 
+            pin.id === existingPin.id 
+              ? { ...pin, x: position.x, y: position.y, isOccupied, isAvailable }
+              : pin
+          ));
+          
+          setShowPinModal(false);
+          setNewPinPosition(null);
+          setPinFormData({ block: '', lot: '', isOccupied: false, isAvailable: false });
+          alert('Pin updated successfully!');
+        }
         return;
       }
+      
+      // Create new pin if no duplicate found
+      const pinData = {
+        x: position.x,
+        y: position.y,
+        block,
+        lot,
+        isOccupied,
+        isAvailable,
+        createdAt: new Date(),
+      };
+      
+      const newPinRef = doc(collection(db, 'mapPins'));
+      await setDoc(newPinRef, pinData);
+      
+      // Add to local state
+      setPinnedLocations(prev => [...prev, {
+        id: newPinRef.id,
+        x: position.x,
+        y: position.y,
+        block,
+        lot,
+        isOccupied,
+        isAvailable,
+      }]);
+      
+      setShowPinModal(false);
+      setNewPinPosition(null);
+      setPinFormData({ block: '', lot: '', isOccupied: false, isAvailable: false });
+      alert('Pin saved successfully!');
+    } catch (error) {
+      console.error('Error saving pinned location:', error);
+      alert('Failed to save pin');
+    }
+  }, [db, pinnedLocations]);
 
-      // Check if homeowner matches search query
-      let matchesSearch = 
-        !query ||
-        residentInfo.fullName.toLowerCase().includes(query) ||
-        residentInfo.firstName.toLowerCase().includes(query) ||
-        residentInfo.lastName.toLowerCase().includes(query) ||
-        residentInfo.email.toLowerCase().includes(query) ||
-        residentInfo.address.toLowerCase().includes(query);
+  // Update pinned location position (for dragging)
+  const updatePinPosition = useCallback(async (pinId: string, newPosition: { x: number; y: number }) => {
+    if (!db) return;
 
-      // If homeowner doesn't match, check if any tenant at this address matches
-      if (!matchesSearch && query) {
-        const addressKey = (marker as any).addressKey;
-        if (addressKey) {
-          // Find tenants at this address by matching address key
-          const tenantsAtAddress = residentData.filter((resident) => {
-            const isTenant = resident.data?.isTenant === true || resident.data?.residentType === 'tenant';
-            if (!isTenant) return false;
-            
-            // Create address key for resident
-            if (resident.data?.address) {
-              const residentAddressKey = `${resident.data.address.block || ''}_${resident.data.address.lot || ''}_${resident.data.address.street || ''}`;
-              return residentAddressKey === addressKey;
-            }
-            
-            // Fallback: match by address string
-            const residentAddress = resident.address || '';
-            const markerAddress = residentInfo.address || '';
-            return residentAddress === markerAddress;
+    try {
+      const pinRef = doc(db, 'mapPins', pinId);
+      await setDoc(pinRef, { x: newPosition.x, y: newPosition.y }, { merge: true });
+      
+      // Update local state
+      setPinnedLocations(prev => prev.map(pin => 
+        pin.id === pinId ? { ...pin, x: newPosition.x, y: newPosition.y } : pin
+      ));
+    } catch (error) {
+      console.error('Error updating pin position:', error);
+    }
+  }, [db]);
+
+  // Handle pin drag start
+  const handlePinDragStart = useCallback((e: React.MouseEvent<SVGElement>, pinId: string, pinX: number, pinY: number) => {
+    if (!isPinMode) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    setHasDragged(false); // Reset drag flag
+    const svgElement = e.currentTarget.closest('svg') as SVGSVGElement;
+    if (!svgElement) return;
+    
+    const svgRect = svgElement.getBoundingClientRect();
+    const viewBox = svgElement.viewBox.baseVal;
+    const scaleX = viewBox.width / svgRect.width;
+    const scaleY = viewBox.height / svgRect.height;
+    
+    const clickX = (e.clientX - svgRect.left) * scaleX;
+    const clickY = (e.clientY - svgRect.top) * scaleY;
+    
+    setDraggingPin(pinId);
+    setDragOffset({
+      x: clickX - pinX,
+      y: clickY - pinY
+    });
+  }, [isPinMode]);
+
+  // Handle pin drag
+  const handlePinDrag = useCallback((e: React.MouseEvent<SVGElement>) => {
+    if (!draggingPin || !dragOffset) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    setHasDragged(true); // Mark that a drag has occurred
+    
+    const svgElement = e.currentTarget.closest('svg') as SVGSVGElement;
+    if (!svgElement) return;
+    
+    const svgRect = svgElement.getBoundingClientRect();
+    const viewBox = svgElement.viewBox.baseVal;
+    const scaleX = viewBox.width / svgRect.width;
+    const scaleY = viewBox.height / svgRect.height;
+    
+    const newX = (e.clientX - svgRect.left) * scaleX - dragOffset.x;
+    const newY = (e.clientY - svgRect.top) * scaleY - dragOffset.y;
+    
+    setPinnedLocations(prev => prev.map(pin => 
+      pin.id === draggingPin ? { ...pin, x: newX, y: newY } : pin
+    ));
+  }, [draggingPin, dragOffset]);
+
+  // Handle pin drag end
+  const handlePinDragEnd = useCallback(() => {
+    if (draggingPin) {
+      const pin = pinnedLocations.find(p => p.id === draggingPin);
+      if (pin) {
+        updatePinPosition(draggingPin, { x: pin.x, y: pin.y });
+      }
+    }
+    setDraggingPin(null);
+    setDragOffset(null);
+    // Reset drag flag after a short delay to allow onClick to check it
+    setTimeout(() => setHasDragged(false), 100);
+  }, [draggingPin, pinnedLocations, updatePinPosition]);
+
+  // Global mouse handlers for pin dragging (to continue drag even when mouse leaves SVG)
+  useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (isPinMode && draggingPin && dragOffset && mapContainerRef.current) {
+        setHasDragged(true); // Mark that a drag has occurred
+        const svgElement = mapContainerRef.current.querySelector('svg') as SVGSVGElement;
+        if (svgElement) {
+          const svgRect = svgElement.getBoundingClientRect();
+          const viewBox = svgElement.viewBox.baseVal;
+          const scaleX = viewBox.width / svgRect.width;
+          const scaleY = viewBox.height / svgRect.height;
+          
+          const newX = (e.clientX - svgRect.left) * scaleX - dragOffset.x;
+          const newY = (e.clientY - svgRect.top) * scaleY - dragOffset.y;
+          
+          setPinnedLocations(prev => prev.map(pin => 
+            pin.id === draggingPin ? { ...pin, x: newX, y: newY } : pin
+          ));
+        }
+      }
+    };
+
+    const handleGlobalMouseUp = () => {
+      if (draggingPin) {
+        handlePinDragEnd();
+      }
+    };
+
+    if (draggingPin) {
+      document.addEventListener('mousemove', handleGlobalMouseMove);
+      document.addEventListener('mouseup', handleGlobalMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', handleGlobalMouseMove);
+        document.removeEventListener('mouseup', handleGlobalMouseUp);
+      };
+    }
+  }, [isPinMode, draggingPin, dragOffset, handlePinDragEnd]);
+
+  // Handle resident marker mouse down (start long press timer)
+  const handleResidentMarkerMouseDown = useCallback((e: React.MouseEvent<SVGElement>, lotId: string, markerX: number, markerY: number) => {
+    if (isPinMode || isEditMode) return;
+    
+    e.stopPropagation();
+    setIsLongPress(false);
+    
+    // Start long press timer (500ms)
+    const timer = setTimeout(() => {
+      setIsLongPress(true);
+      const svgElement = e.currentTarget.closest('svg') as SVGSVGElement;
+      if (!svgElement) return;
+
+      const svgRect = svgElement.getBoundingClientRect();
+      const viewBox = svgElement.viewBox.baseVal;
+      const scaleX = viewBox.width / svgRect.width;
+      const scaleY = viewBox.height / svgRect.height;
+      
+      const clickX = (e.clientX - svgRect.left) * scaleX;
+      const clickY = (e.clientY - svgRect.top) * scaleY;
+      
+      setDraggingLot(lotId);
+      setDragOffset({
+        x: clickX - markerX,
+        y: clickY - markerY
+      });
+    }, 500);
+    
+    setLongPressTimer(timer);
+  }, [isPinMode, isEditMode]);
+
+  // Handle resident marker drag end
+  const handleResidentMarkerDragEnd = useCallback(async () => {
+    if (draggingLot && db) {
+      const position = residentMarkerPositions[draggingLot];
+      if (position) {
+        try {
+          const newPositions = { ...residentMarkerPositions };
+          await setDoc(doc(db, 'mapSettings', 'residentMarkerPositions'), newPositions, { merge: true });
+          console.log(`Updated resident marker ${draggingLot} position to x:${position.x}, y:${position.y}`);
+        } catch (error) {
+          console.error('Error updating resident marker position:', error);
+        }
+      }
+    }
+    setDraggingLot(null);
+    setDragOffset(null);
+  }, [draggingLot, residentMarkerPositions, db]);
+
+  // Handle resident marker mouse up (cancel long press or end drag)
+  const handleResidentMarkerMouseUp = useCallback(() => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+    
+    if (isLongPress && draggingLot) {
+      // End drag
+      handleResidentMarkerDragEnd();
+      setIsLongPress(false);
+    } else if (!isLongPress && !draggingLot) {
+      // Normal click - handled by onClick
+    }
+  }, [longPressTimer, isLongPress, draggingLot, handleResidentMarkerDragEnd]);
+
+  // Handle resident marker mouse leave (cancel long press, but continue drag if already dragging)
+  const handleResidentMarkerMouseLeave = useCallback(() => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+    // Don't end drag on mouse leave - let global handler handle it
+  }, [longPressTimer]);
+
+  // Handle resident marker drag
+  const handleResidentMarkerDrag = useCallback((e: React.MouseEvent<SVGElement>) => {
+    if (!draggingLot || !dragOffset) return;
+    
+    const svgElement = e.currentTarget.closest('svg') as SVGSVGElement;
+    if (!svgElement) return;
+    
+    const svgRect = svgElement.getBoundingClientRect();
+    const viewBox = svgElement.viewBox.baseVal;
+    const scaleX = viewBox.width / svgRect.width;
+    const scaleY = viewBox.height / svgRect.height;
+    
+    const newX = (e.clientX - svgRect.left) * scaleX - dragOffset.x;
+    const newY = (e.clientY - svgRect.top) * scaleY - dragOffset.y;
+    
+    // Update local state
+    setResidentMarkerPositions(prev => ({
+      ...prev,
+      [draggingLot]: { x: newX, y: newY }
+    }));
+  }, [draggingLot, dragOffset]);
+
+  // Handle map click in pin mode
+  const handleMapClickForPin = useCallback((e: React.MouseEvent<SVGElement>) => {
+    if (!isPinMode || !mapContainerRef.current) return;
+
+    const svgElement = e.currentTarget as SVGSVGElement;
+    const svgRect = svgElement.getBoundingClientRect();
+    const viewBox = svgElement.viewBox.baseVal;
+    
+    const clickX = e.clientX - svgRect.left;
+    const clickY = e.clientY - svgRect.top;
+    
+    // Convert screen coordinates to SVG coordinates
+    const scaleX = viewBox.width / svgRect.width;
+    const scaleY = viewBox.height / svgRect.height;
+    
+    const svgX = clickX * scaleX;
+    const svgY = clickY * scaleY;
+    
+    setNewPinPosition({ x: svgX, y: svgY });
+    setShowPinModal(true);
+  }, [isPinMode]);
+
+  // Generate subdivision map layout
+  const generateSubdivisionMap = useCallback((): Lot[] => {
+    const lots: Lot[] = [];
+    const lotWidth = 8;
+    const lotHeight = 6;
+    const roadWidth = 12;
+    const blockSpacing = 20;
+    
+    // Create blocks (A-Z, then AA-ZZ)
+    const blocks = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
+    const streets = ['Main St', 'Oak Ave', 'Elm St', 'Maple Dr', 'Pine Rd', 'Cedar Ln', 'Birch Way', 'Willow St'];
+    
+    let currentY = 50; // Start position
+    let maxX = 0;
+    let maxY = 0;
+    
+    blocks.forEach((block, blockIdx) => {
+      const lotsPerRow = 8;
+      const rowsPerBlock = 6;
+      const blockStartX = 50 + (blockIdx % 4) * (lotsPerRow * lotWidth + roadWidth + blockSpacing);
+      const blockStartY = currentY + Math.floor(blockIdx / 4) * (rowsPerBlock * lotHeight + roadWidth + blockSpacing);
+      
+      // Create lots in this block
+      for (let row = 0; row < rowsPerBlock; row++) {
+        for (let col = 0; col < lotsPerRow; col++) {
+          const lotNum = (row * lotsPerRow + col + 1).toString();
+          const street = streets[row % streets.length];
+          
+          const x = blockStartX + col * (lotWidth + 1);
+          const y = blockStartY + row * (lotHeight + 1);
+          
+          maxX = Math.max(maxX, x + lotWidth);
+          maxY = Math.max(maxY, y + lotHeight);
+          
+          lots.push({
+            id: `${block}-${lotNum}-${street}`,
+            x,
+            y,
+            width: lotWidth,
+            height: lotHeight,
+            block,
+            lot: lotNum,
+            street,
+          });
+        }
+      }
+    });
+    
+    // Store max dimensions for viewBox calculation
+    (lots as any).maxX = maxX;
+    (lots as any).maxY = maxY;
+    
+    return lots;
+  }, []);
+
+  // Normalize address values from signup form
+  // Handles formats like "Block 1" -> "1" or "A", "Lot 2" -> "2", "Main Street" -> "Main St"
+  const normalizeAddress = useCallback((value: string, type: 'block' | 'lot' | 'street'): string => {
+    if (!value) return '';
+    
+    const trimmed = value.trim();
+    
+    if (type === 'block') {
+      // Extract number from "Block 1", "Block 2", etc. or return letter if it's already a letter
+      const blockMatch = trimmed.match(/block\s*(\d+)/i);
+      if (blockMatch) {
+        const blockNum = parseInt(blockMatch[1], 10);
+        // Convert block number to letter (1 -> A, 2 -> B, etc.)
+        if (blockNum >= 1 && blockNum <= 26) {
+          return String.fromCharCode(64 + blockNum); // 65 is 'A'
+        }
+        return blockMatch[1]; // Return number if > 26
+      }
+      // If it's already a letter or number, return as is
+      return trimmed.toUpperCase();
+    }
+    
+    if (type === 'lot') {
+      // Extract number from "Lot 1", "Lot 2", etc.
+      const lotMatch = trimmed.match(/lot\s*(\d+)/i);
+      if (lotMatch) {
+        return lotMatch[1];
+      }
+      // If it's already just a number, return as is
+      return trimmed;
+    }
+    
+    if (type === 'street') {
+      // Map street names from signup form to map format
+      // Signup form options: ['Main Street', 'First Street', 'Second Street', 'Third Street', 'Fourth Street', 'Fifth Street']
+      // Map streets: ['Main St', 'Oak Ave', 'Elm St', 'Maple Dr', 'Pine Rd', 'Cedar Ln', 'Birch Way', 'Willow St']
+      const streetMap: Record<string, string> = {
+        'Main Street': 'Main St',      // Maps to first street in map
+        'First Street': 'Main St',      // Maps to first street in map (alternative)
+        'Second Street': 'Oak Ave',     // Maps to second street in map
+        'Third Street': 'Elm St',       // Maps to third street in map
+        'Fourth Street': 'Maple Dr',     // Maps to fourth street in map
+        'Fifth Street': 'Pine Rd',      // Maps to fifth street in map
+      };
+      
+      // Check exact match first
+      if (streetMap[trimmed]) {
+        return streetMap[trimmed];
+      }
+      
+      // Normalize street names - handle variations
+      const normalized = trimmed
+        .replace(/\s+street\s*$/i, ' St')
+        .replace(/\s+avenue\s*$/i, ' Ave')
+        .replace(/\s+drive\s*$/i, ' Dr')
+        .replace(/\s+road\s*$/i, ' Rd')
+        .replace(/\s+lane\s*$/i, ' Ln')
+        .replace(/\s+way\s*$/i, ' Way');
+      
+      return normalized;
+    }
+    
+    return trimmed;
+  }, []);
+
+  // Map residents to lots
+  const mapResidentsToLots = useCallback((lots: Lot[], residents: any[]): Lot[] => {
+    const lotMap: Record<string, Lot> = {};
+    
+    // Create a map of lots by their ID
+    lots.forEach(lot => {
+      lotMap[lot.id] = lot;
+    });
+    
+    // Match residents to lots based on address
+    residents.forEach(resident => {
+      if (!resident.data?.address) return;
+      
+      const rawBlock = String(resident.data.address.block || '').trim();
+      const rawLot = String(resident.data.address.lot || '').trim();
+      
+      if (!rawBlock || !rawLot) return;
+      
+      // Normalize address values to match map format
+      const normalizedBlock = normalizeAddress(rawBlock, 'block');
+      const normalizedLot = normalizeAddress(rawLot, 'lot');
+      
+      // Debug logging for address matching
+      console.log('Matching resident:', {
+        raw: { block: rawBlock, lot: rawLot },
+        normalized: { block: normalizedBlock, lot: normalizedLot },
+        residentName: resident.fullName,
+        residentType: resident.data?.residentType,
+        isTenant: resident.data?.isTenant
+      });
+      
+      // Try exact match first (using block and lot only)
+      // Try to find lot with matching block and lot
+      const exactMatch = lots.find(
+        (l: Lot) => l.block === normalizedBlock && l.lot === normalizedLot
+      );
+      
+      if (exactMatch) {
+        console.log(`✓ Exact match found for ${resident.fullName} at block ${normalizedBlock}, lot ${normalizedLot}`);
+        exactMatch.resident = resident;
+      } else {
+        console.log(`✗ No exact match for ${resident.fullName} at block ${normalizedBlock}, lot ${normalizedLot}, trying fuzzy match...`);
+        // Try fuzzy matching - find first lot with matching block and lot number
+        const fuzzyMatch = lots.find(
+          (l: Lot) => l.block === normalizedBlock && l.lot === normalizedLot
+        );
+        if (fuzzyMatch) {
+          console.log(`✓ Fuzzy match found for ${resident.fullName} at block ${normalizedBlock}, lot ${normalizedLot}`);
+          fuzzyMatch.resident = resident;
+        } else {
+          console.log(`✗ No fuzzy match found for ${resident.fullName} at block ${normalizedBlock}, lot ${normalizedLot}`);
+          // Last resort: try matching just by lot number (in case block format differs)
+          const lotOnlyMatch = lots.find(
+            (l: Lot) => l.lot === normalizedLot && !l.resident
+          );
+          if (lotOnlyMatch) {
+            console.log(`✓ Fallback match found for ${resident.fullName} at lot ${normalizedLot} only`);
+            lotOnlyMatch.resident = resident;
+          } else {
+            console.log(`✗ No match found for ${resident.fullName} - address: Block ${rawBlock}, Lot ${rawLot}`);
+          }
+        }
+      }
+    });
+    
+    return lots;
+  }, [normalizeAddress]);
+
+  // Sync pin markers with resident availability status changes
+  // Only sync when residentData changes, not when pinnedLocations changes (to prevent feedback loops)
+  useEffect(() => {
+    if (!db || residentData.length === 0 || pinnedLocations.length === 0 || isSyncingRef.current) return;
+
+    const syncPinsWithResidents = async () => {
+      // Prevent concurrent syncs
+      if (isSyncingRef.current) return;
+      isSyncingRef.current = true;
+
+      try {
+        // Get current pinned locations snapshot to avoid stale closures
+        const currentPins = [...pinnedLocations];
+        
+        // Track if any updates were made
+        let hasUpdates = false;
+        
+        // For each resident, check if there's a matching pin and sync availability status
+        const updatePromises = residentData.map(async (resident) => {
+          if (!resident.data?.address) return;
+
+          const residentBlock = normalizeAddress(String(resident.data.address.block || ''), 'block');
+          const residentLot = normalizeAddress(String(resident.data.address.lot || ''), 'lot');
+          const availabilityStatus = resident.availabilityStatus || 'unavailable';
+          const isAvailable = availabilityStatus === 'available';
+          
+          // Create a unique key for this resident
+          const residentKey = `${residentBlock}_${residentLot}`;
+          const lastSyncedStatus = lastSyncedResidentsRef.current[residentKey];
+          
+          // Only sync if the status has actually changed from what we last synced
+          if (lastSyncedStatus === availabilityStatus) {
+            return; // Already synced with this status, skip
+          }
+
+          // Find matching pin from current snapshot
+          const matchingPin = currentPins.find(pin => {
+            const pinBlock = normalizeAddress(pin.block, 'block');
+            const pinLot = normalizeAddress(pin.lot, 'lot');
+            return pinBlock === residentBlock && pinLot === residentLot;
           });
 
-          matchesSearch = tenantsAtAddress.some((tenant) => 
-            tenant.fullName.toLowerCase().includes(query) ||
-            tenant.firstName.toLowerCase().includes(query) ||
-            tenant.lastName.toLowerCase().includes(query) ||
-            tenant.email.toLowerCase().includes(query) ||
-            tenant.address.toLowerCase().includes(query)
-          );
-        }
-      }
-
-      // Check if matches availability filter
-      const matchesAvailability = 
-        availabilityFilter === 'all' ||
-        (availabilityFilter === 'available' && residentInfo.availabilityStatus === 'available') ||
-        (availabilityFilter === 'unavailable' && (residentInfo.availabilityStatus === 'unavailable' || !residentInfo.availabilityStatus));
-
-      marker.setVisible(matchesSearch && matchesAvailability);
-    });
-  }, [residentSearchQuery, availabilityFilter, residentMarkers, residentData, map]);
-
-  // Generate resident search suggestions
-  useEffect(() => {
-    if (!residentSearchQuery.trim() || residentSearchQuery.length < 2) {
-      setResidentSearchSuggestions([]);
-      setShowResidentSuggestions(false);
-      return;
-    }
-
-    const query = residentSearchQuery.toLowerCase().trim();
-    const filtered = residentData
-      .filter((resident) => {
-        return (
-          resident.fullName.toLowerCase().includes(query) ||
-          resident.firstName.toLowerCase().includes(query) ||
-          resident.lastName.toLowerCase().includes(query) ||
-          resident.email.toLowerCase().includes(query) ||
-          resident.address.toLowerCase().includes(query)
-        );
-      })
-      .slice(0, 5); // Limit to 5 suggestions
-
-    setResidentSearchSuggestions(filtered);
-    setShowResidentSuggestions(filtered.length > 0);
-  }, [residentSearchQuery, residentData]);
-
-  // Handle selecting a resident from suggestions
-  const handleSelectResident = useCallback((resident: any) => {
-    if (!map) return;
-
-    setResidentSearchQuery(resident.fullName);
-    setShowResidentSuggestions(false);
-
-    const isTenant = resident.data?.isTenant === true || resident.data?.residentType === 'tenant';
-    
-    let marker: any = null;
-    
-    if (isTenant) {
-      // For tenants, find the homeowner's marker at the same address using addressKey
-      // Create addressKey from tenant's address data
-      let tenantAddressKey = '';
-      if (resident.data?.address) {
-        tenantAddressKey = `${resident.data.address.block || ''}_${resident.data.address.lot || ''}_${resident.data.address.street || ''}`;
-      } else {
-        // Fallback: try to extract from address string
-        // The address format is "block lot street"
-        const addressParts = (resident.address || '').trim().split(/\s+/);
-        if (addressParts.length >= 3) {
-          tenantAddressKey = `${addressParts[0]}_${addressParts[1]}_${addressParts.slice(2).join('_')}`;
-        }
-      }
-      
-      // Find marker with matching addressKey
-      if (tenantAddressKey) {
-        marker = residentMarkers.find((m) => {
-          const markerAddressKey = (m as any).addressKey;
-          return markerAddressKey === tenantAddressKey;
-        });
-      }
-      
-      // If still not found, try matching by address components
-      if (!marker && resident.data?.address) {
-        marker = residentMarkers.find((m) => {
-          const info = (m as any).residentInfo;
-          if (!info || !info.data?.address) return false;
-          
-          const markerAddr = info.data.address;
-          const tenantAddr = resident.data.address;
-          
-          return (
-            String(markerAddr.block || '').trim() === String(tenantAddr.block || '').trim() &&
-            String(markerAddr.lot || '').trim() === String(tenantAddr.lot || '').trim() &&
-            String(markerAddr.street || '').trim() === String(tenantAddr.street || '').trim()
-          );
-        });
-      }
-    } else {
-      // For homeowners, match by ID
-      marker = residentMarkers.find((m) => {
-        const info = (m as any).residentInfo;
-        return info && info.id === resident.id;
-      });
-    }
-
-    if (marker) {
-      // Ensure marker is visible (override any filters)
-      marker.setVisible(true);
-      
-      // Get position from marker
-      const position = marker.getPosition();
-      if (position) {
-        const lat = typeof position.lat === 'function' ? position.lat() : position.lat;
-        const lng = typeof position.lng === 'function' ? position.lng() : position.lng;
-        
-        // Center map on marker location with smooth animation
-        map.panTo({ lat, lng });
-        map.setZoom(18);
-
-        // Small delay to ensure map has panned before opening info window
-        setTimeout(() => {
-          // Open info window
-          const infoWindow = (marker as any).infoWindow;
-          if (infoWindow) {
-            infoWindow.open(map, marker);
+          if (matchingPin && matchingPin.isOccupied) {
+            // Only update if the availability status differs from pin
+            if (matchingPin.isAvailable !== isAvailable) {
+              try {
+                await updateDoc(doc(db, 'mapPins', matchingPin.id), {
+                  isAvailable: isAvailable,
+                  updatedAt: Timestamp.now(),
+                });
+                // Update our tracking map
+                lastSyncedResidentsRef.current[residentKey] = availabilityStatus;
+                hasUpdates = true;
+                console.log(`Synced pin ${matchingPin.id} availability to ${availabilityStatus}`);
+              } catch (error) {
+                console.error(`Error syncing pin ${matchingPin.id}:`, error);
+              }
+            } else {
+              // Pin already matches, update our tracking
+              lastSyncedResidentsRef.current[residentKey] = availabilityStatus;
+            }
           }
-        }, 300);
+        });
+
+        await Promise.all(updatePromises);
+        
+        // If no updates were made, we can exit early next time
+        if (!hasUpdates) {
+          // Still update tracking for residents that match pins
+          residentData.forEach(resident => {
+            if (!resident.data?.address) return;
+            const residentBlock = normalizeAddress(String(resident.data.address.block || ''), 'block');
+            const residentLot = normalizeAddress(String(resident.data.address.lot || ''), 'lot');
+            const residentKey = `${residentBlock}_${residentLot}`;
+            const availabilityStatus = resident.availabilityStatus || 'unavailable';
+            const currentPins = [...pinnedLocations];
+            const matchingPin = currentPins.find(pin => {
+              const pinBlock = normalizeAddress(pin.block, 'block');
+              const pinLot = normalizeAddress(pin.lot, 'lot');
+              return pinBlock === residentBlock && pinLot === residentLot;
+            });
+            if (matchingPin && matchingPin.isOccupied && matchingPin.isAvailable === (availabilityStatus === 'available')) {
+              lastSyncedResidentsRef.current[residentKey] = availabilityStatus;
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error syncing pins with residents:', error);
+      } finally {
+        isSyncingRef.current = false;
+      }
+    };
+
+    // Debounce the sync to avoid too many updates
+    const timeoutId = setTimeout(syncPinsWithResidents, 1500);
+    return () => {
+      clearTimeout(timeoutId);
+      // Don't reset isSyncingRef here as it might interrupt an ongoing sync
+    };
+  }, [db, residentData, normalizeAddress]); // Removed pinnedLocations from dependencies to prevent feedback loop
+
+  // Generate lots and map residents (show all residents since there's no filtering UI)
+  const allLots = generateSubdivisionMap();
+  const lotsWithResidents = mapResidentsToLots(allLots, residentData);
+  
+  // Debug: Log coordinate system dimensions
+  console.log('Coordinate system dimensions:', {
+    maxX: (allLots as any).maxX,
+    maxY: (allLots as any).maxY,
+    viewBox: `0 0 ${(allLots as any).maxX || 1000} ${(allLots as any).maxY || 1000}`
+  });
+
+  // Debug: Log matching results
+  const matchedLots = lotsWithResidents.filter(lot => lot.resident);
+  console.log(`Total lots: ${allLots.length}, Lots with residents: ${matchedLots.length}`);
+  console.log('Matched residents:', matchedLots.map(lot => ({
+    lotId: lot.id,
+    residentName: lot.resident?.fullName,
+    residentType: lot.resident?.data?.residentType,
+    isTenant: lot.resident?.data?.isTenant,
+    address: lot.resident?.data?.address
+  })));
+
+  // Filter lots based on search query and status filter
+  const visibleLots = lotsWithResidents.filter(lot => {
+    if (!lot.resident) return false;
+    
+    // Search filter - check name, block, lot, street
+    const searchLower = searchQuery.toLowerCase();
+    const matchesSearch = !searchQuery || 
+      lot.resident.fullName?.toLowerCase().includes(searchLower) ||
+      lot.block?.toLowerCase().includes(searchLower) ||
+      lot.lot?.toLowerCase().includes(searchLower) ||
+      `${lot.block} ${lot.lot}`.toLowerCase().includes(searchLower);
+    
+    if (!matchesSearch) return false;
+    
+    // Status filter
+    if (statusFilter === 'all') return true;
+    
+    // Check if there's a pinned location for this address
+    const normalizedBlock = normalizeAddress(lot.block, 'block');
+    const normalizedLot = normalizeAddress(lot.lot, 'lot');
+    
+    const matchingPin = pinnedLocations.find(pin => {
+      const pinNormalizedBlock = normalizeAddress(pin.block, 'block');
+      const pinNormalizedLot = normalizeAddress(pin.lot, 'lot');
+      
+      return pinNormalizedBlock === normalizedBlock && 
+             pinNormalizedLot === normalizedLot;
+    });
+    
+    if (matchingPin) {
+      // Use pin status
+      if (statusFilter === 'unoccupied') {
+        return !matchingPin.isOccupied;
+      } else if (statusFilter === 'available') {
+        return matchingPin.isOccupied && matchingPin.isAvailable;
+      } else if (statusFilter === 'unavailable') {
+        return matchingPin.isOccupied && !matchingPin.isAvailable;
       }
     } else {
-      console.warn('Marker not found for resident:', resident.fullName, isTenant ? '(tenant)' : '(homeowner)');
-      // Fallback: if marker not found but we have coordinates, just center the map
-      if (resident.lat && resident.lng) {
-        map.panTo({ lat: resident.lat, lng: resident.lng });
-        map.setZoom(18);
+      // Use resident availability status
+      const isAvailable = lot.resident?.availabilityStatus === 'available';
+      if (statusFilter === 'unoccupied') {
+        return false; // Resident markers are always occupied
+      } else if (statusFilter === 'available') {
+        return isAvailable;
+      } else if (statusFilter === 'unavailable') {
+        return !isAvailable;
       }
     }
-  }, [map, residentMarkers]);
+    
+    return true;
+  });
 
-  // Close suggestions when clicking outside
-  useEffect(() => {
-    // Use mousedown with capture phase to catch events early, but allow suggestions to handle their own clicks
-    const handleMouseDown = (event: MouseEvent) => {
-      const target = event.target as Node;
+  console.log(`Visible lots (all residents with addresses): ${visibleLots.length}`);
+  
+  // Filter pinned locations based on search query and status filter
+  const filteredPinnedLocations = pinnedLocations.filter(pin => {
+    // Search filter - check block, lot, and resident name if occupied
+    const searchLower = searchQuery.toLowerCase();
+    let matchesSearch = !searchQuery || 
+      pin.block?.toLowerCase().includes(searchLower) ||
+      pin.lot?.toLowerCase().includes(searchLower) ||
+      `${pin.block} ${pin.lot}`.toLowerCase().includes(searchLower);
+    
+    // If occupied, also check resident name
+    if (pin.isOccupied && !matchesSearch && searchQuery) {
+      const matchingResident = residentData.find(resident => {
+        const residentBlock = normalizeAddress(String(resident.data?.address?.block || ''), 'block');
+        const residentLot = normalizeAddress(String(resident.data?.address?.lot || ''), 'lot');
+        const pinBlock = normalizeAddress(pin.block, 'block');
+        const pinLot = normalizeAddress(pin.lot, 'lot');
+        return residentBlock === pinBlock && residentLot === pinLot;
+      });
       
-      // If clicking inside suggestions, don't close
-      if (suggestionsRef.current?.contains(target)) {
-        return;
+      if (matchingResident) {
+        matchesSearch = matchingResident.fullName?.toLowerCase().includes(searchLower) || false;
       }
-      
-      // If clicking on search input, don't close
-      if (searchInputRef.current?.contains(target)) {
-        return;
-      }
+    }
+    
+    if (!matchesSearch) return false;
+    
+    // Status filter
+    if (statusFilter === 'all') return true;
+    
+    if (statusFilter === 'unoccupied') {
+      return !pin.isOccupied;
+    } else if (statusFilter === 'available') {
+      return pin.isOccupied && pin.isAvailable;
+    } else if (statusFilter === 'unavailable') {
+      return pin.isOccupied && !pin.isAvailable;
+    }
+    
+    return true;
+  });
+  
+  // Debug: Also show unmatched residents
+  const unmatchedResidents = residentData.filter(resident => {
+    const hasMatch = lotsWithResidents.some(lot => lot.resident?.id === resident.id);
+    return !hasMatch;
+  });
+  if (unmatchedResidents.length > 0) {
+    console.warn(`Unmatched residents (${unmatchedResidents.length}):`, unmatchedResidents.map(r => ({
+      name: r.fullName,
+      address: r.data?.address,
+      residentType: r.data?.residentType
+    })));
+  }
 
-      // If clicking inside resident suggestions, don't close
-      if (residentSuggestionsRef.current?.contains(target)) {
-        return;
-      }
+  // Handle lot click
+  const handleLotClick = (lot: Lot, event?: React.MouseEvent<SVGGElement>) => {
+    setSelectedLot(lot);
+    
+    // Get container position
+    if (mapContainerRef.current && event) {
+      const containerRect = mapContainerRef.current.getBoundingClientRect();
       
-      // If clicking on resident search input, don't close
-      if (residentSearchInputRef.current?.contains(target)) {
-        return;
-      }
-
-      // If clicking inside filter dropdown, don't close
-      if (filterDropdownRef.current?.contains(target)) {
-        return;
-      }
+      // Use the click event position directly
+      const clickX = event.clientX;
+      const clickY = event.clientY;
       
-      // Close if clicking outside
-      if (
-        suggestionsRef.current &&
-        !suggestionsRef.current.contains(target) &&
-        searchInputRef.current &&
-        !searchInputRef.current.contains(target) &&
-        residentSuggestionsRef.current &&
-        !residentSuggestionsRef.current.contains(target) &&
-        residentSearchInputRef.current &&
-        !residentSearchInputRef.current.contains(target) &&
-        filterDropdownRef.current &&
-        !filterDropdownRef.current.contains(target)
-      ) {
-        // Use setTimeout to allow click events to fire first
-        setTimeout(() => {
-          setShowSuggestions(false);
-          setShowResidentSuggestions(false);
-          setShowFilterDropdown(false);
-        }, 0);
+      // Convert to container-relative coordinates
+      setSelectedLotPosition({
+        x: clickX - containerRect.left,
+        y: clickY - containerRect.top
+      });
+    } else if (mapContainerRef.current) {
+      // Fallback: calculate from SVG coordinates
+      const markerX = lot.x + lot.width / 2;
+      const markerY = lot.y + lot.height / 2;
+      
+      const containerRect = mapContainerRef.current.getBoundingClientRect();
+      const svgElement = mapContainerRef.current.querySelector('svg');
+      
+      if (svgElement) {
+        const svgRect = svgElement.getBoundingClientRect();
+        const viewBox = svgElement.viewBox.baseVal;
+        
+        if (viewBox.width > 0 && viewBox.height > 0) {
+          const scaleX = svgRect.width / viewBox.width;
+          const scaleY = svgRect.height / viewBox.height;
+          
+          setSelectedLotPosition({
+            x: (markerX * scaleX),
+            y: (markerY * scaleY)
+          });
+        } else {
+          // Fallback: use percentage-based positioning
+          setSelectedLotPosition({
+            x: containerRect.width * 0.5,
+            y: containerRect.height * 0.5
+          });
+        }
+      } else {
+        setSelectedLotPosition({
+          x: containerRect.width * 0.5,
+          y: containerRect.height * 0.5
+        });
       }
-    };
-
-    document.addEventListener('mousedown', handleMouseDown, false);
-    return () => {
-      document.removeEventListener('mousedown', handleMouseDown, false);
-    };
-  }, []);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -853,272 +1111,812 @@ function Map() {
     );
   }
 
-  const handleUnlockView = () => {
-    setIsViewLocked(false);
-    // Save lock state to localStorage
-    localStorage.setItem('mapViewLocked', 'false');
-    localStorage.removeItem('selectedPlace');
-    setSelectedPlace('');
-    if (map) {
-      // Save current center and zoom before unlocking
-      const center = map.getCenter();
-      if (center) {
-        const lat = typeof center.lat === 'function' ? center.lat() : center.lat;
-        const lng = typeof center.lng === 'function' ? center.lng() : center.lng;
-        localStorage.setItem('mapCenter', JSON.stringify({ lat, lng }));
-      }
-      const zoom = map.getZoom();
-      if (zoom !== undefined) {
-        localStorage.setItem('mapZoom', String(zoom));
-      }
-      
-      map.setOptions({
-        gestureHandling: 'auto',
-        draggable: true,
-      });
-    }
-    setSearchQuery('');
-  };
-
-  const handleToggleLock = () => {
-    if (!map) return;
-    
-    const newLockState = !isViewLocked;
-    setIsViewLocked(newLockState);
-    // Save lock state to localStorage
-    localStorage.setItem('mapViewLocked', String(newLockState));
-    
-    // Save current center and zoom
-    const center = map.getCenter();
-    if (center) {
-      const lat = typeof center.lat === 'function' ? center.lat() : center.lat;
-      const lng = typeof center.lng === 'function' ? center.lng() : center.lng;
-      localStorage.setItem('mapCenter', JSON.stringify({ lat, lng }));
-    }
-    const zoom = map.getZoom();
-    if (zoom !== undefined) {
-      localStorage.setItem('mapZoom', String(zoom));
-    }
-    
-    if (newLockState) {
-      // Lock the view
-      map.setOptions({
-        gestureHandling: 'none',
-        draggable: false,
-      });
-    } else {
-      // Unlock the view
-      map.setOptions({
-        gestureHandling: 'auto',
-        draggable: true,
-      });
-      localStorage.removeItem('selectedPlace');
-      setSelectedPlace('');
-    }
-  };
-
   return (
     <Layout>
-      <div className="min-h-screen bg-gray-50 w-full flex flex-col" style={{ height: '100vh' }}>
-        <Header 
-          title="Map" 
-          showSearchBar={true}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          handleSearch={handleSearch}
-          isSearching={isSearching}
-          searchInputRef={searchInputRef}
-          selectedPlace={selectedPlace}
-          onUnlockView={handleUnlockView}
-          suggestions={suggestions}
-          showSuggestions={showSuggestions}
-          onSelectSuggestion={handleSelectSuggestion}
-          suggestionsRef={suggestionsRef}
-          isViewLocked={isViewLocked}
-        />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {isViewLocked && (
-            <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 flex-shrink-0">
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                <p className="text-sm text-blue-800 font-medium">
-                  View is locked to selected location. Use "Unlock" to enable panning.
-                </p>
+      <div className="w-full h-screen bg-gray-100 overflow-hidden" style={{ display: 'flex', flexDirection: 'row' }}>
+        {/* Control Buttons */}
+        <div className="absolute top-4 right-4 z-30 flex flex-col gap-2">
+          <button
+            onClick={() => {
+              setIsPinMode(!isPinMode);
+              setIsEditMode(false);
+              setEditingMarker(null);
+              if (!isPinMode) {
+                alert('Pin mode enabled. Click on the map to place a pin and label it.');
+              } else {
+                setShowPinModal(false);
+                setNewPinPosition(null);
+                alert('Pin mode disabled.');
+              }
+            }}
+            className={`px-4 py-2 rounded-lg font-medium shadow-lg transition-colors ${
+              isPinMode 
+                ? 'bg-red-500 hover:bg-red-600 text-white' 
+                : 'bg-green-500 hover:bg-green-600 text-white'
+            }`}
+          >
+            {isPinMode ? 'Exit Pin Mode' : 'Add Pin'}
+          </button>
+        </div>
+        
+        {/* Map Container */}
+        <div 
+          ref={mapContainerRef}
+          className="w-full overflow-hidden bg-gray-100 relative"
+          style={{ 
+            userSelect: 'none',
+            aspectRatio: '16/9',
+            width: '100%',
+            height: 'auto',
+            minHeight: 'calc(100vh - 0px)',
+            maxHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden'
+          }}
+          onDragStart={(e) => {
+            if (isPinMode && draggingPin) {
+              e.preventDefault();
+            }
+          }}
+        >
+            {/* Search Bar and Filters - Inside Map */}
+            <div className="absolute top-2 left-1/2 transform -translate-x-1/2 z-30">
+              <div className="bg-gray-800 bg-opacity-90 rounded-md shadow-lg p-1.5 flex items-center gap-1.5">
+                {/* Search Bar */}
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-32 bg-white text-gray-900"
+                />
+                
+                {/* Filter Buttons - Horizontal */}
+                <button
+                  onClick={() => setStatusFilter('all')}
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    statusFilter === 'all'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-600 text-white hover:bg-gray-500'
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => setStatusFilter('unoccupied')}
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    statusFilter === 'unoccupied'
+                      ? 'bg-red-500 text-white'
+                      : 'bg-gray-600 text-white hover:bg-gray-500'
+                  }`}
+                >
+                  Unoccupied
+                </button>
+                <button
+                  onClick={() => setStatusFilter('available')}
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    statusFilter === 'available'
+                      ? 'bg-green-500 text-white'
+                      : 'bg-gray-600 text-white hover:bg-gray-500'
+                  }`}
+                >
+                  Available
+                </button>
+                <button
+                  onClick={() => setStatusFilter('unavailable')}
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    statusFilter === 'unavailable'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-600 text-white hover:bg-gray-500'
+                  }`}
+                >
+                  Unavailable
+                </button>
               </div>
             </div>
-          )}
-          <div className="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden m-4 md:m-6 lg:m-8 min-h-0 relative">
-            {/* Resident Search Bar with Filter */}
-            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 w-full max-w-2xl px-4">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <input
-                    ref={residentSearchInputRef}
-                    type="text"
-                    value={residentSearchQuery}
-                    onChange={(e) => setResidentSearchQuery(e.target.value)}
-                    onFocus={() => {
-                      if (residentSearchSuggestions.length > 0) {
-                        setShowResidentSuggestions(true);
+            
+            {/* Map Image */}
+            <img
+              ref={mapImageRef}
+              src={mapsImage}
+              alt="Subdivision Map"
+              className="w-full h-full object-contain"
+              style={{
+                userSelect: 'none',
+                pointerEvents: 'none',
+                transform: 'rotate(-90deg) scale(1.5)',
+                transformOrigin: 'center center',
+              } as React.CSSProperties}
+              draggable={false}
+              onDragStart={(e) => e.preventDefault()}
+            />
+            
+            {/* Overlay for resident markers and labels */}
+            <svg
+              width="100%"
+              height="100%"
+              className="absolute inset-0"
+              style={{
+                pointerEvents: 'all', // Always allow pointer events so markers can be clicked
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+              }}
+              onDragStart={(e) => {
+                if (isPinMode && draggingPin) {
+                  e.preventDefault();
+                }
+              }}
+              viewBox={`0 0 ${(allLots as any).maxX || 1000} ${(allLots as any).maxY || 1000}`}
+              preserveAspectRatio="xMidYMid meet"
+              onClick={(e) => {
+                if (draggingLot || draggingPin) {
+                  // Don't handle clicks while dragging
+                  return;
+                }
+                
+                // Check if click is on a marker (pin or resident)
+                const target = e.target as HTMLElement;
+                const isMarker = target.closest('g[data-pin-marker]') || target.closest('g[data-resident-marker]');
+                
+                // If clicked on a marker, don't handle map click - let marker handle it
+                if (isMarker) {
+                  return;
+                }
+                
+                if (isPinMode && !draggingPin) {
+                  handleMapClickForPin(e);
+                  setSelectedPin(null);
+                  setSelectedPinPosition(null);
+                } else if (isEditMode && editingMarker) {
+                  handleMarkerPositionClick(e, editingMarker.type, editingMarker.block, editingMarker.lot, editingMarker.street);
+                } else {
+                  // Clear selected pin and lot when clicking on map (not on a marker)
+                  setSelectedPin(null);
+                  setSelectedPinPosition(null);
+                  setSelectedLot(null);
+                  setSelectedLotPosition(null);
+                }
+              }}
+              onMouseMove={(e) => {
+                if (isPinMode && draggingPin) {
+                  e.preventDefault();
+                  handlePinDrag(e);
+                } else if (!isPinMode && !isEditMode && draggingLot) {
+                  e.preventDefault();
+                  handleResidentMarkerDrag(e);
+                }
+              }}
+            >
+              {/* Display pinned locations - Google Maps style markers */}
+              {filteredPinnedLocations.map((pin) => {
+                // Determine marker color based on occupation status
+                let markerColor = '#FF0000'; // Red = unoccupied (default)
+                if (pin.isOccupied) {
+                  markerColor = pin.isAvailable ? '#34C759' : '#4285F4'; // Green = occupied & available, Blue = occupied & unavailable
+                }
+                
+                const markerSize = 20;
+                const markerHeight = markerSize;
+                const markerWidth = markerSize * 0.64;
+                const headRadius = markerWidth / 2;
+                const headCenterY = pin.y - markerHeight + headRadius;
+                const pointY = pin.y;
+                
+                return (
+                  <g 
+                    key={pin.id}
+                    data-pin-marker="true"
+                    onMouseDown={(e) => {
+                      if (isPinMode) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handlePinDragStart(e, pin.id, pin.x, pin.y);
                       }
                     }}
-                    placeholder="Search residents by name, email, or address..."
-                    className="w-full px-4 py-2 pl-10 pr-10 border border-gray-300 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                  />
-                  <svg
-                    className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                    onClick={(e) => {
+                      // Show details if not dragging (works in both pin mode and normal mode)
+                      if (!draggingPin && !hasDragged) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setSelectedPin(pin);
+                        if (mapContainerRef.current) {
+                          const containerRect = mapContainerRef.current.getBoundingClientRect();
+                          // Use the click event position directly for accurate positioning
+                          const clickX = e.clientX;
+                          const clickY = e.clientY;
+                          
+                          // Convert to container-relative coordinates
+                          setSelectedPinPosition({
+                            x: clickX - containerRect.left,
+                            y: clickY - containerRect.top
+                          });
+                        }
+                      }
+                    }}
+                    style={{ cursor: isPinMode ? 'move' : 'pointer' }}
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                  {residentSearchQuery && (
-                    <button
-                      onClick={() => {
-                        setResidentSearchQuery('');
-                        setShowResidentSuggestions(false);
-                      }}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
-                  {/* Resident Suggestions Dropdown */}
-                  {showResidentSuggestions && residentSearchSuggestions.length > 0 && (
-                    <div
-                      ref={residentSuggestionsRef}
-                      className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto z-20"
-                    >
-                      {residentSearchSuggestions.map((resident) => {
-                        // Determine if tenant or homeowner
-                        const isTenant = resident.data?.isTenant === true || resident.data?.residentType === 'tenant';
-                        const residentType = isTenant ? 'Tenant' : 'Homeowner';
+                    {/* Shadow */}
+                    <path
+                      d={`M ${pin.x},${pointY + 1}
+                          L ${pin.x - headRadius * 0.85},${headCenterY + headRadius * 0.15 + 1}
+                          A ${headRadius * 0.85} ${headRadius * 0.85} 0 1 1 ${pin.x + headRadius * 0.85},${headCenterY + headRadius * 0.15 + 1}
+                          Z`}
+                      fill="#000000"
+                      opacity="0.3"
+                    />
+                    
+                    {/* Marker (teardrop shape) */}
+                    <path
+                      d={`M ${pin.x},${pointY}
+                          L ${pin.x - headRadius},${headCenterY + headRadius * 0.2}
+                          A ${headRadius} ${headRadius} 0 1 1 ${pin.x + headRadius},${headCenterY + headRadius * 0.2}
+                          Z`}
+                      fill={markerColor}
+                      stroke="#000000"
+                      strokeWidth={2}
+                    />
+                    
+                    {/* Black circle/dot in the upper rounded portion */}
+                    <circle
+                      cx={pin.x}
+                      cy={headCenterY}
+                      r={headRadius * 0.35}
+                      fill="#000000"
+                    />
+                  </g>
+                );
+              })}
+              
+              {/* Block, Lot, and Street Labels - Show for all occupied lots */}
+              {visibleLots.map((lot) => {
+                if (!lot.resident) return null;
+                
+                // Get saved positions or use defaults
+                const blockKey = `block_${lot.block}`;
+                const lotKey = `lot_${lot.block}_${lot.lot}`;
+                const streetKey = `street_${lot.street}`;
+                
+                const blockPos = markerPositions[blockKey] || { x: lot.x - 5, y: lot.y - 5 };
+                const lotPos = markerPositions[lotKey] || { x: lot.x + lot.width / 2, y: lot.y + lot.height / 2 + 2 };
+                const streetPos = markerPositions[streetKey] || { x: lot.x - 5, y: lot.y + lot.height / 2 };
+                
+                return (
+                  <g key={lot.id}>
+                    {/* Lot number label */}
+                    {lot.lot === '1' || markerPositions[lotKey] ? (
+                      <text
+                        x={lotPos.x}
+                        y={lotPos.y}
+                        fontSize="8"
+                        fill="#fff"
+                        fontWeight="600"
+                        textAnchor="middle"
+                        pointerEvents={isEditMode ? 'all' : 'none'}
+                        style={{ 
+                          userSelect: 'none',
+                          cursor: isEditMode ? 'pointer' : 'default',
+                          opacity: editingMarker?.type === 'lot' && editingMarker?.block === lot.block && editingMarker?.lot === lot.lot ? 0.5 : 1
+                        }}
+                        onClick={(e) => {
+                          if (isEditMode) {
+                            e.stopPropagation();
+                            setEditingMarker({ type: 'lot', block: lot.block, lot: lot.lot });
+                            alert(`Click on the map to position the Lot ${lot.lot} label for Block ${lot.block}`);
+                          }
+                        }}
+                      >
+                        {lot.lot}
+                      </text>
+                    ) : null}
+                    
+                    {/* Block label (only show once per block) */}
+                    {lot.lot === '1' && (
+                      <text
+                        x={blockPos.x}
+                        y={blockPos.y}
+                        fontSize="10"
+                        fill="#000"
+                        fontWeight="bold"
+                        textAnchor="start"
+                        pointerEvents={isEditMode ? 'all' : 'none'}
+                        style={{ 
+                          userSelect: 'none',
+                          cursor: isEditMode ? 'pointer' : 'default',
+                          opacity: editingMarker?.type === 'block' && editingMarker?.block === lot.block ? 0.5 : 1
+                        }}
+                        onClick={(e) => {
+                          if (isEditMode) {
+                            e.stopPropagation();
+                            setEditingMarker({ type: 'block', block: lot.block });
+                            alert(`Click on the map to position the Block ${lot.block} label`);
+                          }
+                        }}
+                      >
+                        Block {lot.block}
+                      </text>
+                    )}
+                    
+                    {/* Street label (only show once per street) */}
+                    {lot.lot === '1' && (
+                      <text
+                        x={streetPos.x}
+                        y={streetPos.y}
+                        fontSize="9"
+                        fill="#444"
+                        fontWeight="500"
+                        textAnchor="start"
+                        pointerEvents={isEditMode ? 'all' : 'none'}
+                        style={{ 
+                          userSelect: 'none',
+                          cursor: isEditMode ? 'pointer' : 'default',
+                          opacity: editingMarker?.type === 'street' && editingMarker?.street === lot.street ? 0.5 : 1
+                        }}
+                        onClick={(e) => {
+                          if (isEditMode) {
+                            e.stopPropagation();
+                            setEditingMarker({ type: 'street', street: lot.street });
+                            alert(`Click on the map to position the ${lot.street} label`);
+                          }
+                        }}
+                      >
+                        {lot.street}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+              
+              {/* Show all lot labels when in edit mode (not just lot 1) */}
+              {isEditMode && visibleLots.map((lot) => {
+                if (!lot.resident || lot.lot === '1') return null;
+                
+                const lotKey = `lot_${lot.block}_${lot.lot}`;
+                const lotPos = markerPositions[lotKey] || { x: lot.x + lot.width / 2, y: lot.y + lot.height / 2 + 2 };
+                
+                return (
+                  <text
+                    key={`edit-lot-${lot.id}`}
+                    x={lotPos.x}
+                    y={lotPos.y}
+                    fontSize="8"
+                    fill="#fff"
+                    fontWeight="600"
+                    textAnchor="middle"
+                    pointerEvents="all"
+                    style={{ 
+                      userSelect: 'none',
+                      cursor: 'pointer',
+                      opacity: editingMarker?.type === 'lot' && editingMarker?.block === lot.block && editingMarker?.lot === lot.lot ? 0.5 : 1
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingMarker({ type: 'lot', block: lot.block, lot: lot.lot });
+                      alert(`Click on the map to position the Lot ${lot.lot} label for Block ${lot.block}`);
+                    }}
+                  >
+                    {lot.lot}
+                  </text>
+                );
+              })}
+              
+              {/* Resident markers overlay - Default Google Maps Style */}
+              {visibleLots.map((lot) => {
+                if (!lot.resident) return null;
+                
+                // Check if there's a pinned location for this address - if so, skip rendering resident marker
+                const normalizedBlock = normalizeAddress(lot.block, 'block');
+                const normalizedLot = normalizeAddress(lot.lot, 'lot');
+                
+                const hasMatchingPin = pinnedLocations.some(pin => {
+                  const pinNormalizedBlock = normalizeAddress(pin.block, 'block');
+                  const pinNormalizedLot = normalizeAddress(pin.lot, 'lot');
+                  
+                  return pinNormalizedBlock === normalizedBlock && 
+                         pinNormalizedLot === normalizedLot;
+                });
+                
+                // Skip rendering if there's a matching pinned location
+                if (hasMatchingPin) return null;
+                
+                const isAvailable = lot.resident?.availabilityStatus === 'available';
+                const isSelected = selectedLot?.id === lot.id;
+                
+                // Check if there's a custom position for this marker
+                const customPosition = residentMarkerPositions[lot.id];
+                
+                // Calculate marker position - use custom position if available, otherwise use lot center
+                const markerX = customPosition ? customPosition.x : lot.x + lot.width / 2;
+                const markerY = customPosition ? customPosition.y : lot.y + lot.height / 2;
+                
+                // Reduced marker dimensions (teardrop shape)
+                const markerSize = isSelected ? 24 : 20; // Reduced from 32/40
+                const markerHeight = markerSize;
+                const markerWidth = markerSize * 0.64; // Standard Google Maps marker aspect ratio
+                const headRadius = markerWidth / 2;
+                
+                // Marker colors: Green = available, Blue = unavailable (homeowners default to unavailable)
+                const markerColor = isAvailable ? '#34C759' : '#4285F4'; // Green = available, Blue = unavailable
+                const shadowColor = '#000000';
+                
+                // Position: marker point (bottom tip) should be at markerX, markerY
+                const centerX = markerX;
+                const headCenterY = markerY - markerHeight + headRadius;
+                const pointY = markerY;
                         
-                        return (
-                          <div
-                            key={resident.id}
-                            onClick={() => {
-                              // Tenants share the same marker as their homeowner
-                              handleSelectResident(resident);
-                            }}
-                            className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="font-medium text-gray-900 text-sm flex-1">{resident.fullName}</div>
-                              <span
-                                className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap ${
-                                  isTenant
-                                    ? 'bg-orange-100 text-orange-800'
-                                    : 'bg-blue-100 text-blue-800'
-                                }`}
-                              >
-                                {residentType}
-                              </span>
-                            </div>
-                            {resident.email && (
-                              <div className="text-xs text-gray-500 mt-1">{resident.email}</div>
-                            )}
-                            {resident.address && (
-                              <div className="text-xs text-gray-500">{resident.address}</div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                {/* Filter Button */}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                    className="px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm font-medium text-gray-700 flex items-center gap-2 whitespace-nowrap"
+                return (
+                  <g 
+                    key={`marker-${lot.id}`}
+                    data-resident-marker="true"
+                    style={{ pointerEvents: 'all', cursor: draggingLot === lot.id ? 'move' : 'pointer' }} 
+                    onMouseDown={(e) => {
+                      if (!isPinMode && !isEditMode) {
+                        handleResidentMarkerMouseDown(e, lot.id, markerX, markerY);
+                      }
+                    }}
+                    onMouseMove={draggingLot === lot.id ? handleResidentMarkerDrag : undefined}
+                    onMouseUp={handleResidentMarkerMouseUp}
+                    onMouseLeave={handleResidentMarkerMouseLeave}
+                    onClick={(e) => {
+                      if (!isLongPress && !draggingLot && !isPinMode && !isEditMode) {
+                        handleLotClick(lot, e);
+                      }
+                    }}
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                    </svg>
-                    <span className="hidden sm:inline">
-                      {availabilityFilter === 'all' ? 'All' : availabilityFilter === 'available' ? 'Available' : 'Unavailable'}
-                    </span>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  {/* Filter Dropdown */}
-                  {showFilterDropdown && (
-                    <div ref={filterDropdownRef} className="absolute top-full right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-20 min-w-[140px]">
-                      <button
-                        onClick={() => {
-                          setAvailabilityFilter('all');
-                          setShowFilterDropdown(false);
-                        }}
-                        className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${
-                          availabilityFilter === 'all' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
-                        }`}
+                    {/* Shadow */}
+                    <path
+                      d={`M ${centerX},${pointY + 1}
+                          L ${centerX - headRadius * 0.85},${headCenterY + headRadius * 0.15 + 1}
+                          A ${headRadius * 0.85} ${headRadius * 0.85} 0 1 1 ${centerX + headRadius * 0.85},${headCenterY + headRadius * 0.15 + 1}
+                          Z`}
+                      fill={shadowColor}
+                      opacity="0.3"
+                    />
+                    
+                    {/* Marker (teardrop shape) */}
+                    <path
+                      d={`M ${centerX},${pointY}
+                          L ${centerX - headRadius},${headCenterY + headRadius * 0.2}
+                          A ${headRadius} ${headRadius} 0 1 1 ${centerX + headRadius},${headCenterY + headRadius * 0.2}
+                          Z`}
+                      fill={markerColor}
+                      stroke="#000000"
+                      strokeWidth={isSelected ? 2.5 : 2}
+                    />
+                    
+                    {/* Black circle/dot in the upper rounded portion */}
+                    <circle
+                      cx={centerX}
+                      cy={headCenterY}
+                      r={headRadius * 0.35}
+                      fill="#000000"
+                    />
+                    
+                    {/* Selection indicator */}
+                    {isSelected && (
+                      <circle
+                        cx={centerX}
+                        cy={headCenterY}
+                        r={headRadius + 5}
+                        fill="none"
+                        stroke="#000000"
+                        strokeWidth={2}
+                        opacity={0.4}
+                      />
+                    )}
+                    
+                    {/* Debug label in development */}
+                    {process.env.NODE_ENV === 'development' && (
+                      <text
+                        x={centerX}
+                        y={headCenterY - headRadius - 5}
+                        fontSize="8"
+                        fill="#000"
+                        fontWeight="bold"
+                        textAnchor="middle"
+                        style={{ pointerEvents: 'none' }}
                       >
-                        All
-                      </button>
-                      <button
-                        onClick={() => {
-                          setAvailabilityFilter('available');
-                          setShowFilterDropdown(false);
-                        }}
-                        className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg flex items-center gap-2 ${
-                          availabilityFilter === 'available' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
-                        }`}
-                      >
-                        <span className="w-3 h-3 rounded-full bg-green-500"></span>
-                        Available
-                      </button>
-                      <button
-                        onClick={() => {
-                          setAvailabilityFilter('unavailable');
-                          setShowFilterDropdown(false);
-                        }}
-                        className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg flex items-center gap-2 ${
-                          availabilityFilter === 'unavailable' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
-                        }`}
-                      >
-                        <span className="w-3 h-3 rounded-full bg-blue-500"></span>
-                        Unavailable
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div 
-              ref={mapRef} 
-              className="w-full h-full"
-            />
-            {/* Lock/Unlock Button - Positioned bottom-right to avoid Google Maps controls */}
+                        {lot.resident.fullName.split(' ')[0]}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+            
+            {/* Lot Info Panel - Positioned above marker */}
+            {selectedLot && selectedLot.resident && selectedLotPosition && (
+              <div 
+                className="absolute bg-white border border-gray-300 shadow-lg rounded-md p-2 z-20 max-w-xs"
+                style={{
+                  left: `${selectedLotPosition.x}px`,
+                  top: `${selectedLotPosition.y}px`,
+                  transform: 'translate(-50%, calc(-100% - 10px))',
+                }}
+              >
+          <div className="flex justify-end items-start mb-1">
             <button
-              onClick={handleToggleLock}
-              className="absolute bottom-4 right-4 z-10 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg shadow-md px-4 py-2 flex items-center gap-2 text-sm font-medium text-gray-700 transition-colors"
-              title={isViewLocked ? 'Unlock View' : 'Lock View'}
+              onClick={() => {
+                setSelectedLot(null);
+                setSelectedLotPosition(null);
+              }}
+              className="text-gray-500 hover:text-black text-xs"
+              style={{ fontSize: '12px', lineHeight: '1' }}
             >
-              {isViewLocked ? (
-                <>
-                  <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                  </svg>
-                  <span className="hidden sm:inline">Unlock View</span>
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                  <span className="hidden sm:inline">Lock View</span>
-                </>
-              )}
+              ✕
             </button>
           </div>
+          <div className="space-y-0.5 text-xs">
+            {selectedLot.resident ? (
+              <>
+                <p className="text-black font-semibold text-sm mb-1">{selectedLot.resident.fullName}</p>
+                <div className="text-gray-600">
+                  <p className="text-black text-xs"><strong>Block:</strong> {selectedLot.block}</p>
+                  <p className="text-black text-xs"><strong>Lot:</strong> {selectedLot.lot}</p>
+                  {/* Show tenants if homeowner */}
+                  {(() => {
+                    const isHomeowner = !selectedLot.resident?.data?.isTenant && selectedLot.resident?.data?.residentType !== 'tenant';
+                    if (isHomeowner) {
+                      // Find tenants at the same block and lot
+                      const tenants = residentData.filter(resident => {
+                        const isTenant = resident.data?.isTenant === true || resident.data?.residentType === 'tenant';
+                        if (!isTenant) return false;
+                        
+                        const residentBlock = normalizeAddress(String(resident.data?.address?.block || ''), 'block');
+                        const residentLot = normalizeAddress(String(resident.data?.address?.lot || ''), 'lot');
+                        const lotBlock = normalizeAddress(selectedLot.block, 'block');
+                        const lotLot = normalizeAddress(selectedLot.lot, 'lot');
+                        
+                        return residentBlock === lotBlock && residentLot === lotLot;
+                      });
+                      
+                      if (tenants.length > 0) {
+                        return (
+                          <div className="mt-2 pt-2 border-t border-gray-200">
+                            <p className="text-black text-xs font-semibold mb-1">Tenants ({tenants.length}):</p>
+                            {tenants.map((tenant) => (
+                              <p key={tenant.id} className="text-black text-xs ml-2">
+                                • {tenant.fullName}
+                              </p>
+                            ))}
+                          </div>
+                        );
+                      }
+                    }
+                    return null;
+                  })()}
+                </div>
+              </>
+            ) : (
+              <p className="text-gray-500 text-xs mt-1">No resident assigned</p>
+            )}
+          </div>
+          {/* Arrow pointing down to marker */}
+          <div
+            className="absolute top-full left-1/2 transform -translate-x-1/2"
+            style={{
+              width: 0,
+              height: 0,
+              borderLeft: '10px solid transparent',
+              borderRight: '10px solid transparent',
+              borderTop: '10px solid #000',
+            }}
+          />
+              </div>
+            )}
+            
+            {/* Pin Info Panel - Positioned above marker */}
+            {selectedPin && selectedPinPosition && (
+              <div 
+                className="absolute bg-white border border-gray-300 shadow-lg rounded-md p-2 z-20 max-w-xs"
+                style={{
+                  left: `${selectedPinPosition.x}px`,
+                  top: `${selectedPinPosition.y}px`,
+                  transform: 'translate(-50%, calc(-100% - 10px))',
+                }}
+              >
+                <div className="flex justify-end items-start mb-1">
+                  <button
+                    onClick={() => {
+                      setSelectedPin(null);
+                      setSelectedPinPosition(null);
+                    }}
+                    className="text-gray-500 hover:text-black text-xs"
+                    style={{ fontSize: '12px', lineHeight: '1' }}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="space-y-0.5 text-xs">
+                  <div className="text-gray-600">
+                    {selectedPin.isOccupied ? (() => {
+                      // Find resident for this pin by matching block and lot
+                      const matchingResident = residentData.find(resident => {
+                        const residentBlock = normalizeAddress(String(resident.data?.address?.block || ''), 'block');
+                        const residentLot = normalizeAddress(String(resident.data?.address?.lot || ''), 'lot');
+                        const pinBlock = normalizeAddress(selectedPin.block, 'block');
+                        const pinLot = normalizeAddress(selectedPin.lot, 'lot');
+                        return residentBlock === pinBlock && residentLot === pinLot;
+                      });
+                      
+                      const isHomeowner = matchingResident && !matchingResident.data?.isTenant && matchingResident.data?.residentType !== 'tenant';
+                      
+                      // Find tenants at the same block and lot
+                      const tenants = residentData.filter(resident => {
+                        const isTenant = resident.data?.isTenant === true || resident.data?.residentType === 'tenant';
+                        if (!isTenant) return false;
+                        
+                        const residentBlock = normalizeAddress(String(resident.data?.address?.block || ''), 'block');
+                        const residentLot = normalizeAddress(String(resident.data?.address?.lot || ''), 'lot');
+                        const pinBlock = normalizeAddress(selectedPin.block, 'block');
+                        const pinLot = normalizeAddress(selectedPin.lot, 'lot');
+                        
+                        return residentBlock === pinBlock && residentLot === pinLot;
+                      });
+                      
+                      return (
+                        <>
+                          {matchingResident && (
+                            <p className="text-black font-semibold text-sm mb-1">{matchingResident.fullName}</p>
+                          )}
+                          <p className="text-black text-xs"><strong>Block:</strong> {selectedPin.block}</p>
+                          <p className="text-black text-xs"><strong>Lot:</strong> {selectedPin.lot}</p>
+                          <p className="text-black text-xs">
+                            <strong>Status:</strong> {
+                              selectedPin.isAvailable ? 'Available' : 'Unavailable'
+                            }
+                          </p>
+                          {/* Show tenants if homeowner */}
+                          {isHomeowner && tenants.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-gray-200">
+                              <p className="text-black text-xs font-semibold mb-1">Tenants ({tenants.length}):</p>
+                              {tenants.map((tenant) => (
+                                <p key={tenant.id} className="text-black text-xs ml-2">
+                                  • {tenant.fullName}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })() : (
+                      <>
+                        <p className="text-black text-xs"><strong>Block:</strong> {selectedPin.block}</p>
+                        <p className="text-black text-xs"><strong>Lot:</strong> {selectedPin.lot}</p>
+                        <p className="text-black text-xs"><strong>Status:</strong> Unoccupied</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {/* Arrow pointing down to marker */}
+                <div
+                  className="absolute top-full left-1/2 transform -translate-x-1/2"
+                  style={{
+                    width: 0,
+                    height: 0,
+                    borderLeft: '6px solid transparent',
+                    borderRight: '6px solid transparent',
+                    borderTop: '6px solid #d1d5db',
+                  }}
+                />
+                <div
+                  className="absolute top-full left-1/2 transform -translate-x-1/2"
+                  style={{
+                    width: 0,
+                    height: 0,
+                    borderLeft: '5px solid transparent',
+                    borderRight: '5px solid transparent',
+                    borderTop: '5px solid white',
+                    marginTop: '-1px',
+                  }}
+                />
+              </div>
+            )}
         </div>
+        
+        {/* Pin Label Modal */}
+        {showPinModal && newPinPosition && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+              <h3 className="text-lg font-bold mb-4">Label Pin Location</h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Block</label>
+                  <select
+                    value={pinFormData.block}
+                    onChange={(e) => setPinFormData({ ...pinFormData, block: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select Block</option>
+                    {blockOptions.map((block) => (
+                      <option key={block} value={block}>{block}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Lot</label>
+                  <select
+                    value={pinFormData.lot}
+                    onChange={(e) => setPinFormData({ ...pinFormData, lot: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select Lot</option>
+                    {lotOptions.map((lot) => (
+                      <option key={lot} value={lot}>{lot}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={pinFormData.isOccupied}
+                      onChange={(e) => setPinFormData({ ...pinFormData, isOccupied: e.target.checked, isAvailable: e.target.checked ? pinFormData.isAvailable : false })}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Occupied</span>
+                  </label>
+                </div>
+                
+                {pinFormData.isOccupied && (
+                  <div>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={pinFormData.isAvailable}
+                        onChange={(e) => setPinFormData({ ...pinFormData, isAvailable: e.target.checked })}
+                        className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                      />
+                      <span className="text-sm font-medium text-gray-700">Available</span>
+                    </label>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {pinFormData.isAvailable ? 'Green marker (occupied & available)' : 'Blue marker (occupied & unavailable)'}
+                    </p>
+                  </div>
+                )}
+                
+                {!pinFormData.isOccupied && (
+                  <p className="text-xs text-gray-500">Red marker (unoccupied)</p>
+                )}
+              </div>
+              
+              <div className="flex gap-2 mt-6">
+                <button
+                  onClick={() => {
+                    setShowPinModal(false);
+                    setNewPinPosition(null);
+                    setPinFormData({ block: '', lot: '', isOccupied: false, isAvailable: false });
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                    onClick={() => {
+                      if (pinFormData.block && pinFormData.lot && newPinPosition) {
+                        savePinnedLocation(
+                          newPinPosition, 
+                          pinFormData.block, 
+                          pinFormData.lot, 
+                          pinFormData.isOccupied,
+                          pinFormData.isAvailable
+                        );
+                      } else {
+                        alert('Please select Block and Lot');
+                      }
+                    }}
+                  className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                >
+                  Save Pin
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );
