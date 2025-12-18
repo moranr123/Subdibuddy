@@ -741,7 +741,7 @@ export default function Billing() {
       <Sidebar isOpen={sidebarOpen} onClose={toggleSidebar} animation={sidebarAnimation} />
       <ScrollView style={dynamicStyles.content} contentContainerStyle={{ paddingBottom: 24 }}>
         <View style={dynamicStyles.section}>
-          <Text style={dynamicStyles.title}>Billings & Payment</Text>
+          <Text style={dynamicStyles.title}>Billings</Text>
           <Text style={dynamicStyles.description}>Your bills and payment history.</Text>
         </View>
 

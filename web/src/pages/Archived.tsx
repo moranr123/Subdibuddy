@@ -1381,7 +1381,7 @@ function Archived() {
     { id: 'visitor-pre-registration' as FilterType, label: 'Visitor Pre-registration' },
     { id: 'residents-applications' as FilterType, label: 'Residents Applications' },
     { id: 'registered-residents' as FilterType, label: 'Registered Residents' },
-    { id: 'billings-payments' as FilterType, label: 'Billings & Payments' },
+    { id: 'billings-payments' as FilterType, label: 'Billings' },
     { id: 'maintenance' as FilterType, label: 'Maintenance' },
     { id: 'vehicle-registration' as FilterType, label: 'Vehicle Registration' },
   ];

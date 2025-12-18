@@ -17,7 +17,7 @@ const menuItems: MenuItem[] = [
   { path: '/complaints', label: 'Complaints', icon: 'warning' },
   { path: '/visitor-pre-registration', label: 'Visitor Pre-Registration', icon: 'person_add' },
   { path: '/resident-management', label: 'Resident Management', icon: 'people' },
-  { path: '/billing-payment', label: 'Billing & Payment', icon: 'payments' },
+  { path: '/billing-payment', label: 'Billings', icon: 'payments' },
   { path: '/maintenance', label: 'Maintenance', icon: 'build' },
   { path: '/vehicle-registration', label: 'Vehicle Registration', icon: 'directions_car' },
   { path: '/archived', label: 'Archived', icon: 'archive' },
@@ -682,7 +682,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                         }}
                       >
                         <span className="material-symbols-outlined text-lg">receipt_long</span>
-                        <span className="text-xs flex-1 text-left">Proof of Payments</span>
+                        <span className="text-xs flex-1 text-left">Proof of Payment</span>
                         {renderBadge(pendingProofsCount)}
                       </button>
                     </div>

@@ -886,7 +886,7 @@ function BillingPayment() {
               ? 'Water Billing Dates'
               : isElectricView
               ? 'Electricity Billing Dates'
-              : 'Billing & Payment'
+              : 'Billings'
           }
         />
 
@@ -1576,7 +1576,7 @@ function BillingPayment() {
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
                   <h2 className="m-0 text-gray-900 text-base md:text-lg font-normal">
-                    Proof of Payments
+                    Proof of Payment
                   </h2>
                   <p className="m-0 text-xs text-gray-500">
                     Review proofs sent by residents and mark billings as paid or reject them.

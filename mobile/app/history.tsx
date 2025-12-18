@@ -367,7 +367,7 @@ export default function History() {
   const getTypeLabel = (type: FilterType) => {
     switch (type) {
       case 'complaints': return 'Complaint';
-      case 'billings-payments': return 'Billing & Payment';
+      case 'billings-payments': return 'Billings';
       case 'maintenance': return 'Maintenance';
       case 'vehicle-registration': return 'Vehicle Registration';
       case 'visitor-registration': return 'Visitor Registration';
@@ -408,7 +408,7 @@ export default function History() {
   const filters: { id: FilterType; label: string }[] = [
     { id: 'all', label: 'All' },
     { id: 'complaints', label: 'Complaints' },
-    { id: 'billings-payments', label: 'Billings & Payments' },
+    { id: 'billings-payments', label: 'Billings' },
     { id: 'maintenance', label: 'Maintenance' },
     { id: 'vehicle-registration', label: 'Vehicle Registration' },
     { id: 'visitor-registration', label: 'Visitor Registration' },
