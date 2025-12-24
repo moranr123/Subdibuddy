@@ -20,10 +20,10 @@
 import emailjs from '@emailjs/browser';
 
 // EmailJS configuration
-const EMAILJS_SERVICE_ID = 'service_xre2ekc';
-const EMAILJS_TEMPLATE_ID = 'template_1wwgxhv';
-// Try to get from environment variable, fallback to hardcoded value for now
-const EMAILJS_PUBLIC_KEY = import.meta.env.VITE_EMAILJS_PUBLIC_KEY || 'OpoSKg71Mm4YSjsqt';
+const EMAILJS_SERVICE_ID = import.meta.env.VITE_EMAILJS_SERVICE_ID || '';
+const EMAILJS_TEMPLATE_ID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID || '';
+// Get from environment variable - REQUIRED for production
+const EMAILJS_PUBLIC_KEY = import.meta.env.VITE_EMAILJS_PUBLIC_KEY || '';
 
 // Log configuration on module load (for debugging)
 console.log('📧 EmailJS Configuration:', {

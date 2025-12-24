@@ -4,8 +4,9 @@ import { getFirestore } from 'firebase-admin/firestore';
 import * as readline from 'readline';
 
 // Firebase configuration
+// Project ID should come from environment variable
 const firebaseConfig = {
-  projectId: "subsibuddy-88108",
+  projectId: process.env.FIREBASE_PROJECT_ID || "",
 };
 
 // Initialize Firebase Admin (you'll need to download service account key from Firebase Console)
