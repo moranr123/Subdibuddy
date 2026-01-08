@@ -69,24 +69,32 @@ npm install
 ```
 
 3. Create a `.env` file in the `web/` directory:
-```env
-# Firebase Configuration
-VITE_FIREBASE_API_KEY=your_firebase_api_key_here
-VITE_FIREBASE_AUTH_DOMAIN=your_firebase_auth_domain_here
-VITE_FIREBASE_PROJECT_ID=your_firebase_project_id_here
-VITE_FIREBASE_STORAGE_BUCKET=your_firebase_storage_bucket_here
-VITE_FIREBASE_MESSAGING_SENDER_ID=your_firebase_messaging_sender_id_here
-VITE_FIREBASE_APP_ID=your_firebase_app_id_here
-VITE_FIREBASE_MEASUREMENT_ID=your_firebase_measurement_id_here
-
-# Google Maps API Key
-VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
-
-# EmailJS Configuration
-VITE_EMAILJS_PUBLIC_KEY=your_emailjs_public_key_here
-VITE_EMAILJS_SERVICE_ID=your_emailjs_service_id_here
-VITE_EMAILJS_TEMPLATE_ID=your_emailjs_template_id_here
-```
+   - **Option 1 (Recommended)**: Copy the example file:
+     ```bash
+     cp .env.example .env
+     ```
+   - **Option 2**: Create manually using the template below:
+   
+   ```env
+   # Firebase Configuration
+   VITE_FIREBASE_API_KEY=your_firebase_api_key_here
+   VITE_FIREBASE_AUTH_DOMAIN=your_firebase_auth_domain_here
+   VITE_FIREBASE_PROJECT_ID=your_firebase_project_id_here
+   VITE_FIREBASE_STORAGE_BUCKET=your_firebase_storage_bucket_here
+   VITE_FIREBASE_MESSAGING_SENDER_ID=your_firebase_messaging_sender_id_here
+   VITE_FIREBASE_APP_ID=your_firebase_app_id_here
+   VITE_FIREBASE_MEASUREMENT_ID=your_firebase_measurement_id_here
+   
+   # Google Maps API Key
+   VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
+   
+   # EmailJS Configuration
+   VITE_EMAILJS_PUBLIC_KEY=your_emailjs_public_key_here
+   VITE_EMAILJS_SERVICE_ID=your_emailjs_service_id_here
+   VITE_EMAILJS_TEMPLATE_ID=your_emailjs_template_id_here
+   ```
+   
+   Then replace all placeholder values with your actual API keys and credentials.
 
 4. Start the development server:
 ```bash
@@ -111,16 +119,24 @@ npm install
 ```
 
 3. Create a `.env` file in the `mobile/` directory:
-```env
-# Firebase Configuration
-EXPO_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key_here
-EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your_firebase_auth_domain_here
-EXPO_PUBLIC_FIREBASE_PROJECT_ID=your_firebase_project_id_here
-EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your_firebase_storage_bucket_here
-EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_firebase_messaging_sender_id_here
-EXPO_PUBLIC_FIREBASE_APP_ID=your_firebase_app_id_here
-EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=your_firebase_measurement_id_here
-```
+   - **Option 1 (Recommended)**: Copy the example file:
+     ```bash
+     cp .env.example .env
+     ```
+   - **Option 2**: Create manually using the template below:
+   
+   ```env
+   # Firebase Configuration
+   EXPO_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key_here
+   EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your_firebase_auth_domain_here
+   EXPO_PUBLIC_FIREBASE_PROJECT_ID=your_firebase_project_id_here
+   EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your_firebase_storage_bucket_here
+   EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_firebase_messaging_sender_id_here
+   EXPO_PUBLIC_FIREBASE_APP_ID=your_firebase_app_id_here
+   EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=your_firebase_measurement_id_here
+   ```
+   
+   Then replace all placeholder values with your actual API keys and credentials.
 
 4. Start the Expo development server:
 ```bash
@@ -193,10 +209,24 @@ Subsibuddy/
 
 ⚠️ **Important**: 
 - All API keys and secrets are stored in environment variables
+- **`.env` files are excluded from version control and zip files** (this is intentional for security)
+- When sharing or deploying the project, you'll need to recreate `.env` files from `.env.example` templates
 - Never commit `.env` files to version control
 - Use different API keys for development and production
 - Restrict your API keys in Google Cloud Console
 - Rotate your keys if they are ever exposed
+
+### Why `.env` files are excluded?
+
+`.env` files contain sensitive API keys and credentials. They are automatically excluded from:
+- Git repositories (via `.gitignore`)
+- Zip files (when using git-based tools)
+- Version control systems
+
+**This is a security best practice!** Always:
+1. Use `.env.example` files as templates (included in the project)
+2. Create your own `.env` file locally with real credentials
+3. Never share your actual `.env` file with others
 
 ## Development
 
