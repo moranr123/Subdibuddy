@@ -6,7 +6,6 @@ import { auth, db } from '../firebase/config';
 import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
 import Header from '../components/Header';
-import EditResidentModal from '../components/EditResidentModal';
 import { sendApprovalEmail, sendRejectionEmail } from '../utils/emailService';
 
 interface UserLocation {
@@ -53,8 +52,6 @@ function ResidentManagement() {
   const [showMapModal, setShowMapModal] = useState(false);
   const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [editingResident, setEditingResident] = useState<Resident | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [homeownerName, setHomeownerName] = useState<string | null>(null);
   const [tenantNames, setTenantNames] = useState<string[]>([]);
@@ -290,46 +287,191 @@ function ResidentManagement() {
         const isTenant = selectedResident.isTenant === true || selectedResident.residentType === 'tenant';
         const address = selectedResident.address;
 
+        // Validate that required address fields exist (block and lot are required, street is optional)
+        const block = address?.block;
+        const lot = address?.lot;
+        const street = address?.street;
+        
+        const missingFields = [];
+        if (!block || (typeof block === 'string' && block.trim() === '')) missingFields.push('block');
+        if (!lot || (typeof lot === 'string' && lot.trim() === '')) missingFields.push('lot');
+        // Street is optional - tenants may not have street field
+        
+        if (!address || missingFields.length > 0) {
+          console.warn('Incomplete address data, cannot fetch related residents:', {
+            address,
+            missingFields,
+            block: block || 'MISSING',
+            lot: lot || 'MISSING',
+            street: street || 'MISSING (optional)'
+          });
+          setLoadingRelatedResidents(false);
+          return;
+        }
+
+        console.log('Fetching related residents:', { 
+          isTenant, 
+          residentType: selectedResident.residentType,
+          isTenantField: selectedResident.isTenant,
+          address,
+          residentId: selectedResident.id
+        });
+
         if (isTenant) {
           // Fetch homeowner at the same address
+          // Note: Street is optional - query by block and lot only, then filter by street in JavaScript
           const homeownerQuery = query(
             collection(db, 'users'),
             where('address.block', '==', address.block),
             where('address.lot', '==', address.lot),
-            where('address.street', '==', address.street),
-            where('residentType', '==', 'homeowner'),
-            where('status', '==', 'approved'),
-            limit(1)
-          );
-
-          const homeownerSnapshot = await getDocs(homeownerQuery);
-          if (!homeownerSnapshot.empty) {
-            const homeownerData = homeownerSnapshot.docs[0].data();
-            const homeownerFullName = homeownerData.fullName || 
-              `${homeownerData.firstName || ''} ${homeownerData.middleName || ''} ${homeownerData.lastName || ''}`.trim() ||
-              'Unknown Homeowner';
-            setHomeownerName(homeownerFullName);
-          }
-        } else {
-          // Fetch tenants at the same address
-          const tenantsQuery = query(
-            collection(db, 'users'),
-            where('address.block', '==', address.block),
-            where('address.lot', '==', address.lot),
-            where('address.street', '==', address.street),
-            where('residentType', '==', 'tenant'),
             where('status', '==', 'approved')
           );
 
+          console.log('Querying for homeowner with address:', {
+            block: address.block,
+            lot: address.lot,
+            street: street || 'NOT SET (will match homeowners without street)'
+          });
+
+          const homeownerSnapshot = await getDocs(homeownerQuery);
+          let homeownerFound = false;
+          
+          console.log(`Found ${homeownerSnapshot.size} residents at same block/lot`);
+          
+          homeownerSnapshot.forEach((doc) => {
+            const data = doc.data();
+            const homeownerAddress = data.address;
+            
+            // Check if address matches (block and lot must match, street is optional)
+            const blockMatches = homeownerAddress?.block === address.block;
+            const lotMatches = homeownerAddress?.lot === address.lot;
+            const streetMatches = !street || !homeownerAddress?.street || homeownerAddress.street === street;
+            
+            console.log('Checking resident for homeowner:', {
+              id: doc.id,
+              fullName: data.fullName,
+              residentType: data.residentType,
+              isTenant: data.isTenant,
+              address: homeownerAddress,
+              blockMatches,
+              lotMatches,
+              streetMatches
+            });
+            
+            // Check if this is a homeowner (not a tenant)
+            const isHomeownerResident = (data.residentType === 'homeowner' || (!data.isTenant && data.residentType !== 'tenant')) && doc.id !== selectedResident.id;
+            
+            // Address must match (block and lot required, street optional)
+            if (isHomeownerResident && 
+                !homeownerFound &&
+                blockMatches && 
+                lotMatches && 
+                streetMatches) {
+              const homeownerFullName = data.fullName || 
+                `${data.firstName || ''}${data.middleName ? ' ' + data.middleName : ''}${data.lastName ? ' ' + data.lastName : ''}`.trim() ||
+                'Unknown Homeowner';
+              if (homeownerFullName && homeownerFullName !== 'Unknown Homeowner') {
+                setHomeownerName(homeownerFullName);
+                homeownerFound = true;
+                console.log('✓ Found homeowner:', homeownerFullName, 'ID:', doc.id);
+              }
+            } else {
+              console.log('✗ Skipped (not a homeowner or address mismatch):', doc.id, {
+                isHomeownerResident,
+                isCurrentResident: doc.id === selectedResident.id,
+                blockMatches,
+                lotMatches,
+                streetMatches
+              });
+            }
+          });
+          
+          if (!homeownerFound) {
+            console.log('No homeowner found at this address');
+          }
+        } else {
+          // Fetch tenants at the same address (for homeowners or non-tenants)
+          // Note: Street is optional - tenants may only have block and lot
+          // Build query with block and lot (required), street only if it exists
+          const queryConditions: any[] = [
+            where('address.block', '==', address.block),
+            where('address.lot', '==', address.lot),
+            where('status', '==', 'approved')
+          ];
+          
+          // Only add street condition if street exists (some tenants don't have street)
+          if (street && typeof street === 'string' && street.trim() !== '') {
+            queryConditions.push(where('address.street', '==', address.street));
+          }
+
+          const tenantsQuery = query(
+            collection(db, 'users'),
+            ...queryConditions
+          );
+
+          console.log('Querying for tenants with address:', {
+            block: address.block,
+            lot: address.lot,
+            street: street || 'NOT SET (will match tenants without street)'
+          });
+
           const tenantsSnapshot = await getDocs(tenantsQuery);
           const names: string[] = [];
+          
+          console.log(`Found ${tenantsSnapshot.size} residents at same address`);
+          
           tenantsSnapshot.forEach((tenantDoc) => {
             const tenantData = tenantDoc.data();
-            const tenantFullName = tenantData.fullName || 
-              `${tenantData.firstName || ''} ${tenantData.middleName || ''} ${tenantData.lastName || ''}`.trim() ||
-              'Unknown Tenant';
-            names.push(tenantFullName);
+            const tenantAddress = tenantData.address;
+            
+            // Check if address matches (block and lot must match, street is optional)
+            const blockMatches = tenantAddress?.block === address.block;
+            const lotMatches = tenantAddress?.lot === address.lot;
+            const streetMatches = !street || !tenantAddress?.street || tenantAddress.street === street;
+            
+            console.log('Checking resident:', {
+              id: tenantDoc.id,
+              fullName: tenantData.fullName,
+              residentType: tenantData.residentType,
+              isTenant: tenantData.isTenant,
+              address: tenantAddress,
+              status: tenantData.status,
+              blockMatches,
+              lotMatches,
+              streetMatches
+            });
+            
+            // Check if this is a tenant (either by residentType or isTenant field)
+            const isTenantResident = tenantData.residentType === 'tenant' || tenantData.isTenant === true;
+            
+            // Exclude the current resident from the list
+            // Address must match (block and lot required, street optional)
+            if (isTenantResident && 
+                tenantDoc.id !== selectedResident.id &&
+                blockMatches && 
+                lotMatches && 
+                streetMatches) {
+              const tenantFullName = tenantData.fullName || 
+                `${tenantData.firstName || ''}${tenantData.middleName ? ' ' + tenantData.middleName : ''}${tenantData.lastName ? ' ' + tenantData.lastName : ''}`.trim();
+              
+              if (tenantFullName && tenantFullName.trim() !== '') {
+                names.push(tenantFullName);
+                console.log('✓ Added tenant:', tenantFullName, 'ID:', tenantDoc.id);
+              } else {
+                console.log('✗ Skipped tenant (no name):', tenantDoc.id);
+              }
+            } else {
+              console.log('✗ Skipped:', tenantDoc.id, {
+                isTenantResident,
+                isCurrentResident: tenantDoc.id === selectedResident.id,
+                blockMatches,
+                lotMatches,
+                streetMatches
+              });
+            }
           });
+          
+          console.log(`Total tenants found: ${names.length}`, names);
           setTenantNames(names);
         }
       } catch (error) {
@@ -842,38 +984,6 @@ function ResidentManagement() {
     }
   };
 
-  const handleEdit = useCallback((resident: Resident) => {
-    setEditingResident(resident);
-    setShowEditModal(true);
-  }, []);
-
-  const handleCloseEdit = useCallback(() => {
-    setShowEditModal(false);
-    setEditingResident(null);
-  }, []);
-
-  const handleSaveEdit = useCallback(async (updatedData: Partial<Resident>) => {
-    if (!db || !editingResident) return;
-
-    try {
-      const residentRef = doc(db, 'users', editingResident.id);
-      await updateDoc(residentRef, {
-        ...updatedData,
-        updatedAt: Timestamp.now(),
-      });
-
-      // Update local state
-      setResidents(prev => prev.map(r => 
-        r.id === editingResident.id ? { ...r, ...updatedData } : r
-      ));
-
-      alert('Resident information updated successfully');
-      handleCloseEdit();
-    } catch (error: any) {
-      console.error('Error updating resident:', error);
-      alert(`Failed to update resident: ${error.message}`);
-    }
-  }, [db, editingResident, handleCloseEdit]);
 
   return (
     <Layout>
@@ -1059,14 +1169,6 @@ function ResidentManagement() {
                           >
                             View Details
                           </button>
-                          {activeView === 'registered' && (
-                            <button
-                              className="w-full bg-blue-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-blue-700"
-                              onClick={() => handleEdit(resident)}
-                            >
-                              Edit
-                            </button>
-                          )}
                           {activeView === 'applications' && (
                             <div className="flex gap-2">
                               <button
@@ -1152,14 +1254,6 @@ function ResidentManagement() {
                               >
                                 View Details
                               </button>
-                              {activeView === 'registered' && (
-                                <button
-                                  className="bg-blue-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-blue-700"
-                                  onClick={() => handleEdit(resident)}
-                                >
-                                  Edit
-                                </button>
-                              )}
                               {activeView === 'applications' && (
                                 <>
                                   <button
@@ -1348,10 +1442,6 @@ function ResidentManagement() {
                     <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Street</label>
                     <p className="text-gray-900">{selectedResident.address?.street || 'N/A'}</p>
                   </div>
-                  <div>
-                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Is Tenant</label>
-                    <p className="text-gray-900">{selectedResident.isTenant ? 'Yes' : 'No'}</p>
-                  </div>
                   {selectedResident.isTenant && (
                     <div>
                       <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Tenant Relation</label>
@@ -1368,7 +1458,7 @@ function ResidentManagement() {
                       )}
                     </div>
                   )}
-                  {!selectedResident.isTenant && (
+                  {!(selectedResident.isTenant === true || selectedResident.residentType === 'tenant') && (
                     <div>
                       <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Tenants</label>
                       {loadingRelatedResidents ? (
@@ -1559,14 +1649,6 @@ function ResidentManagement() {
         )}
       </div>
 
-      {/* Edit Modal */}
-      {showEditModal && editingResident && (
-        <EditResidentModal
-          resident={editingResident}
-          onClose={handleCloseEdit}
-          onSave={handleSaveEdit}
-        />
-      )}
     </Layout>
   );
 }

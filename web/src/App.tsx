@@ -4,6 +4,7 @@ import { SidebarProvider } from './contexts/SidebarContext'
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
 import CreateSuperAdmin from './pages/CreateSuperAdmin'
+import RestoreSuperAdmin from './pages/RestoreSuperAdmin'
 import Announcement from './pages/Announcement'
 import Complaints from './pages/Complaints'
 import VisitorPreRegistration from './pages/VisitorPreRegistration'
@@ -38,6 +39,7 @@ function App() {
       <Route path="/archived" element={<Archived />} />
       <Route path="/map" element={<Map />} />
       <Route path="/create-superadmin" element={<CreateSuperAdmin />} />
+      <Route path="/restore-superadmin" element={<RestoreSuperAdmin />} />
     </Routes>
   ), []);
 
