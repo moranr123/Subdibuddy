@@ -1339,9 +1339,9 @@ function Map() {
               {/* Display pinned locations - Google Maps style markers */}
               {filteredPinnedLocations.map((pin) => {
                 // Determine marker color based on occupation status
-                let markerColor = '#FF0000'; // Red = unoccupied (default)
+                let markerColor = '#4285F4'; // Blue = unoccupied (default)
                 if (pin.isOccupied) {
-                  markerColor = pin.isAvailable ? '#34C759' : '#4285F4'; // Green = occupied & available, Blue = occupied & unavailable
+                  markerColor = pin.isAvailable ? '#34C759' : '#FF0000'; // Green = occupied & available, Red = occupied & unavailable
                 }
                 
                 const markerSize = 20;
