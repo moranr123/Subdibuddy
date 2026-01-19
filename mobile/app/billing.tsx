@@ -1,13 +1,11 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Dimensions, ActivityIndicator, Modal, Alert, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import * as ImagePicker from 'expo-image-picker';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, orderBy, onSnapshot, updateDoc, doc, Timestamp, addDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { collection, query, where, orderBy, onSnapshot, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
-import { getAuthService, db, storage } from '../firebase/config';
+import { getAuthService, db } from '../firebase/config';
 import { useNotifications } from '../hooks/useNotifications';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -36,12 +34,9 @@ export default function Billing() {
   const [user, setUser] = useState<any>(null);
   const [billings, setBillings] = useState<Billing[]>([]);
   const [loading, setLoading] = useState(true);
-  const [proofModalVisible, setProofModalVisible] = useState(false);
-  const [selectedBilling, setSelectedBilling] = useState<Billing | null>(null);
-  const [proofImage, setProofImage] = useState<string | null>(null);
   const [viewProofModalVisible, setViewProofModalVisible] = useState(false);
   const [viewProofBilling, setViewProofBilling] = useState<Billing | null>(null);
-  const [submittingProof, setSubmittingProof] = useState(false);
+  const [markingAsPaid, setMarkingAsPaid] = useState<string | null>(null);
 
   const toggleSidebar = () => {
     const toValue = sidebarOpen ? -Dimensions.get('window').width : 0;
@@ -117,16 +112,6 @@ export default function Billing() {
   };
 
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'notified':
-        return '#16a34a';
-      case 'overdue':
-        return '#dc2626';
-      default:
-        return '#f59e0b';
-    }
-  };
 
   const dynamicStyles = useMemo(() => StyleSheet.create({
     container: {
@@ -183,19 +168,97 @@ export default function Billing() {
     },
     card: {
       backgroundColor: theme.cardBackground,
-      borderRadius: 14,
-      padding: 16,
+      borderRadius: 16,
+      padding: 0,
       borderWidth: 1,
       borderColor: theme.border,
       shadowColor: '#000',
-      shadowOpacity: 0.04,
-      shadowOffset: { width: 0, height: 2 },
-      shadowRadius: 8,
-      elevation: 2,
+      shadowOpacity: 0.06,
+      shadowOffset: { width: 0, height: 3 },
+      shadowRadius: 10,
+      elevation: 3,
+      overflow: 'hidden',
     },
     cardOverdue: {
       borderColor: '#fecaca',
-      backgroundColor: theme.cardBackground,
+      borderWidth: 2,
+      backgroundColor: '#fef2f2',
+    },
+    cardContent: {
+      padding: 18,
+    },
+    cardHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      marginBottom: 14,
+      gap: 12,
+    },
+    notificationIcon: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: '#e0f2fe',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    notificationIconOverdue: {
+      backgroundColor: '#fee2e2',
+    },
+    notificationIconText: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: '#0369a1',
+    },
+    notificationIconTextOverdue: {
+      color: '#dc2626',
+    },
+    cardTextContainer: {
+      flex: 1,
+    },
+    notificationTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: theme.text,
+      marginBottom: 4,
+    },
+    dueDateText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#0369a1',
+    },
+    dueDateTextOverdue: {
+      color: '#dc2626',
+    },
+    messageContainer: {
+      backgroundColor: theme.inputBackground || '#f9fafb',
+      padding: 12,
+      borderRadius: 10,
+      marginBottom: 12,
+    },
+    notificationMessage: {
+      fontSize: 14,
+      lineHeight: 20,
+      color: theme.text,
+      fontWeight: '500',
+    },
+    markPaidButton: {
+      marginTop: 12,
+      backgroundColor: '#16a34a',
+      paddingVertical: 12,
+      paddingHorizontal: 20,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 44,
+    },
+    markPaidButtonDisabled: {
+      opacity: 0.6,
+    },
+    markPaidButtonText: {
+      color: '#ffffff',
+      fontSize: 15,
+      fontWeight: '600',
     },
     cardHeader: {
       flexDirection: 'row',
@@ -213,16 +276,6 @@ export default function Billing() {
       color: theme.textSecondary,
       marginTop: 2,
     },
-    statusPill: {
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 999,
-    },
-    statusText: {
-      color: 'white',
-      fontSize: 11,
-      fontWeight: '700',
-    },
     typePill: {
       paddingHorizontal: 8,
       paddingVertical: 3,
@@ -238,19 +291,6 @@ export default function Billing() {
       fontSize: 10,
       fontWeight: '600',
       color: theme.text,
-    },
-    proofButton: {
-      marginTop: 10,
-      alignSelf: 'flex-start',
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 999,
-      backgroundColor: '#2563eb',
-    },
-    proofButtonText: {
-      color: 'white',
-      fontSize: 12,
-      fontWeight: '600',
     },
     modalOverlay: {
       flex: 1,
@@ -318,38 +358,6 @@ export default function Billing() {
     modalButtonDisabled: {
       opacity: 0.6,
     },
-    submitButtonContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    proofActionsRow: {
-      flexDirection: 'row',
-      gap: 10,
-    },
-    proofActionButton: {
-      flex: 1,
-      paddingVertical: 10,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.inputBackground,
-      alignItems: 'center',
-    },
-    proofActionPrimary: {
-      backgroundColor: '#e0ecff',
-      borderColor: '#bfdbfe',
-    },
-    proofActionText: {
-      color: theme.text,
-      fontSize: 13,
-      fontWeight: '600',
-    },
-    proofActionPrimaryText: {
-      color: '#1d4ed8',
-      fontSize: 13,
-      fontWeight: '700',
-    },
     proofPreview: {
       width: '100%',
       height: 200,
@@ -362,76 +370,6 @@ export default function Billing() {
     modalHint: {
       color: theme.textSecondary,
       fontSize: 13,
-    },
-    riskChip: {
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 999,
-    },
-    riskChipText: {
-      fontSize: 10,
-      fontWeight: '700',
-      color: theme.text,
-    },
-    riskChipOverdue: {
-      backgroundColor: '#fee2e2',
-    },
-    riskChipSoon: {
-      backgroundColor: '#fef3c7',
-    },
-    riskChipSafe: {
-      backgroundColor: '#dcfce7',
-    },
-    summaryCard: {
-      marginHorizontal: 16,
-      marginBottom: 12,
-      padding: 16,
-      borderRadius: 14,
-      backgroundColor: theme.headerBackground,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    summaryRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
-    summaryMain: {
-      flex: 1,
-    },
-    summaryLabel: {
-      color: theme.textSecondary,
-      fontSize: 12,
-      marginBottom: 2,
-    },
-    summaryValue: {
-      color: theme.text,
-      fontSize: 20,
-      fontWeight: '700',
-    },
-    summaryBadgeGroup: {
-      marginLeft: 8,
-      alignItems: 'flex-end',
-    },
-    summaryPill: {
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 999,
-    },
-    summaryPillOverdue: {
-      backgroundColor: '#fef3c7',
-    },
-    summaryPillLabel: {
-      fontSize: 11,
-      fontWeight: '600',
-      color: '#92400e',
-    },
-    summaryMetaRow: {
-      marginTop: 10,
-    },
-    summaryMetaText: {
-      color: theme.textSecondary,
-      fontSize: 12,
     },
     viewProofButton: {
       marginTop: 8,
@@ -448,48 +386,34 @@ export default function Billing() {
       fontWeight: '600',
       color: theme.text,
     },
-    seeAllButton: {
-      marginHorizontal: 16,
-      marginTop: 12,
-      marginBottom: 8,
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      borderRadius: 12,
-      backgroundColor: theme.cardBackground,
-      borderWidth: 1,
-      borderColor: theme.border,
-      alignItems: 'center',
-      shadowColor: '#000',
-      shadowOpacity: 0.04,
-      shadowOffset: { width: 0, height: 2 },
-      shadowRadius: 8,
-      elevation: 2,
-    },
-    seeAllButtonText: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: '#2563eb',
-    },
   }), [theme]);
 
-  const renderStatus = (billing: Billing) => (
-    <View style={[dynamicStyles.statusPill, { backgroundColor: getStatusColor(billing.status) }]}>
-      <Text style={dynamicStyles.statusText}>{billing.status.toUpperCase()}</Text>
-    </View>
-  );
 
-  const getRiskChip = (billing: Billing) => {
-    if (billing.status === 'notified') {
-      return (
-        <View style={[dynamicStyles.riskChip, dynamicStyles.riskChipSafe]}>
-          <Text style={dynamicStyles.riskChipText}>Notified</Text>
-        </View>
-      );
+  const openViewProofModal = useCallback((billing: Billing) => {
+    setViewProofBilling(billing);
+    setViewProofModalVisible(true);
+  }, []);
+
+  const handleMarkAsPaid = useCallback(async (billingId: string) => {
+    if (!db) return;
+    
+    setMarkingAsPaid(billingId);
+    try {
+      await updateDoc(doc(db, 'billings', billingId), {
+        status: 'notified',
+        updatedAt: Timestamp.now(),
+      });
+      Alert.alert('Success', 'Billing marked as paid.');
+    } catch (error) {
+      console.error('Error marking billing as paid:', error);
+      Alert.alert('Error', 'Failed to mark billing as paid. Please try again.');
+    } finally {
+      setMarkingAsPaid(null);
     }
+  }, [db]);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
+  const unpaidBillings = billings.filter((billing) => {
+    // Parse due date
     let dueDate: Date | null = null;
     try {
       const raw = (billing as any).dueDate;
@@ -507,191 +431,26 @@ export default function Billing() {
       dueDate = null;
     }
 
-    if (!dueDate) return null;
+    if (!dueDate) return false;
 
-    if (billing.status === 'overdue' || dueDate < today) {
-      return (
-        <View style={[dynamicStyles.riskChip, dynamicStyles.riskChipOverdue]}>
-          <Text style={dynamicStyles.riskChipText}>Overdue</Text>
-        </View>
-      );
-    }
-
-    const diffMs = dueDate.getTime() - today.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    if (diffDays >= 0 && diffDays <= 7) {
-      return (
-        <View style={[dynamicStyles.riskChip, dynamicStyles.riskChipSoon]}>
-          <Text style={dynamicStyles.riskChipText}>Due soon</Text>
-        </View>
-      );
-    }
-
-    return null;
-  };
-
-  const summary = (() => {
-    if (!billings || billings.length === 0) {
-      return {
-        overdueCount: 0,
-        nextDueDate: null as Date | null,
-      };
-    }
-
-    let overdueCount = 0;
-    let nextDueDate: Date | null = null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    billings.forEach((b) => {
-      const isNotified = b.status === 'notified';
-
-      let dueDate: Date | null = null;
-      try {
-        const raw = (b as any).dueDate;
-        if (raw?.toDate && typeof raw.toDate === 'function') {
-          dueDate = raw.toDate();
-        } else {
-          dueDate = new Date(b.dueDate);
-        }
-        if (dueDate && Number.isNaN(dueDate.getTime())) {
-          dueDate = null;
-        } else if (dueDate) {
-          dueDate.setHours(0, 0, 0, 0);
-        }
-      } catch {
-        dueDate = null;
-      }
-
-      if (dueDate && !isNotified && dueDate < today) {
-        overdueCount += 1;
-      }
-
-      if (dueDate && !isNotified && dueDate >= today) {
-        if (!nextDueDate || dueDate.getTime() < nextDueDate.getTime()) {
-          nextDueDate = dueDate;
-        }
-      }
-    });
-
-    return { overdueCount, nextDueDate };
-  })();
-
-  const openProofModal = useCallback((billing: Billing) => {
-    setSelectedBilling(billing);
-    setProofImage(null);
-    setProofModalVisible(true);
-  }, []);
-
-  const showImageSourcePicker = useCallback(() => {
-    Alert.alert(
-      'Select Image Source',
-      'Choose an option',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Camera', onPress: () => pickImage('camera') },
-        { text: 'Gallery', onPress: () => pickImage('gallery') },
-      ]
-    );
-  }, []);
-
-  const pickImage = useCallback(async (source: 'camera' | 'gallery') => {
-    try {
-      if (source === 'camera') {
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Permission needed', 'Please allow camera access to proceed.');
-          return;
-        }
-        const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.7 });
-        if (!result.canceled && result.assets && result.assets.length > 0) {
-          setProofImage(result.assets[0].uri);
-        }
-      } else {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Permission needed', 'Please allow gallery access to proceed.');
-          return;
-        }
-        const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, quality: 0.7 });
-        if (!result.canceled && result.assets && result.assets.length > 0) {
-          setProofImage(result.assets[0].uri);
-        }
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    // Show card exactly 1 week (7 days) before due date
+    const diffMs = dueDate.getTime() - today.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    // Show if due date is exactly 7 days from today (1 week before)
+    if (diffDays === 7) {
+      return true;
     }
-  }, []);
 
-  const handleSubmitProof = useCallback(async () => {
-    if (!db || !selectedBilling) return;
-    if (!proofImage) {
-      Alert.alert('Proof required', 'Please attach an image of your payment proof.');
-      return;
+    // Also show if already past due date (overdue)
+    if (diffDays < 0) {
+      return true;
     }
-    setSubmittingProof(true);
-    try {
-      // Upload image to Firebase Storage first
-      let downloadUrl: string | null = null;
-      if (storage) {
-        const response = await fetch(proofImage);
-        const blob = await response.blob();
-        const filePath = `billing-proofs/${user?.uid || 'anonymous'}/${selectedBilling.id}-${Date.now()}.jpg`;
-        const storageRef = ref(storage, filePath);
-        await uploadBytes(storageRef, blob);
-        downloadUrl = await getDownloadURL(storageRef);
-      }
 
-      await updateDoc(doc(db, 'billings', selectedBilling.id), {
-        userProofDetails: null,
-        userProofImageUrl: downloadUrl || proofImage || null,
-        userProofStatus: 'pending',
-        userProofSubmittedAt: Timestamp.now(),
-      });
-
-      // Notify admins that a new proof of payment was submitted
-      try {
-        const billingTypeLabel =
-          selectedBilling.billingType === 'water'
-            ? 'Water'
-            : selectedBilling.billingType === 'electricity'
-            ? 'Electricity'
-            : 'Billing';
-        await addDoc(collection(db, 'notifications'), {
-          type: 'billing_proof',
-          billingId: selectedBilling.id,
-          userId: user?.uid || null,
-          userEmail: user?.email || '',
-          subject: `New Proof of Payment – ${billingTypeLabel}`,
-          message: `A new proof of payment was submitted for ${billingTypeLabel.toLowerCase()} billing "${
-            selectedBilling.billingCycle || 'Billing'
-          }".`,
-          recipientType: 'admin',
-          isRead: false,
-          createdAt: Timestamp.now(),
-        });
-      } catch (notifyErr) {
-        console.error('Error creating admin notification for billing proof:', notifyErr);
-      }
-      Alert.alert('Submitted', 'Your proof of payment has been sent for verification.');
-      setProofModalVisible(false);
-      setSelectedBilling(null);
-      setProofImage(null);
-    } catch (error) {
-      console.error('Error submitting proof of payment:', error);
-      Alert.alert('Error', 'Failed to submit proof. Please try again.');
-    } finally {
-      setSubmittingProof(false);
-    }
-  }, [db, selectedBilling, proofImage, user]);
-
-  const openViewProofModal = useCallback((billing: Billing) => {
-    setViewProofBilling(billing);
-    setViewProofModalVisible(true);
-  }, []);
-
-  const unpaidBillings = billings.filter((billing) => {
-    return billing.status !== 'notified';
+    return false;
   });
 
   return (
@@ -708,45 +467,7 @@ export default function Billing() {
           <Text style={dynamicStyles.description}>Your bills and payment history.</Text>
         </View>
 
-        {billings.length > 0 && (
-          <View style={dynamicStyles.summaryCard}>
-            <View style={dynamicStyles.summaryRow}>
-              <View style={dynamicStyles.summaryMain}>
-                <Text style={dynamicStyles.summaryLabel}>Billing Status</Text>
-                <Text style={dynamicStyles.summaryValue}>
-                  {summary.overdueCount > 0 ? `${summary.overdueCount} overdue` : 'All up to date'}
-                </Text>
-              </View>
-              <View style={dynamicStyles.summaryBadgeGroup}>
-                {summary.overdueCount > 0 && (
-                  <View style={[dynamicStyles.summaryPill, dynamicStyles.summaryPillOverdue]}>
-                    <Text style={dynamicStyles.summaryPillLabel}>
-                      {summary.overdueCount} overdue
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-            <View style={dynamicStyles.summaryMetaRow}>
-              <Text style={dynamicStyles.summaryMetaText}>
-                Next due:{' '}
-                {summary.nextDueDate
-                  ? summary.nextDueDate.toLocaleDateString()
-                  : 'No upcoming due'}
-              </Text>
-            </View>
-          </View>
-        )}
 
-        {billings.length > 0 && (
-          <TouchableOpacity
-            style={dynamicStyles.seeAllButton}
-            onPress={() => router.push('/billing-all')}
-            activeOpacity={0.7}
-          >
-            <Text style={dynamicStyles.seeAllButtonText}>See all billings</Text>
-          </TouchableOpacity>
-        )}
 
         {loading ? (
           <View style={dynamicStyles.loadingBox}>
@@ -755,142 +476,101 @@ export default function Billing() {
           </View>
         ) : unpaidBillings.length === 0 ? (
           <View style={dynamicStyles.emptyBox}>
-            <Text style={dynamicStyles.emptyText}>No outstanding billings.</Text>
+            <Text style={dynamicStyles.emptyText}>No billings due.</Text>
           </View>
         ) : (
           <View style={dynamicStyles.list}>
-            {unpaidBillings.slice(0, 3).map((billing) => (
-              <View
-                key={billing.id}
-                style={[
-                  dynamicStyles.card,
-                  billing.status === 'overdue' ? dynamicStyles.cardOverdue : null,
-                ]}
-              >
-                <View style={dynamicStyles.cardHeader}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={dynamicStyles.cardTitle}>{billing.billingCycle || 'Billing'}</Text>
-                    {billing.billingType && (
-                      <View
-                        style={[
-                          dynamicStyles.typePill,
-                          billing.billingType === 'water'
-                            ? dynamicStyles.typePillWater
-                            : dynamicStyles.typePillElectricity,
-                        ]}
-                      >
-                        <Text style={dynamicStyles.typePillText}>
-                          {billing.billingType === 'water' ? 'Water' : 'Electricity'}
+            {unpaidBillings.map((billing) => {
+              // Calculate days until due
+              let dueDate: Date | null = null;
+              try {
+                const raw = (billing as any).dueDate;
+                if (raw?.toDate && typeof raw.toDate === 'function') {
+                  dueDate = raw.toDate();
+                } else {
+                  dueDate = new Date(billing.dueDate);
+                }
+                if (dueDate && Number.isNaN(dueDate.getTime())) {
+                  dueDate = null;
+                } else if (dueDate) {
+                  dueDate.setHours(0, 0, 0, 0);
+                }
+              } catch {
+                dueDate = null;
+              }
+
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const diffMs = dueDate ? dueDate.getTime() - today.getTime() : 0;
+              const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+              const isOverdue = diffDays < 0;
+
+              return (
+                <View
+                  key={billing.id}
+                  style={[
+                    dynamicStyles.card,
+                    isOverdue && dynamicStyles.cardOverdue
+                  ]}
+                >
+                  <View style={dynamicStyles.cardContent}>
+                    <View style={dynamicStyles.cardHeaderRow}>
+                      <View style={[
+                        dynamicStyles.notificationIcon,
+                        isOverdue && dynamicStyles.notificationIconOverdue
+                      ]}>
+                        <Text style={[
+                          dynamicStyles.notificationIconText,
+                          isOverdue && dynamicStyles.notificationIconTextOverdue
+                        ]}>
+                          {isOverdue ? '!' : '📅'}
                         </Text>
                       </View>
-                    )}
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    {renderStatus(billing)}
-                    {getRiskChip(billing)}
+                      <View style={dynamicStyles.cardTextContainer}>
+                        <Text style={dynamicStyles.notificationTitle}>
+                          {isOverdue ? 'Billing Due' : 'Upcoming Billing'}
+                        </Text>
+                        <Text style={[
+                          dynamicStyles.dueDateText,
+                          isOverdue && dynamicStyles.dueDateTextOverdue
+                        ]}>
+                          Due: {formatDate(billing.dueDate)}
+                        </Text>
+                      </View>
+                    </View>
+                    
+                    <View style={dynamicStyles.messageContainer}>
+                      <Text style={dynamicStyles.notificationMessage}>
+                        {isOverdue 
+                          ? 'Your billing is now due. Please take action.'
+                          : `Your billing will be due in ${diffDays} day${diffDays !== 1 ? 's' : ''}.`}
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[
+                        dynamicStyles.markPaidButton,
+                        markingAsPaid === billing.id && dynamicStyles.markPaidButtonDisabled
+                      ]}
+                      onPress={() => handleMarkAsPaid(billing.id)}
+                      disabled={markingAsPaid === billing.id}
+                      activeOpacity={0.7}
+                    >
+                      {markingAsPaid === billing.id ? (
+                        <ActivityIndicator size="small" color="#ffffff" />
+                      ) : (
+                        <Text style={dynamicStyles.markPaidButtonText}>
+                          Mark as Paid
+                        </Text>
+                      )}
+                    </TouchableOpacity>
                   </View>
                 </View>
-                <Text style={dynamicStyles.rowText}>Due: {formatDate(billing.dueDate)}</Text>
-                <Text style={dynamicStyles.rowText}>Description: {billing.description || '—'}</Text>
-
-                {billing.userProofStatus === 'pending' ? (
-                  <Text style={[dynamicStyles.rowText, { marginTop: 6, color: '#2563eb' }]}>
-                    Proof submitted. Waiting for admin verification.
-                  </Text>
-                ) : billing.userProofStatus === 'verified' ? (
-                  <Text style={[dynamicStyles.rowText, { marginTop: 6, color: '#16a34a' }]}>
-                    Proof verified by admin.
-                  </Text>
-                ) : billing.userProofStatus === 'rejected' ? (
-                  <Text style={[dynamicStyles.rowText, { marginTop: 6, color: '#dc2626' }]}>
-                    Proof rejected. Please contact admin.
-                  </Text>
-                ) : billing.status !== 'paid' ? (
-                  <TouchableOpacity
-                    style={dynamicStyles.proofButton}
-                    onPress={() => openProofModal(billing)}
-                  >
-                    <Text style={dynamicStyles.proofButtonText}>Send Proof of Payment</Text>
-                  </TouchableOpacity>
-                ) : null}
-
-                {(billing.userProofImageUrl || billing.userProofDetails) && (
-                  <TouchableOpacity
-                    style={dynamicStyles.viewProofButton}
-                    onPress={() => openViewProofModal(billing)}
-                  >
-                    <Text style={dynamicStyles.viewProofButtonText}>View receipt / proof</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
       </ScrollView>
-
-      <Modal
-        visible={proofModalVisible}
-        animationType="fade"
-        transparent
-        onRequestClose={() => {
-          setProofModalVisible(false);
-          setSelectedBilling(null);
-          setProofImage(null);
-        }}
-      >
-        <View style={dynamicStyles.modalOverlay}>
-          <View style={dynamicStyles.modalCard}>
-            <View style={dynamicStyles.modalHeader}>
-              <Text style={dynamicStyles.modalTitle}>Proof of Payment</Text>
-              {selectedBilling && (
-                <Text style={dynamicStyles.modalSubtitle}>
-                  {selectedBilling.billingCycle || 'Billing'}
-                </Text>
-              )}
-            </View>
-
-            <View style={dynamicStyles.modalBody}>
-              <View style={dynamicStyles.proofActionsRow}>
-                <TouchableOpacity style={[dynamicStyles.proofActionButton, dynamicStyles.proofActionPrimary]} onPress={showImageSourcePicker}>
-                  <Text style={dynamicStyles.proofActionPrimaryText}>Select Image</Text>
-                </TouchableOpacity>
-              </View>
-              {proofImage ? (
-                <Image source={{ uri: proofImage }} style={dynamicStyles.proofPreview} />
-              ) : (
-                <Text style={dynamicStyles.modalHint}>Attach a clear photo or screenshot of your payment.</Text>
-              )}
-            </View>
-
-            <View style={dynamicStyles.modalActions}>
-              <TouchableOpacity
-                style={[dynamicStyles.modalButton, dynamicStyles.modalCancel]}
-                onPress={() => {
-                  setProofModalVisible(false);
-                  setSelectedBilling(null);
-                  setProofImage(null);
-                }}
-              >
-                <Text style={dynamicStyles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[dynamicStyles.modalButton, dynamicStyles.modalSubmit, submittingProof && dynamicStyles.modalButtonDisabled]}
-                onPress={handleSubmitProof}
-                disabled={submittingProof}
-              >
-                {submittingProof ? (
-                  <View style={dynamicStyles.submitButtonContent}>
-                    <ActivityIndicator size="small" color="#ffffff" />
-                    <Text style={dynamicStyles.modalSubmitText}>Submitting...</Text>
-                  </View>
-                ) : (
-                  <Text style={dynamicStyles.modalSubmitText}>Submit Proof</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       <Modal
         visible={viewProofModalVisible && !!viewProofBilling}
