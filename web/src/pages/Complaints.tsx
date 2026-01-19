@@ -238,6 +238,14 @@ function Complaints() {
     
     let rejectionReason: string | undefined = undefined;
     
+    // Show confirmation dialog when setting status to in-progress
+    if (newStatus === 'in-progress') {
+      const confirmed = window.confirm('Are you sure you want to mark this complaint as in progress? This action will notify the user that their complaint is being processed.');
+      if (!confirmed) {
+        return;
+      }
+    }
+    
     // Show confirmation dialog when resolving a complaint
     if (newStatus === 'resolved') {
       const confirmed = window.confirm('Are you sure you want to mark this complaint as resolved? This action will notify the user and they will be able to submit a new complaint.');
