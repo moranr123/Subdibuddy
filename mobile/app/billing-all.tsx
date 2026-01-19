@@ -7,24 +7,13 @@ import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestor
 import { getAuthService, db } from '../firebase/config';
 import { FontAwesome5 } from '@expo/vector-icons';
 
-interface Payment {
-  amount: number;
-  paymentDate: string;
-  paymentMethod: string;
-  referenceNumber?: string;
-}
-
 interface Billing {
   id: string;
   billingCycle: string;
   dueDate: string;
-  amount: number;
   description: string;
   billingType?: 'water' | 'electricity';
-  status: 'pending' | 'paid' | 'overdue' | 'partial';
-  payments?: Payment[];
-  totalPaid?: number;
-  balance?: number;
+  status: 'pending' | 'notified' | 'overdue';
   createdAt?: any;
   userProofDetails?: string;
   userProofImageUrl?: string;
@@ -71,10 +60,6 @@ export default function BillingAll() {
             id: doc.id,
             ...data,
           } as Billing;
-          const totalPaid =
-            billing.payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
-          billing.totalPaid = totalPaid;
-          billing.balance = (billing.amount || 0) - totalPaid;
           list.push(billing);
         });
         setBillings(list);
@@ -108,11 +93,6 @@ export default function BillingAll() {
     }
   };
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-PH', {
-      style: 'currency',
-      currency: 'PHP',
-    }).format(amount || 0);
 
   const passesDateFilter = (billing: Billing) => {
     if (dateFilter === 'all') return true;
@@ -254,24 +234,15 @@ export default function BillingAll() {
                     </View>
                     <View style={[
                       styles.statusBadge,
-                      billing.status === 'paid' && styles.statusBadgePaid
+                      billing.status === 'notified' && styles.statusBadgePaid
                     ]}>
                       <Text style={styles.statusBadgeText}>
                         {(billing.status || 'pending').toUpperCase()}
                       </Text>
                     </View>
                   </View>
-                  <Text style={styles.amount}>{formatCurrency(billing.amount)}</Text>
                   <Text style={styles.rowText}>
                     Due: {formatDate(billing.dueDate)}
-                  </Text>
-                  <Text style={styles.rowText}>
-                    Paid: {formatCurrency(billing.totalPaid || 0)} | Balance:{' '}
-                    {formatCurrency(
-                      typeof billing.balance === 'number'
-                        ? billing.balance
-                        : (billing.amount || 0) - (billing.totalPaid || 0)
-                    )}
                   </Text>
                   <Text style={styles.rowText}>
                     Description: {billing.description || '—'}
@@ -312,8 +283,7 @@ export default function BillingAll() {
               <Text style={styles.modalTitle}>Billing Receipt / Proof</Text>
               {viewProofBilling && (
                 <Text style={styles.modalSubtitle}>
-                  {viewProofBilling.billingCycle || 'Billing'} ·{' '}
-                  {formatCurrency(viewProofBilling.amount)}
+                  {viewProofBilling.billingCycle || 'Billing'}
                 </Text>
               )}
             </View>
@@ -504,12 +474,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 11,
     fontWeight: '700',
-  },
-  amount: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 4,
   },
   rowText: {
     fontSize: 13,

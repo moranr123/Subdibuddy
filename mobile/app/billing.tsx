@@ -11,24 +11,13 @@ import { getAuthService, db, storage } from '../firebase/config';
 import { useNotifications } from '../hooks/useNotifications';
 import { useTheme } from '../contexts/ThemeContext';
 
-interface Payment {
-  amount: number;
-  paymentDate: string;
-  paymentMethod: string;
-  referenceNumber?: string;
-}
-
 interface Billing {
   id: string;
   billingCycle: string;
   dueDate: string;
-  amount: number;
   description: string;
   billingType?: 'water' | 'electricity';
-  status: 'pending' | 'paid' | 'overdue' | 'partial';
-  payments?: Payment[];
-  totalPaid?: number;
-  balance?: number;
+  status: 'pending' | 'notified' | 'overdue';
   createdAt?: any;
   userProofDetails?: string;
   userProofImageUrl?: string;
@@ -94,9 +83,6 @@ export default function Billing() {
             id: doc.id,
             ...data,
           } as Billing;
-          const totalPaid = billing.payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
-          billing.totalPaid = totalPaid;
-          billing.balance = (billing.amount || 0) - totalPaid;
           list.push(billing);
         });
         setBillings(list);
@@ -130,15 +116,11 @@ export default function Billing() {
     }
   };
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount || 0);
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'paid':
+      case 'notified':
         return '#16a34a';
-      case 'partial':
-        return '#2563eb';
       case 'overdue':
         return '#dc2626';
       default:
@@ -225,12 +207,6 @@ export default function Billing() {
       fontSize: 16,
       fontWeight: '600',
       color: theme.text,
-    },
-    amount: {
-      fontSize: 20,
-      fontWeight: '700',
-      color: theme.text,
-      marginBottom: 4,
     },
     rowText: {
       fontSize: 13,
@@ -503,10 +479,10 @@ export default function Billing() {
   );
 
   const getRiskChip = (billing: Billing) => {
-    if (billing.status === 'paid') {
+    if (billing.status === 'notified') {
       return (
         <View style={[dynamicStyles.riskChip, dynamicStyles.riskChipSafe]}>
-          <Text style={dynamicStyles.riskChipText}>Paid</Text>
+          <Text style={dynamicStyles.riskChipText}>Notified</Text>
         </View>
       );
     }
@@ -557,27 +533,18 @@ export default function Billing() {
   const summary = (() => {
     if (!billings || billings.length === 0) {
       return {
-        totalOutstanding: 0,
         overdueCount: 0,
         nextDueDate: null as Date | null,
       };
     }
 
-    let totalOutstanding = 0;
     let overdueCount = 0;
     let nextDueDate: Date | null = null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     billings.forEach((b) => {
-      const isPaid = b.status === 'paid';
-      const balance =
-        typeof b.balance === 'number'
-          ? b.balance
-          : (b.amount || 0) - (b.totalPaid || 0);
-      if (!isPaid && balance > 0) {
-        totalOutstanding += balance;
-      }
+      const isNotified = b.status === 'notified';
 
       let dueDate: Date | null = null;
       try {
@@ -596,18 +563,18 @@ export default function Billing() {
         dueDate = null;
       }
 
-      if (dueDate && !isPaid && dueDate < today) {
+      if (dueDate && !isNotified && dueDate < today) {
         overdueCount += 1;
       }
 
-      if (dueDate && !isPaid && dueDate >= today) {
+      if (dueDate && !isNotified && dueDate >= today) {
         if (!nextDueDate || dueDate.getTime() < nextDueDate.getTime()) {
           nextDueDate = dueDate;
         }
       }
     });
 
-    return { totalOutstanding, overdueCount, nextDueDate };
+    return { overdueCount, nextDueDate };
   })();
 
   const openProofModal = useCallback((billing: Billing) => {
@@ -698,7 +665,7 @@ export default function Billing() {
           subject: `New Proof of Payment – ${billingTypeLabel}`,
           message: `A new proof of payment was submitted for ${billingTypeLabel.toLowerCase()} billing "${
             selectedBilling.billingCycle || 'Billing'
-          }" amounting to ${formatCurrency(selectedBilling.amount)}.`,
+          }".`,
           recipientType: 'admin',
           isRead: false,
           createdAt: Timestamp.now(),
@@ -724,11 +691,7 @@ export default function Billing() {
   }, []);
 
   const unpaidBillings = billings.filter((billing) => {
-    const balance =
-      typeof billing.balance === 'number'
-        ? billing.balance
-        : (billing.amount || 0) - (billing.totalPaid || 0);
-    return billing.status !== 'paid' && balance > 0;
+    return billing.status !== 'notified';
   });
 
   return (
@@ -749,17 +712,19 @@ export default function Billing() {
           <View style={dynamicStyles.summaryCard}>
             <View style={dynamicStyles.summaryRow}>
               <View style={dynamicStyles.summaryMain}>
-                <Text style={dynamicStyles.summaryLabel}>Total outstanding</Text>
+                <Text style={dynamicStyles.summaryLabel}>Billing Status</Text>
                 <Text style={dynamicStyles.summaryValue}>
-                  {formatCurrency(summary.totalOutstanding)}
+                  {summary.overdueCount > 0 ? `${summary.overdueCount} overdue` : 'All up to date'}
                 </Text>
               </View>
               <View style={dynamicStyles.summaryBadgeGroup}>
-                <View style={[dynamicStyles.summaryPill, dynamicStyles.summaryPillOverdue]}>
-                  <Text style={dynamicStyles.summaryPillLabel}>
-                    {summary.overdueCount} overdue
-                  </Text>
-                </View>
+                {summary.overdueCount > 0 && (
+                  <View style={[dynamicStyles.summaryPill, dynamicStyles.summaryPillOverdue]}>
+                    <Text style={dynamicStyles.summaryPillLabel}>
+                      {summary.overdueCount} overdue
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
             <View style={dynamicStyles.summaryMetaRow}>
@@ -825,13 +790,8 @@ export default function Billing() {
                     {getRiskChip(billing)}
                   </View>
                 </View>
-                <Text style={dynamicStyles.amount}>{formatCurrency(billing.amount)}</Text>
                 <Text style={dynamicStyles.rowText}>Due: {formatDate(billing.dueDate)}</Text>
                 <Text style={dynamicStyles.rowText}>Description: {billing.description || '—'}</Text>
-                <Text style={dynamicStyles.rowText}>
-                  Paid: {formatCurrency(billing.totalPaid || 0)} | Balance:{' '}
-                  {formatCurrency(billing.balance || billing.amount)}
-                </Text>
 
                 {billing.userProofStatus === 'pending' ? (
                   <Text style={[dynamicStyles.rowText, { marginTop: 6, color: '#2563eb' }]}>
@@ -884,7 +844,7 @@ export default function Billing() {
               <Text style={dynamicStyles.modalTitle}>Proof of Payment</Text>
               {selectedBilling && (
                 <Text style={dynamicStyles.modalSubtitle}>
-                  {selectedBilling.billingCycle || 'Billing'} · {formatCurrency(selectedBilling.amount)}
+                  {selectedBilling.billingCycle || 'Billing'}
                 </Text>
               )}
             </View>
@@ -947,8 +907,7 @@ export default function Billing() {
               <Text style={dynamicStyles.modalTitle}>Billing Receipt / Proof</Text>
               {viewProofBilling && (
                 <Text style={dynamicStyles.modalSubtitle}>
-                  {viewProofBilling.billingCycle || 'Billing'} ·{' '}
-                  {formatCurrency(viewProofBilling.amount)}
+                  {viewProofBilling.billingCycle || 'Billing'}
                 </Text>
               )}
             </View>

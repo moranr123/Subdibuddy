@@ -7,14 +7,6 @@ import { isSuperadmin } from '../utils/auth';
 import Layout from '../components/Layout';
 import Header from '../components/Header';
 
-interface Payment {
-  id?: string;
-  amount: number;
-  paymentDate: string;
-  paymentMethod: string;
-  referenceNumber?: string;
-}
-
 interface Resident {
   id: string;
   email: string;
@@ -34,13 +26,9 @@ interface Billing {
   residentEmail: string;
   billingCycle: string;
   dueDate: string;
-  amount: number;
   description: string;
   billingType?: 'water' | 'electricity';
-  status: 'pending' | 'paid' | 'overdue' | 'partial';
-  payments?: Payment[];
-  totalPaid?: number;
-  balance?: number;
+  status: 'pending' | 'notified' | 'overdue';
   createdAt: any;
   updatedAt?: any;
   userProofDetails?: string;
@@ -58,12 +46,10 @@ function BillingPayment() {
   const [loading, setLoading] = useState(false);
   const [loadingResidents, setLoadingResidents] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [selectedBilling, setSelectedBilling] = useState<Billing | null>(null);
   const [showSendBillForm, setShowSendBillForm] = useState(false);
   const [sendBillResident, setSendBillResident] = useState<Resident | null>(null);
   const [sendBillData, setSendBillData] = useState({
-    amount: '',
     billingCycle: '',
     dueDate: new Date().toISOString().split('T')[0],
     description: '',
@@ -73,15 +59,8 @@ function BillingPayment() {
     residentId: '',
     billingCycle: '',
     dueDate: '',
-    amount: '',
     description: '',
     billingType: '',
-  });
-  const [paymentData, setPaymentData] = useState({
-    amount: '',
-    paymentDate: new Date().toISOString().split('T')[0],
-    paymentMethod: 'cash',
-    referenceNumber: '',
   });
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
@@ -170,24 +149,16 @@ function BillingPayment() {
           ...data,
         } as Billing;
         
-        // Calculate totals
-        const totalPaid = billing.payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
-        billing.totalPaid = totalPaid;
-        billing.balance = billing.amount - totalPaid;
+        // Update status based on due date
+        const dueDate = new Date(billing.dueDate);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        dueDate.setHours(0, 0, 0, 0);
         
-        // Update status based on balance
-        if (billing.balance <= 0) {
-          billing.status = 'paid';
-        } else if (billing.balance < billing.amount) {
-          billing.status = 'partial';
-        } else {
-          const dueDate = new Date(billing.dueDate);
-          const today = new Date();
-          if (dueDate < today) {
-            billing.status = 'overdue';
-          } else {
-            billing.status = 'pending';
-          }
+        if (dueDate < today && billing.status !== 'notified') {
+          billing.status = 'overdue';
+        } else if (billing.status === 'pending') {
+          billing.status = 'pending';
         }
         
         billingsData.push(billing);
@@ -306,23 +277,16 @@ function BillingPayment() {
                 ...data,
               } as Billing;
 
-              const totalPaid =
-                billing.payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
-              billing.totalPaid = totalPaid;
-              billing.balance = billing.amount - totalPaid;
-
-              if (billing.balance <= 0) {
-                billing.status = 'paid';
-              } else if (billing.balance < billing.amount) {
-                billing.status = 'partial';
-              } else {
-                const dueDate = new Date(billing.dueDate);
-                const today = new Date();
-                if (dueDate < today) {
-                  billing.status = 'overdue';
-                } else {
-                  billing.status = 'pending';
-                }
+              // Update status based on due date
+              const dueDate = new Date(billing.dueDate);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              dueDate.setHours(0, 0, 0, 0);
+              
+              if (dueDate < today && billing.status !== 'notified') {
+                billing.status = 'overdue';
+              } else if (billing.status === 'pending') {
+                billing.status = 'pending';
               }
 
               billingsData.push(billing);
@@ -358,7 +322,7 @@ function BillingPayment() {
 
   const handleSubmitBilling = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.residentId || !formData.billingCycle || !formData.dueDate || !formData.amount || !formData.description || !formData.billingType) {
+    if (!formData.residentId || !formData.billingCycle || !formData.dueDate || !formData.description || !formData.billingType) {
       alert('Please fill in all required fields');
       return;
     }
@@ -380,11 +344,9 @@ function BillingPayment() {
         residentEmail: selectedResident.email,
         billingCycle: formData.billingCycle,
         dueDate: formData.dueDate,
-        amount: parseFloat(formData.amount),
         description: formData.description,
         billingType: formData.billingType as 'water' | 'electricity',
         status: 'pending' as const,
-        payments: [],
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       };
@@ -399,7 +361,7 @@ function BillingPayment() {
       
       console.log('Billing created successfully');
       
-      setFormData({ residentId: '', billingCycle: '', dueDate: '', amount: '', description: '', billingType: '' });
+      setFormData({ residentId: '', billingCycle: '', dueDate: '', description: '', billingType: '' });
       setShowForm(false);
       await fetchBillings();
     } catch (error) {
@@ -410,62 +372,6 @@ function BillingPayment() {
     }
   }, [formData, residents, db, fetchBillings]);
 
-  const handleSubmitPayment = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!paymentData.amount || !paymentData.paymentDate || !paymentData.paymentMethod || !selectedBilling) {
-      alert('Please fill in all required fields');
-      return;
-    }
-
-    if (!db) return;
-
-    try {
-      setLoading(true);
-      const paymentAmount = parseFloat(paymentData.amount);
-      
-      const currentPayments = selectedBilling.payments || [];
-      const newPayment: Payment = {
-        amount: paymentAmount,
-        paymentDate: paymentData.paymentDate,
-        paymentMethod: paymentData.paymentMethod,
-        referenceNumber: paymentData.referenceNumber || undefined,
-      };
-      
-      const updatedPayments = [...currentPayments, newPayment];
-      const totalPaid = updatedPayments.reduce((sum, p) => sum + p.amount, 0);
-      const balance = selectedBilling.amount - totalPaid;
-      
-      let newStatus: Billing['status'] = 'pending';
-      if (balance <= 0) {
-        newStatus = 'paid';
-      } else if (balance < selectedBilling.amount) {
-        newStatus = 'partial';
-      } else {
-        const dueDate = new Date(selectedBilling.dueDate);
-        const today = new Date();
-        if (dueDate < today) {
-          newStatus = 'overdue';
-        }
-      }
-
-      await updateDoc(doc(db, 'billings', selectedBilling.id), {
-        payments: updatedPayments,
-        status: newStatus,
-        updatedAt: Timestamp.now(),
-      });
-      
-      setPaymentData({ amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentMethod: 'cash', referenceNumber: '' });
-      setShowPaymentForm(false);
-      setSelectedBilling(null);
-      await fetchBillings();
-      alert('Payment recorded successfully!');
-    } catch (error) {
-      console.error('Error recording payment:', error);
-      alert('Failed to record payment');
-    } finally {
-      setLoading(false);
-    }
-  }, [paymentData, selectedBilling, db, fetchBillings]);
 
   const formatDate = (value: any) => {
     if (!value) return 'N/A';
@@ -607,12 +513,6 @@ function BillingPayment() {
     return map;
   }, [billings]);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-PH', {
-      style: 'currency',
-      currency: 'PHP',
-    }).format(amount);
-  };
 
   const overdueCount = useMemo(
     () => billings.filter((b) => b.status === 'overdue').length,
@@ -620,7 +520,7 @@ function BillingPayment() {
   );
 
   const unpaidCount = useMemo(
-    () => billings.filter((b) => b.status === 'pending' || b.status === 'partial' || b.status === 'overdue').length,
+    () => billings.filter((b) => b.status === 'pending' || b.status === 'overdue').length,
     [billings]
   );
 
@@ -630,7 +530,6 @@ function BillingPayment() {
         typeOverride ?? (isWaterView ? 'water' : isElectricView ? 'electricity' : '');
       setSendBillResident(null);
       setSendBillData({
-        amount: '',
         billingCycle: '',
         dueDate: new Date().toISOString().split('T')[0],
         description: '',
@@ -655,7 +554,6 @@ function BillingPayment() {
 
       setSendBillResident(resident);
       setSendBillData({
-        amount: '',
         billingCycle: '',
         dueDate: new Date().toISOString().split('T')[0],
         description: '',
@@ -681,8 +579,8 @@ function BillingPayment() {
   const handleSubmitSendBill = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!sendBillResident || !sendBillData.amount || !sendBillData.dueDate || !sendBillData.billingType) {
-        alert('Please fill in the amount and due date.');
+      if (!sendBillResident || !sendBillData.dueDate || !sendBillData.billingType) {
+        alert('Please fill in the due date and billing type.');
         return;
       }
       if (!db) return;
@@ -695,27 +593,23 @@ function BillingPayment() {
           residentEmail: sendBillResident.email,
           billingCycle: sendBillData.billingCycle || 'Manual Billing',
           dueDate: sendBillData.dueDate,
-          amount: parseFloat(sendBillData.amount),
           description: sendBillData.description || 'Manual billing created by admin',
           billingType: sendBillData.billingType as 'water' | 'electricity',
-          status: 'pending',
-          payments: [],
+          status: 'notified',
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
         } as any;
 
         await addDoc(collection(db, 'billings'), billingData);
 
-        // Optional: also send a notification so the resident is alerted
+        // Send a notification so the resident is alerted about their due date
         await addDoc(collection(db, 'notifications'), {
           recipientUserId: sendBillResident.id,
           type: 'billing',
-          subject: 'New Billing',
-          message: `A new billing of ${formatCurrency(
-            billingData.amount
-          )} has been posted for ${billingData.billingCycle}. Due date: ${formatDate(
+          subject: 'Billing Due Date Notification',
+          message: `You have a billing due for ${billingData.billingCycle}. Due date: ${formatDate(
             billingData.dueDate
-          )}.`,
+          )}. ${billingData.description ? `Description: ${billingData.description}` : ''}`,
           isRead: false,
           createdAt: Timestamp.now(),
         });
@@ -804,14 +698,10 @@ function BillingPayment() {
             action === 'approve'
               ? `Your proof of payment for ${billingTypeLabel.toLowerCase()} billing "${
                   proofBilling.billingCycle
-                }" amounting to ${formatCurrency(
-                  proofBilling.amount
-                )} has been approved.`
+                }" has been approved.`
               : `Your proof of payment for ${billingTypeLabel.toLowerCase()} billing "${
                   proofBilling.billingCycle
-                }" amounting to ${formatCurrency(
-                  proofBilling.amount
-                )} has been rejected. Please contact the admin if you have questions.`;
+                }" has been rejected. Please contact the admin if you have questions.`;
 
           await addDoc(collection(db, 'notifications'), {
             type: 'billing_proof_status',
@@ -869,10 +759,9 @@ function BillingPayment() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'paid': return '#4CAF50';
+      case 'notified': return '#4CAF50';
       case 'pending': return '#FFA500';
-      case 'overdue': return '#1e40af';
-      case 'partial': return '#2196F3';
+      case 'overdue': return '#dc2626';
       default: return '#666666';
     }
   };
@@ -969,36 +858,20 @@ function BillingPayment() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-6">
-                        <div className="mb-6">
-                          <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
-                            Amount *
-                          </label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={formData.amount}
-                            onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                            placeholder="0.00"
-                            required
-                            className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
-                          />
-                        </div>
-                        <div className="mb-6">
-                          <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
-                            Billing Type *
-                          </label>
-                          <select
-                            value={formData.billingType}
-                            onChange={(e) => setFormData({ ...formData, billingType: e.target.value })}
-                            required
-                            className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
-                          >
-                            <option value="">Select type</option>
-                            <option value="water">Water</option>
-                            <option value="electricity">Electricity</option>
-                          </select>
-                        </div>
+                      <div className="mb-6">
+                        <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
+                          Billing Type *
+                        </label>
+                        <select
+                          value={formData.billingType}
+                          onChange={(e) => setFormData({ ...formData, billingType: e.target.value })}
+                          required
+                          className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
+                        >
+                          <option value="">Select type</option>
+                          <option value="water">Water</option>
+                          <option value="electricity">Electricity</option>
+                        </select>
                       </div>
 
                       <div className="mb-6">
@@ -1028,7 +901,7 @@ function BillingPayment() {
                           className="bg-gray-800 text-white border border-gray-600 px-5 py-2.5 rounded-md text-sm font-medium cursor-pointer transition-all hover:border-gray-500 hover:bg-gray-700"
                           onClick={() => {
                             setShowForm(false);
-                            setFormData({ residentId: '', billingCycle: '', dueDate: '', amount: '', description: '', billingType: '' });
+                            setFormData({ residentId: '', billingCycle: '', dueDate: '', description: '', billingType: '' });
                           }}
                         >
                           Cancel
@@ -1064,9 +937,6 @@ function BillingPayment() {
                             <span>{unpaidCount} resident billing{unpaidCount > 1 ? 's' : ''} are still unpaid or partially paid.</span>
                           )}
                         </div>
-                        <span className="text-[11px] text-yellow-800">
-                          Use "Send Bill (₱)" in the Actions column to notify residents about their dues.
-                        </span>
                       </div>
                     )}
                     <table className="w-full border-collapse text-sm">
@@ -1076,20 +946,14 @@ function BillingPayment() {
                           <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Resident</th>
                           <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Billing Cycle</th>
                           <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Due Date</th>
-                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Amount</th>
-                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Paid</th>
-                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Balance</th>
                           <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Status</th>
-                          <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {paginated.map((billing) => (
                           <tr
                             key={billing.id}
-                            className={`last:border-b-0 border-b border-gray-100 ${
-                              billing.status === 'overdue' ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-gray-50'
-                            }`}
+                            className="last:border-b-0 border-b border-gray-100 hover:bg-gray-50"
                           >
                             <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
                               {formatDate(billing.createdAt?.toDate ? billing.createdAt.toDate().toISOString() : '')}
@@ -1097,9 +961,6 @@ function BillingPayment() {
                             <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{billing.residentEmail}</td>
                             <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{billing.billingCycle}</td>
                             <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{formatDate(billing.dueDate)}</td>
-                            <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{formatCurrency(billing.amount)}</td>
-                            <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{formatCurrency(billing.totalPaid || 0)}</td>
-                            <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">{formatCurrency(billing.balance || billing.amount)}</td>
                             <td className="px-4 py-4 border-b border-gray-100 align-middle">
                               <span
                                 className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide text-white inline-block"
@@ -1107,33 +968,6 @@ function BillingPayment() {
                               >
                                 {billing.status.toUpperCase()}
                               </span>
-                            </td>
-                            <td className="px-4 py-4 border-b border-gray-100 align-middle">
-                              <div className="flex flex-col sm:flex-row gap-2">
-                                <button
-                                  className="bg-green-500 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-[#45a049]"
-                                  onClick={() => {
-                                    setSelectedBilling(billing);
-                                    setShowPaymentForm(true);
-                                  }}
-                                >
-                                  Record Payment
-                                </button>
-                                <button
-                                  className="bg-blue-600 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-blue-700"
-                                  onClick={() => openSendBillFormForBilling(billing)}
-                                >
-                                  Send Bill (₱)
-                                </button>
-                                {billing.userProofStatus === 'pending' && (
-                                  <button
-                                    className="bg-yellow-500 text-white border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all hover:bg-yellow-600"
-                                    onClick={() => openProofModalForBilling(billing)}
-                                  >
-                                    Review Proof
-                                  </button>
-                                )}
-                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1346,9 +1180,7 @@ function BillingPayment() {
                             return (
                               <div
                                 key={resident.id}
-                                className={`border border-gray-200 rounded-lg p-4 bg-white shadow-sm ${
-                                  isDue ? 'border-red-300 bg-red-50/50' : ''
-                                }`}
+                                className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm"
                               >
                                 <div className="flex items-center justify-between mb-2">
                                   <div>
@@ -1359,11 +1191,6 @@ function BillingPayment() {
                                       {resident.email}
                                     </p>
                                   </div>
-                                  {isDue && (
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-700 uppercase tracking-wide">
-                                      Due
-                                    </span>
-                                  )}
                                 </div>
                                 <div className="text-xs text-gray-600 space-y-0.5 mb-3">
                                   <p>
@@ -1389,26 +1216,6 @@ function BillingPayment() {
                                     )}
                                   </p>
                                 </div>
-                                <button
-                                  className={`w-full border-none px-3 py-2 rounded text-xs font-medium cursor-pointer transition-all ${
-                                    !canSendBilling
-                                      ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                                      : 'bg-blue-600 text-white hover:bg-blue-700'
-                                  }`}
-                                  disabled={!canSendBilling}
-                                  onClick={() => {
-                                    if (!canSendBilling) return;
-                                    const latestBilling =
-                                      latestBillingByResidentId.get(resident.id);
-                                    if (latestBilling) {
-                                      openSendBillFormForBilling(latestBilling);
-                                    } else {
-                                      openSendBillFormForResident(resident);
-                                    }
-                                  }}
-                                >
-                                  {!canSendBilling ? 'Already billed' : 'Send Bill (₱)'}
-                                </button>
                               </div>
                             );
                           })}
@@ -1439,9 +1246,6 @@ function BillingPayment() {
                                     ? 'Water Billing Date'
                                     : 'Electricity Billing Date'}
                                 </th>
-                                <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
-                                  Actions
-                                </th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1469,20 +1273,11 @@ function BillingPayment() {
                               return (
                               <tr
                                 key={resident.id}
-                                className={`last:border-b-0 border-b border-gray-100 ${
-                                      isDue
-                                        ? 'bg-red-50 hover:bg-red-100'
-                                        : 'hover:bg-gray-50'
-                                }`}
+                                className="last:border-b-0 border-b border-gray-100 hover:bg-gray-50"
                               >
                                 <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
                                       <div className="flex items-center gap-2">
                                         <span>{resident.fullName || 'N/A'}</span>
-                                        {isDue && (
-                                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-700 uppercase tracking-wide">
-                                            Due
-                                          </span>
-                                        )}
                                       </div>
                                 </td>
                                 <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
@@ -1503,34 +1298,6 @@ function BillingPayment() {
                                           ? resident.waterBillingDate
                                           : resident.electricBillingDate) as any
                                   )}
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 align-middle">
-                                  <button
-                                        className={`border-none px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all ${
-                                          !canSendBilling
-                                            ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                                            : 'bg-blue-600 text-white hover:bg-blue-700'
-                                        }`}
-                                        disabled={!canSendBilling}
-                                    onClick={() => {
-                                          if (!canSendBilling) return;
-                                          const latestBilling =
-                                            latestBillingByResidentId.get(
-                                              resident.id
-                                            );
-                                      if (latestBilling) {
-                                            openSendBillFormForBilling(
-                                              latestBilling
-                                            );
-                                      } else {
-                                            openSendBillFormForResident(
-                                              resident
-                                            );
-                                      }
-                                    }}
-                                  >
-                                        {!canSendBilling ? 'Already billed' : 'Send Bill (₱)'}
-                                  </button>
                                 </td>
                               </tr>
                                 );
@@ -1784,8 +1551,6 @@ function BillingPayment() {
                               </div>
                               <div className="text-xs text-gray-600 space-y-0.5 mb-3">
                                 <p>
-                                  <span className="font-medium">Amount:</span>{' '}
-                                  {formatCurrency(billing.amount)}
                                 </p>
                                 <p>
                                   <span className="font-medium">Submitted:</span>{' '}
@@ -1833,9 +1598,6 @@ function BillingPayment() {
                                 Type
                               </th>
                               <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
-                                Amount
-                              </th>
-                              <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
                                 Submitted
                               </th>
                               <th className="px-4 py-4 text-left font-semibold text-gray-900 uppercase text-xs tracking-wide">
@@ -1869,9 +1631,6 @@ function BillingPayment() {
                                       ? 'Water'
                                       : 'Electricity'
                                     : '—'}
-                                </td>
-                                <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
-                                  {formatCurrency(billing.amount)}
                                 </td>
                                 <td className="px-4 py-4 border-b border-gray-100 text-gray-600 align-middle">
                                   {billing.userProofSubmittedAt
@@ -1950,108 +1709,6 @@ function BillingPayment() {
           </div>
         </main>
 
-        {showPaymentForm && selectedBilling && (
-          <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1000] p-5" onClick={() => setShowPaymentForm(false)}>
-            <div className="bg-gray-900 rounded-2xl w-full max-w-[600px] p-4 md:p-6 lg:p-8 shadow-2xl mx-4" onClick={(e) => e.stopPropagation()}>
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="m-0 text-white text-xl font-normal">Record Payment</h3>
-                <button 
-                  className="bg-none border-none text-2xl text-gray-300 cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded transition-all hover:bg-gray-800 hover:text-white"
-                  onClick={() => setShowPaymentForm(false)}
-                >
-                  ✕
-                </button>
-              </div>
-              <form onSubmit={handleSubmitPayment}>
-                <div className="mb-6">
-                  <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
-                    Billing: {selectedBilling.billingCycle} - {formatCurrency(selectedBilling.amount)}
-                  </label>
-                  <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
-                    Balance: {formatCurrency(selectedBilling.balance || selectedBilling.amount)}
-                  </label>
-                </div>
-                <div className="mb-6">
-                  <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
-                    Payment Amount *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={paymentData.amount}
-                    onChange={(e) => setPaymentData({ ...paymentData, amount: e.target.value })}
-                    placeholder="0.00"
-                    max={selectedBilling.balance || selectedBilling.amount}
-                    required
-                    className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="mb-6">
-                    <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
-                      Payment Date *
-                    </label>
-                    <input
-                      type="date"
-                      value={paymentData.paymentDate}
-                      onChange={(e) => setPaymentData({ ...paymentData, paymentDate: e.target.value })}
-                      required
-                      className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
-                    />
-                  </div>
-                  <div className="mb-6">
-                    <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
-                      Payment Method *
-                    </label>
-                    <select
-                      value={paymentData.paymentMethod}
-                      onChange={(e) => setPaymentData({ ...paymentData, paymentMethod: e.target.value })}
-                      required
-                      className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
-                    >
-                      <option value="cash">Cash</option>
-                      <option value="bank_transfer">Bank Transfer</option>
-                      <option value="check">Check</option>
-                      <option value="online">Online Payment</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="mb-6">
-                  <label className="block mb-2 font-normal text-gray-300 text-xs uppercase tracking-wide">
-                    Reference Number
-                  </label>
-                  <input
-                    type="text"
-                    value={paymentData.referenceNumber}
-                    onChange={(e) => setPaymentData({ ...paymentData, referenceNumber: e.target.value })}
-                    placeholder="Optional"
-                    className="w-full px-4 py-3 border border-gray-600 rounded-lg text-base font-inherit transition-all bg-gray-950 text-white box-border focus:outline-none focus:border-primary focus:bg-gray-900 focus:shadow-[0_0_0_3px_rgba(30,64,175,0.3)]"
-                  />
-                </div>
-                <div className="flex gap-3 mt-8 pt-6 border-t border-gray-600">
-                  <button 
-                    type="submit" 
-                    className="bg-primary text-white border-none px-5 py-2.5 rounded-md text-sm font-medium cursor-pointer transition-all shadow-md shadow-primary/20 hover:bg-primary-dark hover:shadow-lg hover:shadow-primary/30 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                    disabled={loading}
-                  >
-                    {loading ? 'Recording...' : 'Record Payment'}
-                  </button>
-                  <button
-                    type="button"
-                    className="bg-gray-800 text-white border border-gray-600 px-5 py-2.5 rounded-md text-sm font-medium cursor-pointer transition-all hover:border-gray-500 hover:bg-gray-700"
-                    onClick={() => {
-                      setShowPaymentForm(false);
-                      setSelectedBilling(null);
-                      setPaymentData({ amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentMethod: 'cash', referenceNumber: '' });
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
 
         {showProofModal && proofBilling && (
           <div
@@ -2087,7 +1744,6 @@ function BillingPayment() {
                   <span className="font-semibold">Resident:</span> {proofBilling.residentEmail}
                 </p>
                 <p>
-                  <span className="font-semibold">Amount:</span> {formatCurrency(proofBilling.amount)}
                 </p>
               </div>
 
@@ -2196,37 +1852,19 @@ function BillingPayment() {
               </div>
 
               <form onSubmit={handleSubmitSendBill}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="mb-4">
-                    <label className="block mb-2 font-normal text-gray-700 text-xs uppercase tracking-wide">
-                      Amount (₱) *
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={sendBillData.amount}
-                      onChange={(e) =>
-                        setSendBillData((prev) => ({ ...prev, amount: e.target.value }))
-                      }
-                      placeholder="0.00"
-                      required
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm transition-all focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block mb-2 font-normal text-gray-700 text-xs uppercase tracking-wide">
-                      Due Date *
-                    </label>
-                    <input
-                      type="date"
-                      value={sendBillData.dueDate}
-                      onChange={(e) =>
-                        setSendBillData((prev) => ({ ...prev, dueDate: e.target.value }))
-                      }
-                      required
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm transition-all focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                    />
-                  </div>
+                <div className="mb-4">
+                  <label className="block mb-2 font-normal text-gray-700 text-xs uppercase tracking-wide">
+                    Due Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={sendBillData.dueDate}
+                    onChange={(e) =>
+                      setSendBillData((prev) => ({ ...prev, dueDate: e.target.value }))
+                    }
+                    required
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm transition-all focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  />
                 </div>
 
                 <div className="mb-4">
