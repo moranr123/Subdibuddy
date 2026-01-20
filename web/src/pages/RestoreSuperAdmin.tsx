@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
-import { isSuperadmin } from '../utils/auth';
 
 function RestoreSuperAdmin() {
   const [user, setUser] = useState<any>(null);

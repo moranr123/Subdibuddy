@@ -46,7 +46,6 @@ function BillingPayment() {
   const [loading, setLoading] = useState(false);
   const [loadingResidents, setLoadingResidents] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [selectedBilling, setSelectedBilling] = useState<Billing | null>(null);
   const [showSendBillForm, setShowSendBillForm] = useState(false);
   const [sendBillResident, setSendBillResident] = useState<Resident | null>(null);
   const [sendBillData, setSendBillData] = useState({
@@ -499,19 +498,6 @@ function BillingPayment() {
   //   return { total, withDate, withoutDate };
   // }, [filteredResidentsForUtility, isWaterView, isElectricView]);
 
-  const latestBillingByResidentId = useMemo(() => {
-    const map = new Map<string, Billing>();
-    billings.forEach((billing) => {
-      if (!billing.residentId) return;
-      const existing = map.get(billing.residentId);
-      const createdAtTime = billing.createdAt?.toDate ? billing.createdAt.toDate().getTime() : 0;
-      const existingTime = existing?.createdAt?.toDate ? existing.createdAt.toDate().getTime() : 0;
-      if (!existing || createdAtTime > existingTime) {
-        map.set(billing.residentId, billing);
-      }
-    });
-    return map;
-  }, [billings]);
 
 
   const overdueCount = useMemo(
@@ -537,43 +523,6 @@ function BillingPayment() {
       });
     },
     [isWaterView, isElectricView]
-  );
-
-  const openSendBillFormForBilling = useCallback(
-    (billing: Billing) => {
-      const resident = residents.find(
-        (r) => r.id === billing.residentId || r.email === billing.residentEmail
-      );
-      if (!resident) {
-        alert('Resident not found for this billing record.');
-        return;
-      }
-      const inferredType: 'water' | 'electricity' | '' =
-        billing.billingType ||
-        (isWaterView ? 'water' : isElectricView ? 'electricity' : '');
-
-      setSendBillResident(resident);
-      setSendBillData({
-        billingCycle: '',
-        dueDate: new Date().toISOString().split('T')[0],
-        description: '',
-        billingType: inferredType,
-      });
-      setShowSendBillForm(true);
-    },
-    [residents, isWaterView, isElectricView]
-  );
-
-  const openSendBillFormForResident = useCallback(
-    (resident: Resident) => {
-      const inferredType: 'water' | 'electricity' | '' =
-        isWaterView ? 'water' : isElectricView ? 'electricity' : '';
-      setSendBillResident(resident);
-      resetSendBillForm(inferredType);
-      setSendBillResident(resident);
-      setShowSendBillForm(true);
-    },
-    [resetSendBillForm, isWaterView, isElectricView]
   );
 
   const handleSubmitSendBill = useCallback(
@@ -1160,23 +1109,6 @@ function BillingPayment() {
                         {/* Mobile cards */}
                         <div className="flex flex-col gap-3 md:hidden">
                           {paginatedResidents.map((resident) => {
-                            const billingDate = getDateFromResident(resident, !!isWaterView);
-                            const isDue =
-                              !!billingDate &&
-                              billingDate.setHours(0, 0, 0, 0) <=
-                                new Date().setHours(0, 0, 0, 0);
-                            const billingDateIsFuture =
-                              !!billingDate &&
-                              billingDate.setHours(0, 0, 0, 0) >
-                                new Date().setHours(0, 0, 0, 0);
-                            const hasUnsettledBilling = billings.some(
-                              (b) =>
-                                b.residentId === resident.id &&
-                                b.billingType === (isWaterView ? 'water' : 'electricity') &&
-                                b.status !== 'paid'
-                            );
-                            // Allow sending if: billing date is in future (updated) OR no unsettled billings
-                            const canSendBilling = billingDateIsFuture || !hasUnsettledBilling;
                             return (
                               <div
                                 key={resident.id}
@@ -1250,26 +1182,6 @@ function BillingPayment() {
                           </thead>
                           <tbody>
                             {paginatedResidents.map((resident) => {
-                                const billingDate = getDateFromResident(
-                                  resident,
-                                  !!isWaterView
-                                );
-                              const isDue =
-                                !!billingDate &&
-                                  billingDate.setHours(0, 0, 0, 0) <=
-                                    new Date().setHours(0, 0, 0, 0);
-                                const billingDateIsFuture =
-                                  !!billingDate &&
-                                  billingDate.setHours(0, 0, 0, 0) >
-                                    new Date().setHours(0, 0, 0, 0);
-                                const hasUnsettledBilling = billings.some(
-                                  (b) =>
-                                    b.residentId === resident.id &&
-                                    b.billingType === (isWaterView ? 'water' : 'electricity') &&
-                                    b.status !== 'paid'
-                                );
-                                // Allow sending if: billing date is in future (updated) OR no unsettled billings
-                                const canSendBilling = billingDateIsFuture || !hasUnsettledBilling;
                               return (
                               <tr
                                 key={resident.id}
