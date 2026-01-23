@@ -17,6 +17,7 @@ const menuItems: MenuItem[] = [
   { path: '/complaints', label: 'Complaints', icon: 'warning' },
   { path: '/visitor-pre-registration', label: 'Visitor Pre-Registration', icon: 'person_add' },
   { path: '/resident-management', label: 'Resident Management', icon: 'people' },
+  { path: '/profile-edit-requests', label: 'Profile Edit Requests', icon: 'edit' },
   { path: '/billing-payment', label: 'Billings', icon: 'payments' },
   { path: '/maintenance', label: 'Maintenance', icon: 'build' },
   { path: '/vehicle-registration', label: 'Vehicle Registration', icon: 'directions_car' },
@@ -41,6 +42,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [pendingProofsCount, setPendingProofsCount] = useState(0);
   const [pendingWaterBillingsCount, setPendingWaterBillingsCount] = useState(0);
   const [pendingElectricBillingsCount, setPendingElectricBillingsCount] = useState(0);
+  const [pendingProfileEditRequestsCount, setPendingProfileEditRequestsCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -362,6 +364,42 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
     } catch (err) {
       console.error('Error setting up electricity billing date listener:', err);
     }
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [db]);
+
+  // Listen to pending profile edit requests
+  useEffect(() => {
+    if (!db) return;
+
+    let unsubscribe: (() => void) | null = null;
+
+    const q = query(
+      collection(db, 'profileEditRequests'),
+      where('status', '==', 'pending')
+    );
+
+    unsubscribe = onSnapshot(q, (snapshot) => {
+      setPendingProfileEditRequestsCount(snapshot.size);
+    }, (error: any) => {
+      console.error('Error listening to pending profile edit requests:', error);
+      // Fallback: fetch all and filter client-side
+      if (error.code === 'failed-precondition' || error.message?.includes('index')) {
+        const q2 = query(collection(db, 'profileEditRequests'));
+        unsubscribe = onSnapshot(q2, (snapshot2) => {
+          let count = 0;
+          snapshot2.forEach((doc) => {
+            const data = doc.data();
+            if (data.status === 'pending') {
+              count++;
+            }
+          });
+          setPendingProfileEditRequestsCount(count);
+        });
+      }
+    });
 
     return () => {
       if (unsubscribe) unsubscribe();
@@ -696,6 +734,8 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
               badgeCount = pendingComplaintsCount;
             } else if (item.path === '/maintenance') {
               badgeCount = pendingMaintenanceCount;
+            } else if (item.path === '/profile-edit-requests') {
+              badgeCount = pendingProfileEditRequestsCount;
             }
 
             return (

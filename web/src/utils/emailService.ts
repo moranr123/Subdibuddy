@@ -242,3 +242,105 @@ export const sendRejectionEmail = async (
   });
 };
 
+/**
+ * Sends profile edit approval email to user
+ */
+export const sendProfileEditApprovalEmail = async (
+  email: string,
+  fullName: string
+): Promise<boolean> => {
+  if (!email) {
+    console.warn('No email address provided for profile edit approval notification');
+    return false;
+  }
+
+  const subject = 'Profile Edit Request Approved - Subdibuddy';
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Profile Edit Approved</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="background-color: #1877F2; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+        <h1 style="margin: 0;">Subdibuddy</h1>
+      </div>
+      <div style="background-color: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #ddd;">
+        <h2 style="color: #4CAF50; margin-top: 0;">Profile Edit Request Approved!</h2>
+        <p>Dear ${fullName},</p>
+        <p>We are pleased to inform you that your profile edit request has been approved by the administrator.</p>
+        <p>Your profile information has been updated with the requested changes. You can view your updated profile in the Subdibuddy mobile app.</p>
+        <p>If you have any questions or need assistance, please contact your building administrator.</p>
+        <p style="margin-top: 30px;">Best regards,<br>The Subdibuddy Team</p>
+      </div>
+      <div style="text-align: center; margin-top: 20px; color: #666; font-size: 12px;">
+        <p>This is an automated message. Please do not reply to this email.</p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return await sendEmail({ 
+    to: email, 
+    subject, 
+    html,
+    userName: fullName 
+  });
+};
+
+/**
+ * Sends profile edit rejection email to user
+ */
+export const sendProfileEditRejectionEmail = async (
+  email: string,
+  fullName: string,
+  reason: string
+): Promise<boolean> => {
+  if (!email) {
+    console.warn('No email address provided for profile edit rejection notification');
+    return false;
+  }
+
+  const subject = 'Profile Edit Request Status - Subdibuddy';
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Profile Edit Status</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="background-color: #1877F2; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+        <h1 style="margin: 0;">Subdibuddy</h1>
+      </div>
+      <div style="background-color: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #ddd;">
+        <h2 style="color: #F44336; margin-top: 0;">Profile Edit Request Status Update</h2>
+        <p>Dear ${fullName},</p>
+        <p>We regret to inform you that your profile edit request has been reviewed and unfortunately, we are unable to approve it at this time.</p>
+        ${reason ? `
+        <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #F44336;">
+          <p style="margin: 5px 0;"><strong>Reason:</strong></p>
+          <p style="margin: 5px 0;">${reason}</p>
+        </div>
+        ` : ''}
+        <p>If you believe this is an error or have additional information to provide, please contact your building administrator for further assistance.</p>
+        <p>Thank you for your understanding.</p>
+        <p style="margin-top: 30px;">Best regards,<br>The Subdibuddy Team</p>
+      </div>
+      <div style="text-align: center; margin-top: 20px; color: #666; font-size: 12px;">
+        <p>This is an automated message. Please do not reply to this email.</p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return await sendEmail({ 
+    to: email, 
+    subject, 
+    html,
+    userName: fullName 
+  });
+};

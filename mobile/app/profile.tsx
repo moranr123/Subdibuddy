@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, Timestamp, collection, addDoc, query, where, getDocs, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { getAuthService, db } from '../firebase/config';
 import { useTheme } from '../contexts/ThemeContext';
@@ -43,6 +43,7 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [isEditMode, setIsEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pendingRequest, setPendingRequest] = useState<any>(null);
   
   // Edit form state
   const [editFirstName, setEditFirstName] = useState('');
@@ -111,6 +112,7 @@ export default function Profile() {
               if (bdate) {
                 setTempDate(bdate);
               }
+
             }
           } catch (error) {
             console.error('Error fetching user data:', error);
@@ -125,6 +127,47 @@ export default function Profile() {
       return () => unsubscribe();
     }
   }, [parseBirthdate]);
+
+  // Set up real-time listener for pending profile edit requests
+  useEffect(() => {
+    if (!user || !db) {
+      setPendingRequest(null);
+      return;
+    }
+
+    try {
+      const pendingQuery = query(
+        collection(db, 'profileEditRequests'),
+        where('userId', '==', user.uid),
+        where('status', '==', 'pending'),
+        orderBy('createdAt', 'desc'),
+        limit(1)
+      );
+      
+      // Use onSnapshot for real-time updates
+      const unsubscribePending = onSnapshot(
+        pendingQuery,
+        (snapshot) => {
+          if (!snapshot.empty) {
+            setPendingRequest(snapshot.docs[0].data());
+          } else {
+            setPendingRequest(null);
+          }
+        },
+        (error) => {
+          console.error('Error listening to pending requests:', error);
+          setPendingRequest(null);
+        }
+      );
+      
+      return () => {
+        unsubscribePending();
+      };
+    } catch (error) {
+      console.error('Error setting up pending requests listener:', error);
+      setPendingRequest(null);
+    }
+  }, [user, db]);
 
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'N/A';
@@ -180,9 +223,19 @@ export default function Profile() {
     setShowDatePicker(false);
   }, [tempDate]);
 
-  // Save profile changes
+  // Save profile changes - submit for admin approval
   const handleSave = useCallback(async () => {
     if (!user || !db || !userData) return;
+
+    // Check if there's already a pending request
+    if (pendingRequest) {
+      Alert.alert(
+        'Pending Request',
+        'You already have a pending profile edit request. Please wait for admin approval before submitting a new request.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
 
     // Validation
     if (!editFirstName.trim()) {
@@ -210,47 +263,84 @@ export default function Profile() {
 
     setSaving(true);
     try {
-      const updateData: any = {
+      // Prepare the requested changes
+      const requestedChanges: any = {
         firstName: editFirstName.trim(),
         middleName: editMiddleName.trim() || null,
         lastName: editLastName.trim(),
         fullName: `${editFirstName.trim()} ${editMiddleName.trim() ? editMiddleName.trim() + ' ' : ''}${editLastName.trim()}`.trim(),
-        updatedAt: Timestamp.now(),
       };
 
       if (editPhone.trim()) {
-        updateData.phone = editPhone.trim();
+        requestedChanges.phone = editPhone.trim();
       }
       if (editEmail.trim()) {
-        updateData.email = editEmail.trim();
+        requestedChanges.email = editEmail.trim();
       }
       if (editSex) {
-        updateData.sex = editSex;
+        requestedChanges.sex = editSex;
       }
       if (editBirthdate) {
-        updateData.birthdate = Timestamp.fromDate(editBirthdate);
-        updateData.age = calculateAge(editBirthdate);
+        requestedChanges.birthdate = Timestamp.fromDate(editBirthdate);
+        requestedChanges.age = calculateAge(editBirthdate);
       }
 
-      await updateDoc(doc(db, 'users', user.uid), updateData);
-      
-      // Update local state
-      setUserData({
-        ...userData,
-        ...updateData,
-        birthdate: editBirthdate ? Timestamp.fromDate(editBirthdate) : userData.birthdate,
-        age: editBirthdate ? calculateAge(editBirthdate) : userData.age,
+      // Create profile edit request
+      const requestRef = await addDoc(collection(db, 'profileEditRequests'), {
+        userId: user.uid,
+        userEmail: userData.email || user.email || '',
+        userName: userData.fullName || `${userData.firstName || ''} ${userData.lastName || ''}`.trim(),
+        currentData: {
+          firstName: userData.firstName,
+          middleName: userData.middleName,
+          lastName: userData.lastName,
+          fullName: userData.fullName,
+          phone: userData.phone,
+          email: userData.email,
+          sex: userData.sex,
+          birthdate: userData.birthdate,
+          age: userData.age,
+        },
+        requestedChanges: requestedChanges,
+        status: 'pending',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+
+      // Create notification for admins
+      await addDoc(collection(db, 'notifications'), {
+        type: 'profile_edit_request',
+        profileEditRequestId: requestRef.id,
+        userId: user.uid,
+        userEmail: userData.email || user.email || '',
+        subject: `Profile Edit Request from ${userData.fullName || 'User'}`,
+        message: `New profile edit request submitted. Please review and approve or reject.`,
+        recipientType: 'admin',
+        isRead: false,
+        createdAt: Timestamp.now(),
+      });
+
+      // Update pending request state
+      setPendingRequest({
+        id: requestRef.id,
+        ...requestedChanges,
+        status: 'pending',
+        createdAt: Timestamp.now(),
       });
 
       setIsEditMode(false);
-      Alert.alert('Success', 'Profile updated successfully');
+      Alert.alert(
+        'Request Submitted',
+        'Your profile edit request has been submitted for admin approval. You will be notified once it is reviewed.',
+        [{ text: 'OK' }]
+      );
     } catch (error: any) {
-      console.error('Error updating profile:', error);
-      Alert.alert('Error', `Failed to update profile: ${error.message || 'Unknown error'}`);
+      console.error('Error submitting profile edit request:', error);
+      Alert.alert('Error', `Failed to submit profile edit request: ${error.message || 'Unknown error'}`);
     } finally {
       setSaving(false);
     }
-  }, [user, db, userData, editFirstName, editMiddleName, editLastName, editPhone, editEmail, editSex, editBirthdate, calculateAge]);
+  }, [user, db, userData, editFirstName, editMiddleName, editLastName, editPhone, editEmail, editSex, editBirthdate, calculateAge, pendingRequest]);
 
   const handleCancel = useCallback(() => {
     // Reset form to original values
@@ -417,6 +507,16 @@ export default function Profile() {
           
           {userData ? (
             <View style={styles.profileCard}>
+              {/* Pending Request Banner */}
+              {pendingRequest && (
+                <View style={styles.pendingBanner}>
+                  <FontAwesome5 name="clock" size={16} color="#FFA500" />
+                  <Text style={styles.pendingBannerText}>
+                    You have a pending profile edit request awaiting admin approval.
+                  </Text>
+                </View>
+              )}
+              
               {/* Personal Information */}
               <View style={dynamicStyles.sectionCard}>
                 <Text style={dynamicStyles.sectionTitle}>Personal Information</Text>
@@ -1118,6 +1218,23 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  pendingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3CD',
+    borderColor: '#FFA500',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  pendingBannerText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#856404',
+    lineHeight: 20,
   },
 });
 

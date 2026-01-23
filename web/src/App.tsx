@@ -14,6 +14,7 @@ import Maintenance from './pages/Maintenance'
 import VehicleRegistration from './pages/VehicleRegistration'
 import Archived from './pages/Archived'
 import Map from './pages/Map'
+import ProfileEditRequests from './pages/ProfileEditRequests'
 
 function App() {
   const routes = useMemo(() => (
@@ -38,6 +39,7 @@ function App() {
       <Route path="/vehicle-registration/registered" element={<VehicleRegistration />} />
       <Route path="/archived" element={<Archived />} />
       <Route path="/map" element={<Map />} />
+      <Route path="/profile-edit-requests" element={<ProfileEditRequests />} />
       <Route path="/create-superadmin" element={<CreateSuperAdmin />} />
       <Route path="/restore-superadmin" element={<RestoreSuperAdmin />} />
     </Routes>
